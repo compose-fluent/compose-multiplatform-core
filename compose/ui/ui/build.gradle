@@ -74,9 +74,6 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.UIElement")
         type("Microsoft.UI.Xaml.VerticalAlignment")
         type("Microsoft.UI.Xaml.Window")
-        type("Microsoft.UI.Xaml.Controls.Button")
-        type("Microsoft.UI.Xaml.Controls.ContentControl")
-        type("Microsoft.UI.Xaml.Controls.Primitives.ButtonBase")
         type("Windows.UI.Xaml.Interop.Type")
         type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
     }

@@ -18,21 +18,12 @@ package androidx.compose.ui.viewinterop
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
-import androidx.compose.runtime.CompositionLocalMap
 import androidx.compose.runtime.ReusableComposeNode
 import androidx.compose.runtime.Updater
-import androidx.compose.runtime.currentComposer
-import androidx.compose.runtime.currentCompositeKeyHashCode
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
-import androidx.compose.ui.internal.checkPreconditionNotNull
-import androidx.compose.ui.layout.MeasurePolicy
-import androidx.compose.ui.materialize
-import androidx.compose.ui.node.ComposeUiNode.Companion.SetCompositeKeyHash
-import androidx.compose.ui.node.ComposeUiNode.Companion.SetResolvedCompositionLocals
-import androidx.compose.ui.node.LayoutNode
-import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.platform.WinUIApplier
+import androidx.compose.ui.platform.WinUINode
 import microsoft.ui.xaml.UIElement
 
 /**
@@ -81,82 +72,60 @@ fun <T : UIElement> WinUIView(
     onRelease: (T) -> Unit = WinUIViewNoOpUpdate,
     update: (T) -> Unit = WinUIViewNoOpUpdate,
 ) {
-    val materializedModifier = currentComposer.materialize(modifier)
-    val compositeKeyHash = currentCompositeKeyHashCode.hashCode()
-    val compositionLocalMap = currentComposer.currentCompositionLocalMap
-
     if (onReset != null) {
-        ReusableComposeNode<LayoutNode, UiApplier>(
+        ReusableComposeNode<WinUINode, WinUIApplier>(
             factory = createWinUIViewNodeFactory(factory),
             update = {
                 updateWinUIViewHolderParams<T>(
-                    modifier = materializedModifier,
+                    modifier = modifier,
                     properties = properties,
-                    compositeKeyHash = compositeKeyHash,
-                    compositionLocalMap = compositionLocalMap,
                 )
-                set(onReset) { requireWinUIViewHolder<T>().resetBlock = it }
-                set(update) { requireWinUIViewHolder<T>().updateBlock = it }
-                set(onRelease) { requireWinUIViewHolder<T>().releaseBlock = it }
+                set(onReset) { requireWinUIViewNode<T>().resetBlock = it }
+                set(update) { requireWinUIViewNode<T>().updateBlock = it }
+                set(onRelease) { requireWinUIViewNode<T>().releaseBlock = it }
             },
         )
     } else {
-        ComposeNode<LayoutNode, UiApplier>(
+        ComposeNode<WinUINode, WinUIApplier>(
             factory = createWinUIViewNodeFactory(factory),
             update = {
                 updateWinUIViewHolderParams<T>(
-                    modifier = materializedModifier,
+                    modifier = modifier,
                     properties = properties,
-                    compositeKeyHash = compositeKeyHash,
-                    compositionLocalMap = compositionLocalMap,
                 )
-                set(update) { requireWinUIViewHolder<T>().updateBlock = it }
-                set(onRelease) { requireWinUIViewHolder<T>().releaseBlock = it }
+                set(update) { requireWinUIViewNode<T>().updateBlock = it }
+                set(onRelease) { requireWinUIViewNode<T>().releaseBlock = it }
             },
         )
     }
 }
 
 @Composable
-private fun <T : UIElement> createWinUIViewNodeFactory(factory: () -> T): () -> LayoutNode {
-    val compositeKeyHash = currentCompositeKeyHashCode.hashCode()
+private fun <T : UIElement> createWinUIViewNodeFactory(factory: () -> T): () -> WinUINode {
     return {
-        WinUIViewHolder(
-            view = factory(),
-            compositeKeyHash = compositeKeyHash,
-        ).layoutNode
+        WinUIViewNode(view = factory())
     }
 }
 
-private fun <T : UIElement> Updater<LayoutNode>.updateWinUIViewHolderParams(
+private fun <T : UIElement> Updater<WinUINode>.updateWinUIViewHolderParams(
     modifier: Modifier,
     properties: WinUIInteropProperties,
-    compositeKeyHash: Int,
-    compositionLocalMap: CompositionLocalMap,
 ) {
-    set(compositionLocalMap, SetResolvedCompositionLocals)
-    set(modifier) { requireWinUIViewHolder<T>().modifier = it }
-    set(properties) { requireWinUIViewHolder<T>().properties = it }
-    set(compositeKeyHash, SetCompositeKeyHash)
+    set(modifier) { requireWinUIViewNode<T>().modifier = it }
+    set(properties) { requireWinUIViewNode<T>().properties = it }
 }
 
-@OptIn(InternalComposeUiApi::class)
 @Suppress("UNCHECKED_CAST")
-private fun <T : UIElement> LayoutNode.requireWinUIViewHolder(): WinUIViewHolder<T> {
-    return checkPreconditionNotNull(interopViewFactoryHolder) as WinUIViewHolder<T>
+private fun <T : UIElement> WinUINode.requireWinUIViewNode(): WinUIViewNode<T> {
+    return this as WinUIViewNode<T>
 }
 
 private val WinUIViewNoOpUpdate: UIElement.() -> Unit = {}
 
-private class WinUIViewHolder<T : UIElement>(
+private class WinUIViewNode<T : UIElement>(
     private val view: T,
-    compositeKeyHash: Int,
-) : InteropViewFactoryHolder() {
+) : WinUINode(view) {
     var modifier: Modifier = Modifier
-        set(value) {
-            field = value
-            layoutNode.modifier = value
-        }
 
     var properties: WinUIInteropProperties = WinUIInteropProperties()
 
@@ -170,14 +139,6 @@ private class WinUIViewHolder<T : UIElement>(
 
     var releaseBlock: (T) -> Unit = WinUIViewNoOpUpdate
 
-    val layoutNode: LayoutNode = LayoutNode().also { node ->
-        node.interopViewFactoryHolder = this
-        node.compositeKeyHash = compositeKeyHash
-        node.measurePolicy = WinUIViewMeasurePolicy
-    }
-
-    override fun getInteropView(): InteropView = view
-
     override fun onReuse() {
         view.apply(resetBlock)
     }
@@ -187,10 +148,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     override fun onRelease() {
+        super.onRelease()
         view.apply(releaseBlock)
     }
-}
-
-private val WinUIViewMeasurePolicy = MeasurePolicy { _, constraints ->
-    layout(constraints.minWidth, constraints.minHeight) {}
 }

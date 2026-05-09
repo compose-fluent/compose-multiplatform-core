@@ -18,7 +18,10 @@ package androidx.compose.ui.node
 
 import androidx.compose.runtime.AbstractApplier
 
-internal class UiApplier(root: LayoutNode) : AbstractApplier<LayoutNode>(root) {
+internal class UiApplier(
+    root: LayoutNode,
+    private val onEndChangesCallback: () -> Unit = {},
+) : AbstractApplier<LayoutNode>(root) {
     override fun insertTopDown(index: Int, instance: LayoutNode) {
         // Ignored. Building the tree bottom-up avoids duplicate enter notifications.
     }
@@ -40,8 +43,8 @@ internal class UiApplier(root: LayoutNode) : AbstractApplier<LayoutNode>(root) {
     }
 
     override fun onEndChanges() {
-        super.onEndChanges()
         root.owner?.onEndApplyChanges()
+        onEndChangesCallback()
     }
 
     override fun reuse() {

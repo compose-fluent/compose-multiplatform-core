@@ -17,6 +17,7 @@
 package androidx.compose.ui.winui.samples
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.viewinterop.WinUIView
 import io.github.composefluent.winrt.runtime.RuntimeScope
 import io.github.composefluent.winrt.runtime.WinRtWinUiResourceManagerBootstrap
@@ -60,6 +61,7 @@ fun main() {
 private object ComposeWinUiSmokeApp {
     private var application: Application? = null
     private var window: Window? = null
+    private var composeView: Any? = null
     private var resourceManagerRegistration: WinRtWinUiResourceManagerBootstrap.Registration? = null
 
     fun launch() {
@@ -74,9 +76,19 @@ private object ComposeWinUiSmokeApp {
         val currentWindow = Window()
         println("compose-winui-sample: window created")
         currentWindow.title = "compose-winui sample"
-        currentWindow.content = Button().apply {
-            content = "compose-winui WinUI smoke"
+        val rootButton = createSampleButtonHost()
+        val currentComposeView = WinUIComposeView(rootButton) { content ->
+            rootButton.content = content
         }
+        composeView = currentComposeView
+        currentComposeView.setContent {
+            WinUIViewSampleContent()
+        }
+        println(
+            "compose-winui-sample: compose button content=" +
+                ((rootButton.content as? Button)?.content ?: "not-found")
+        )
+        currentWindow.content = currentComposeView.root
         window = currentWindow
         println("compose-winui-sample: window content set")
         currentWindow.activate()
@@ -85,4 +97,8 @@ private object ComposeWinUiSmokeApp {
             app.exit()
         }
     }
+}
+
+private fun createSampleButtonHost(): Button {
+    return Button()
 }

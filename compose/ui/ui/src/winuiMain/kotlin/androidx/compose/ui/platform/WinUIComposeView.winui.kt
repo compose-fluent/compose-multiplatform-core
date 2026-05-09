@@ -17,8 +17,10 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.node.LayoutNode
-import microsoft.ui.xaml.controls.ContentControl
+import androidx.compose.runtime.Composition
+import androidx.compose.runtime.Recomposer
+import microsoft.ui.xaml.UIElement
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -26,19 +28,46 @@ import microsoft.ui.xaml.controls.ContentControl
  * This is intentionally independent from Skiko/Desktop/AWT. Rendering, scheduling, and Owner
  * integration are filled in by the WinUI target rather than delegated to the desktop backend.
  */
-class WinUIComposeView {
-    val root = ContentControl()
+class WinUIComposeView(
+    val root: UIElement,
+    private val setRootContent: (UIElement?) -> Unit,
+) {
+    internal val rootNode = WinUINode()
 
-    internal val rootLayoutNode = LayoutNode()
-
+    private var recomposer: Recomposer? = null
+    private var composition: Composition? = null
     private var content: (@Composable () -> Unit)? = null
 
     fun setContent(content: @Composable () -> Unit) {
         this.content = content
-        TODO("WinUI Owner, recomposer, and frame scheduling are not implemented yet")
+        val currentComposition = composition ?: createComposition().also {
+            composition = it
+        }
+        currentComposition.setContent(content)
+        syncRootContent()
     }
 
     fun disposeComposition() {
+        composition?.dispose()
+        composition = null
+        recomposer?.close()
+        recomposer = null
         content = null
+        setRootContent(null)
+        rootNode.removeAll()
+    }
+
+    private fun createComposition(): Composition {
+        val currentRecomposer = Recomposer(EmptyCoroutineContext)
+        recomposer = currentRecomposer
+        val applier = WinUIApplier(rootNode, ::syncRootContent)
+        return Composition(
+            applier = applier,
+            parent = currentRecomposer,
+        )
+    }
+
+    private fun syncRootContent() {
+        setRootContent(rootNode.firstInteropView())
     }
 }
