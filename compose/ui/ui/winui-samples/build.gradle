@@ -1,0 +1,95 @@
+/*
+ * Copyright 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+plugins {
+    id("AndroidXPlugin")
+    id("AndroidXComposePlugin")
+    id("org.jetbrains.kotlin.jvm")
+    id("JetBrainsAndroidXPlugin")
+    id("io.github.composefluent.winrt")
+}
+
+dependencies {
+    implementation(project(":compose:runtime:runtime"))
+    implementation(project(":compose:ui:ui"))
+    implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
+}
+
+configurations {
+    winRtAuthoringScannerClasspath {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    winRtAuthoringScannerClasspath(libs.kotlinCompilerEmbeddable)
+}
+
+def composeWinUiWindowsAppSdkVersion = providers
+        .gradleProperty("composeWinUi.windowsAppSdkVersion")
+        .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
+        .orElse("1.8.260416003")
+def composeWinUiWindowsSdkVersion = providers
+        .gradleProperty("composeWinUi.windowsSdkVersion")
+        .orElse("10.0.26100.0")
+
+winRt {
+    application {
+    }
+    windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
+    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
+    type("Windows.Foundation.IStringable")
+    type("Microsoft.UI.Xaml.Application")
+    type("Microsoft.UI.Xaml.DependencyProperty")
+    type("Microsoft.UI.Xaml.FrameworkElement")
+    type("Microsoft.UI.Xaml.HorizontalAlignment")
+    type("Microsoft.UI.Xaml.LaunchActivatedEventArgs")
+    type("Microsoft.UI.Xaml.RoutedEventArgs")
+    type("Microsoft.UI.Xaml.RoutedEventHandler")
+    type("Microsoft.UI.Xaml.ResourceDictionary")
+    type("Microsoft.UI.Xaml.Thickness")
+    type("Microsoft.UI.Xaml.UIElement")
+    type("Microsoft.UI.Xaml.VerticalAlignment")
+    type("Microsoft.UI.Xaml.Window")
+    type("Microsoft.UI.Xaml.Controls.Button")
+    type("Microsoft.UI.Xaml.Controls.ContentControl")
+    type("Microsoft.UI.Xaml.Controls.Primitives.ButtonBase")
+    type("Windows.UI.Xaml.Interop.Type")
+    type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
+}
+
+tasks.named("generateWinRtProjections").configure {
+    authoringScannerClasspath.from(configurations.runtimeClasspath)
+    authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
+    }
+}
+
+tasks.register("runWinUIViewSample", JavaExec) {
+    group = "verification"
+    description = "Runs the minimal compose-winui WinUI smoke sample."
+    dependsOn("classes")
+    dependsOn("stageWinRtRuntimeAssets")
+    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
+    classpath = sourceSets.main.runtimeClasspath
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    systemProperty("compose.winui.sample.autoExit", "true")
+}

@@ -19,6 +19,9 @@ pluginManagement {
         }
     }
     includeBuild("androidx-settings-plugins")
+    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)) {
+        includeBuild("external/kotlin-winrt/winrt-gradle-plugin")
+    }
 }
 
 buildscript {
@@ -522,6 +525,9 @@ includeProject(":compose:ui:ui-viewbinding")
 includeProject(":compose:ui:ui-viewbinding:ui-viewbinding-samples", "compose/ui/ui-viewbinding/samples")
 includeProject(":compose:ui:ui:integration-tests:ui-demos")
 includeProject(":compose:ui:ui:ui-samples", "compose/ui/ui/samples")
+if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)) {
+    includeProject(":compose:ui:ui:winui-samples")
+}
 includeProject(":compose:ui:ui-uikit")
 includeProject(":compose:ui:ui-backhandler")
 
@@ -555,6 +561,16 @@ includeProject(":internal-testutils-xctest", "testutils/testutils-xctest")
 
 // Workaround for b/203825166
 includeBuild("placeholder")
+
+// Local compose-winui dependency source. Keep this as a submodule/composite build until
+// kotlin-winrt is stable enough to consume as a normal Gradle dependency. kotlin-winrt's build
+// requires running Gradle on JDK 22+, so keep it out of the build graph on older JVMs.
+def runningJavaVersion = JavaVersion.current()
+if (runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
+    includeBuild("external/kotlin-winrt")
+} else {
+    logger.lifecycle("Skipping external/kotlin-winrt included build: JDK 22+ is required, current JVM is ${runningJavaVersion}.")
+}
 
 includeProject(":mpp")
 

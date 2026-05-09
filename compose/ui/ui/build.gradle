@@ -36,6 +36,61 @@ plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
     id("JetBrainsAndroidXPlugin")
+    id("io.github.composefluent.winrt")
+}
+
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiWindowsSdkVersion = providers
+        .gradleProperty("composeWinUi.windowsSdkVersion")
+        .orElse("10.0.26100.0")
+def composeWinUiWindowsAppSdkVersion = providers
+        .gradleProperty("composeWinUi.windowsAppSdkVersion")
+        .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
+        .orElse("1.8.260416003")
+
+if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginAvailable) {
+    throw new GradleException("compose-winui JVM target requires running Gradle on JDK 22 or newer.")
+}
+
+if (composeWinUiGradlePluginAvailable) {
+    winRt {
+        windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
+        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
+        type("Windows.Foundation.IStringable")
+        type("Microsoft.UI.Xaml.Application")
+        type("Microsoft.UI.Xaml.DependencyProperty")
+        type("Microsoft.UI.Xaml.FrameworkElement")
+        type("Microsoft.UI.Xaml.HorizontalAlignment")
+        type("Microsoft.UI.Xaml.LaunchActivatedEventArgs")
+        type("Microsoft.UI.Xaml.RoutedEventArgs")
+        type("Microsoft.UI.Xaml.RoutedEventHandler")
+        type("Microsoft.UI.Xaml.ResourceDictionary")
+        type("Microsoft.UI.Xaml.Thickness")
+        type("Microsoft.UI.Xaml.UIElement")
+        type("Microsoft.UI.Xaml.VerticalAlignment")
+        type("Microsoft.UI.Xaml.Window")
+        type("Microsoft.UI.Xaml.Controls.Button")
+        type("Microsoft.UI.Xaml.Controls.ContentControl")
+        type("Microsoft.UI.Xaml.Controls.Primitives.ButtonBase")
+        type("Windows.UI.Xaml.Interop.Type")
+        type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
+    }
+
+    configurations {
+        winRtAuthoringScannerClasspath {
+            canBeConsumed = false
+            canBeResolved = true
+        }
+    }
+
+    dependencies {
+        winRtAuthoringScannerClasspath(libs.kotlinCompilerEmbeddable)
+    }
 }
 
 androidXMultiplatform {
@@ -59,7 +114,9 @@ androidXMultiplatform {
             }
         }
     }
-    desktop()
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
     mac()
     ios()
     js()
@@ -301,6 +358,49 @@ androidXMultiplatform {
     }
 }
 
+kotlin {
+    if (composeWinUiGradlePluginAvailable) {
+        if (composeWinUiJvmTargetEnabled) {
+            jvm("winuiJvm")
+        }
+        mingwX64("winuiMingw")
+
+        sourceSets {
+            winuiMain {
+                dependsOn(commonMain)
+                kotlin.srcDir(layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin"))
+                dependencies {
+                    implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
+                }
+            }
+
+            winuiTest {
+                dependsOn(commonTest)
+            }
+
+            if (composeWinUiJvmTargetEnabled) {
+                winuiJvmMain {
+                    dependsOn(winuiMain)
+                }
+            }
+
+            if (composeWinUiJvmTargetEnabled) {
+                winuiJvmTest {
+                    dependsOn(winuiTest)
+                }
+            }
+
+            winuiMingwMain {
+                dependsOn(winuiMain)
+            }
+
+            winuiMingwTest {
+                dependsOn(winuiTest)
+            }
+        }
+    }
+}
+
 dependencies {
     lintChecks(project(":compose:ui:ui-lint"))
     lintPublish(project(":compose:ui:ui-lint"))
@@ -331,6 +431,21 @@ tasks.withType(KotlinCompile).configureEach { task ->
     if (task.name != "compileAndroidMain") return
     task.compilerOptions {
         it.freeCompilerArgs.addAll("-Xlambdas=class")
+    }
+}
+
+if (composeWinUiGradlePluginAvailable) {
+    tasks.withType(KotlinCompile).configureEach { task ->
+        if (!task.name.contains("Winui")) return
+        task.dependsOn("generateWinRtProjections")
+        task.compilerOptions {
+            it.freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
+        }
+    }
+
+    tasks.named("generateWinRtProjections").configure {
+        sourceRoots.setFrom(project.file("src/winuiMain/kotlin"))
+        authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
     }
 }
 
@@ -453,25 +568,27 @@ tasks.register("updateTranslationsIos", UpdateTranslationsTask.class) {
     ]
 }
 
-tasks.findByName("desktopTest").configure {
-    systemProperties["GOLDEN_PATH"] = project.rootDir.absolutePath + "/golden"
-}
-
-tasks.register("desktopHeadlessTest", Test) {
-    group = "verification"
-    description = "Headless desktop tests"
-    testClassesDirs = sourceSets.desktopTest.output.classesDirs
-    classpath = sourceSets.desktopTest.runtimeClasspath
-
-    useJUnit {
-        includeCategories("androidx.compose.ui.HeadlessTest")
+if (!composeWinUiJvmTargetEnabled) {
+    tasks.findByName("desktopTest").configure {
+        systemProperties["GOLDEN_PATH"] = project.rootDir.absolutePath + "/golden"
     }
-    systemProperty("java.awt.headless", "true")
-}
 
-tasks.desktopTest {
-    useJUnit {
-        excludeCategories("androidx.compose.ui.HeadlessTest")
+    tasks.register("desktopHeadlessTest", Test) {
+        group = "verification"
+        description = "Headless desktop tests"
+        testClassesDirs = sourceSets.desktopTest.output.classesDirs
+        classpath = sourceSets.desktopTest.runtimeClasspath
+
+        useJUnit {
+            includeCategories("androidx.compose.ui.HeadlessTest")
+        }
+        systemProperty("java.awt.headless", "true")
     }
-    jvmArgs("--add-opens=java.desktop/javax.swing=ALL-UNNAMED")
+
+    tasks.desktopTest {
+        useJUnit {
+            excludeCategories("androidx.compose.ui.HeadlessTest")
+        }
+        jvmArgs("--add-opens=java.desktop/javax.swing=ALL-UNNAMED")
+    }
 }
