@@ -4,16 +4,16 @@
 - [x] Implement compose-winui as a standalone `compose-ui` platform target, comparable in responsibility to `androidMain`.
 - [x] Keep `winuiMain` independent from `skikoMain`, `desktopMain`, AWT, and Swing.
 - [x] Use `kotlin-winrt` as the WinRT and WinUI projection/runtime foundation instead of duplicating COM or Windows App SDK bootstrap code in `compose-ui`.
-- [ ] Share WinUI-specific Compose semantics in `winuiMain`, with JVM and mingw source sets providing only ABI, runtime, and native surface details.
+- [ ] Share WinUI-specific Compose semantics in `winuiMain`, with `winuiJvmMain` providing current JVM runtime details and `winuiMingwMain` deferred until `kotlin-winrt` provides mingw support.
 - [ ] Treat Android `AndroidView` interop as the behavioral reference for factory, update, reuse, detach, release, layout, focus, and input behavior.
 
 ## Gradle targets and source sets
 - [x] Add a JVM target for WinUI, for example `jvm("winuiJvm")`, configured for JDK 22 or newer because `kotlin-winrt` JVM support uses the Java Foreign Function and Memory API.
-- [x] Add a Windows native target, `mingwX64("winuiMingw")`.
+- [ ] Add a Windows native target, `mingwX64("winuiMingw")`, after `kotlin-winrt` implements mingw support.
 - [x] Add `winuiMain` as a direct dependent of `commonMain`.
 - [x] Add `winuiJvmMain` as a dependent of `winuiMain`.
-- [x] Add `winuiMingwMain` as a dependent of `winuiMain`.
-- [x] Add matching test source sets for shared WinUI behavior and target-specific JVM/mingw behavior.
+- [ ] Add `winuiMingwMain` as a dependent of `winuiMain` after the mingw target is enabled.
+- [x] Add matching test source sets for shared WinUI behavior and target-specific JVM behavior.
 - [x] Do not make `winuiMain`, `winuiJvmMain`, or `winuiMingwMain` depend on `skikoMain`, `desktopMain`, AWT, Swing, or `org.jetbrains.skiko.SkiaLayer`.
 - [x] Wire `winuiMain` to the local `kotlin-winrt` runtime without depending on checked-in `winrt-projections`.
 - [x] Apply the local `kotlin-winrt` Gradle plugin for WinUI projection generation when running on JDK 22 or newer.
@@ -25,6 +25,14 @@
 - [ ] Replace the initial `WinUIComposeView` placeholder with a real WinUI `Owner`, recomposer, and frame scheduler.
 - [ ] Implement the `Owner` contract for WinUI: root `LayoutNode`, measure/layout scheduling, drawing invalidation, snapshot observation, semantics owner, focus owner, pointer processing, and test root support.
 - [ ] Implement a WinUI `setContent` entry point that creates a `Composition` with `UiApplier` and provides WinUI composition locals.
+- [x] Add an initial `Window.setContent` entry point that creates a `WinUIComposeView`, installs its root into the WinUI `Window`, and returns the view for lifecycle management.
+- [x] Add initial `Application { Window { ... } }` domains for WinUI JVM, including Windows App SDK bootstrap, RuntimeScope initialization, WinUI resource manager registration, and a window scope backed by `WinUIComposeView`.
+- [x] Keep the WinUI application domain in `Application.winui.kt` and the WinUI window domain in `Window.winui.kt`.
+- [x] Expose initial WinUI window capabilities from the generated `microsoft.ui.xaml.Window`: `extendsContentIntoTitleBar`, `WindowBackdrop`, and `WindowScope` access to `window`, `appWindow`, `compositor`, and `dispatcherQueue`.
+- [x] Add concrete backdrop projection types for Mica and Desktop Acrylic through explicit Windows App SDK `type(...)` entries and validate `WindowBackdrop.Mica` in the sample.
+- [x] Add an initial `Window(onCloseRequest = ...)` close-request hook and close the native WinUI window when its Compose node is released.
+- [x] Move initial WinUI application/window disposal onto the WinUI UI thread via `DispatcherQueue` for `exitApplication` and window close/removal paths.
+- [ ] Broaden the initial close/removal work into full declarative multi-window lifetime semantics, including cancelable close policy if WinUI exposes a suitable pre-close event.
 - [ ] Provide WinUI actuals for common platform hooks such as time, delayed posting, view configuration, window info, URI handling, clipboard, haptics, semantics region, focusability, platform velocity tracking, and fillable data.
 - [ ] Provide initial WinUI text input and IME integration hooks, with minimal stubs only where behavior is explicitly deferred.
 - [ ] Provide WinUI accessibility integration hooks that can later map Compose semantics to UI Automation.
@@ -34,7 +42,7 @@
 - [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer.
 - [ ] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
-- [ ] Implement the mingwX64 backend in `winuiMingwMain` using `kotlin-winrt`, Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
+- [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
 - [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target.
 - [ ] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work.
 - [ ] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
@@ -58,19 +66,21 @@
 - [ ] Reuse `kotlin-winrt` Windows App SDK bootstrap and resource manager support for unpackaged WinUI applications.
 - [ ] Reuse `kotlin-winrt` COM reference management, event-token management, activation factory lookup, and XAML metadata provider support.
 - [ ] Add missing projection/runtime capabilities to `kotlin-winrt` first when compose-winui requires WinUI APIs that are not yet projected.
-- [ ] Keep target-specific native interop code inside `winuiJvmMain` or `winuiMingwMain`; keep shared Compose/WinUI behavior in `winuiMain`.
+- [ ] Keep target-specific native interop code inside `winuiJvmMain`, and later `winuiMingwMain`; keep shared Compose/WinUI behavior in `winuiMain`.
 
 ## Tests and validation
 - [x] Add a repository-local compose-winui sample that compiles against `:compose:ui:ui` and calls `WinUIView { Button() }`.
 - [x] Add a runnable Windows App SDK/WinUI smoke task for the compose-winui sample so projection/runtime wiring is validated outside `kotlin-winrt`'s own samples.
+- [x] Add repository-local WinUIView lifecycle smoke validation for factory, initial update, and release.
+- [x] Add repository-local window smoke validation for `Application { Window { ... } }`, title propagation, `WindowScope.window`, and `WindowBackdrop.Mica`.
 - [ ] Upgrade the compose-winui sample to render Compose content inside `WinUIComposeView` once the WinUI Owner, recomposer, and frame scheduler are implemented.
 - [x] Add compile validation for the new WinUI JVM source set.
-- [ ] Add compile validation for the new WinUI mingwX64 source set.
+- [ ] Add compile validation for the new WinUI mingwX64 source set after `kotlin-winrt` supports mingw.
 - [ ] Add tests proving WinUI source sets do not depend on `skikoMain`, `desktopMain`, AWT, Swing, or Skiko AWT classes.
 - [ ] Add lifecycle tests for `WinUIView`: factory once, update after creation, repeated update on state changes, reset on reuse, release on final disposal.
 - [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [ ] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button`, `TextBox`, and `ToggleSwitch`.
-- [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample.
+- [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.

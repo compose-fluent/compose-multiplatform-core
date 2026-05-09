@@ -22,8 +22,8 @@ import androidx.compose.runtime.ReusableComposeNode
 import androidx.compose.runtime.Updater
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
-import androidx.compose.ui.platform.WinUIApplier
-import androidx.compose.ui.platform.WinUINode
+import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.UiApplier
 import microsoft.ui.xaml.UIElement
 
 /**
@@ -73,61 +73,67 @@ fun <T : UIElement> WinUIView(
     update: (T) -> Unit = WinUIViewNoOpUpdate,
 ) {
     if (onReset != null) {
-        ReusableComposeNode<WinUINode, WinUIApplier>(
+        ReusableComposeNode<LayoutNode, UiApplier>(
             factory = createWinUIViewNodeFactory(factory),
             update = {
                 updateWinUIViewHolderParams<T>(
                     modifier = modifier,
                     properties = properties,
                 )
-                set(onReset) { requireWinUIViewNode<T>().resetBlock = it }
-                set(update) { requireWinUIViewNode<T>().updateBlock = it }
-                set(onRelease) { requireWinUIViewNode<T>().releaseBlock = it }
+                set(onReset) { requireWinUIViewHolder<T>().resetBlock = it }
+                set(update) { requireWinUIViewHolder<T>().updateBlock = it }
+                set(onRelease) { requireWinUIViewHolder<T>().releaseBlock = it }
             },
         )
     } else {
-        ComposeNode<WinUINode, WinUIApplier>(
+        ComposeNode<LayoutNode, UiApplier>(
             factory = createWinUIViewNodeFactory(factory),
             update = {
                 updateWinUIViewHolderParams<T>(
                     modifier = modifier,
                     properties = properties,
                 )
-                set(update) { requireWinUIViewNode<T>().updateBlock = it }
-                set(onRelease) { requireWinUIViewNode<T>().releaseBlock = it }
+                set(update) { requireWinUIViewHolder<T>().updateBlock = it }
+                set(onRelease) { requireWinUIViewHolder<T>().releaseBlock = it }
             },
         )
     }
 }
 
 @Composable
-private fun <T : UIElement> createWinUIViewNodeFactory(factory: () -> T): () -> WinUINode {
+private fun <T : UIElement> createWinUIViewNodeFactory(factory: () -> T): () -> LayoutNode {
     return {
-        WinUIViewNode(view = factory())
+        LayoutNode().also {
+            it.interopViewFactoryHolder = WinUIViewHolder(view = factory())
+        }
     }
 }
 
-private fun <T : UIElement> Updater<WinUINode>.updateWinUIViewHolderParams(
+private fun <T : UIElement> Updater<LayoutNode>.updateWinUIViewHolderParams(
     modifier: Modifier,
     properties: WinUIInteropProperties,
 ) {
-    set(modifier) { requireWinUIViewNode<T>().modifier = it }
-    set(properties) { requireWinUIViewNode<T>().properties = it }
+    set(modifier) { requireWinUIViewHolder<T>().modifier = it }
+    set(properties) { requireWinUIViewHolder<T>().properties = it }
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun <T : UIElement> WinUINode.requireWinUIViewNode(): WinUIViewNode<T> {
-    return this as WinUIViewNode<T>
+private fun <T : UIElement> LayoutNode.requireWinUIViewHolder(): WinUIViewHolder<T> {
+    return interopViewFactoryHolder as WinUIViewHolder<T>
 }
 
 private val WinUIViewNoOpUpdate: UIElement.() -> Unit = {}
 
-private class WinUIViewNode<T : UIElement>(
+private class WinUIViewHolder<T : UIElement>(
     private val view: T,
-) : WinUINode(view) {
+) : InteropViewFactoryHolder() {
     var modifier: Modifier = Modifier
 
     var properties: WinUIInteropProperties = WinUIInteropProperties()
+        set(value) {
+            field = value
+            view.isHitTestVisible = value.isUserInteractionEnabled
+        }
 
     var updateBlock: (T) -> Unit = WinUIViewNoOpUpdate
         set(value) {
@@ -139,6 +145,8 @@ private class WinUIViewNode<T : UIElement>(
 
     var releaseBlock: (T) -> Unit = WinUIViewNoOpUpdate
 
+    override fun getInteropView(): InteropView = view.asInteropView()
+
     override fun onReuse() {
         view.apply(resetBlock)
     }
@@ -148,7 +156,6 @@ private class WinUIViewNode<T : UIElement>(
     }
 
     override fun onRelease() {
-        super.onRelease()
         view.apply(releaseBlock)
     }
 }

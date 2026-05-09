@@ -19,7 +19,12 @@ package androidx.compose.ui.platform
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.UiApplier
 import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.Window
+import microsoft.ui.xaml.controls.ContentControl
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
@@ -32,11 +37,14 @@ class WinUIComposeView(
     val root: UIElement,
     private val setRootContent: (UIElement?) -> Unit,
 ) {
-    internal val rootNode = WinUINode()
+    constructor() : this(WinUIRootContentHost())
+
+    internal val rootNode = LayoutNode()
 
     private var recomposer: Recomposer? = null
     private var composition: Composition? = null
     private var content: (@Composable () -> Unit)? = null
+    private var currentRootContent: UIElement? = null
 
     fun setContent(content: @Composable () -> Unit) {
         this.content = content
@@ -53,14 +61,14 @@ class WinUIComposeView(
         recomposer?.close()
         recomposer = null
         content = null
-        setRootContent(null)
+        updateRootContent(null)
         rootNode.removeAll()
     }
 
     private fun createComposition(): Composition {
         val currentRecomposer = Recomposer(EmptyCoroutineContext)
         recomposer = currentRecomposer
-        val applier = WinUIApplier(rootNode, ::syncRootContent)
+        val applier = UiApplier(rootNode, ::syncRootContent)
         return Composition(
             applier = applier,
             parent = currentRecomposer,
@@ -68,6 +76,35 @@ class WinUIComposeView(
     }
 
     private fun syncRootContent() {
-        setRootContent(rootNode.firstInteropView())
+        updateRootContent(rootNode.firstInteropView())
+    }
+
+    private fun updateRootContent(content: UIElement?) {
+        if (currentRootContent === content) return
+        currentRootContent = content
+        setRootContent(content)
+    }
+
+    private constructor(host: WinUIRootContentHost) : this(host.root, host::setRootContent)
+}
+
+fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
+    val composeView = WinUIComposeView()
+    composeView.setContent(content)
+    this.content = composeView.root
+    return composeView
+}
+
+@OptIn(InternalComposeUiApi::class)
+private fun LayoutNode.firstInteropView(): UIElement? {
+    return getInteropView()?.uiElement ?: children.firstNotNullOfOrNull { it.firstInteropView() }
+}
+
+private class WinUIRootContentHost {
+    val root = ContentControl()
+    private val emptyContent = ContentControl()
+
+    fun setRootContent(content: UIElement?) {
+        root.content = content ?: emptyContent
     }
 }

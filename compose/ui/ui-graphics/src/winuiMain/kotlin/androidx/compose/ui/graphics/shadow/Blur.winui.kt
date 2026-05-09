@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.viewinterop
+package androidx.compose.ui.graphics.shadow
 
-import microsoft.ui.xaml.UIElement
+import androidx.compose.ui.graphics.Paint
 
-actual class InteropView internal constructor(
-    internal val uiElement: UIElement,
-)
+internal actual fun BlurFilter(radius: Float): BlurFilter = BlurFilter()
 
-internal fun UIElement.asInteropView(): InteropView = InteropView(this)
+internal actual class BlurFilter
+
+internal actual fun Paint.setBlurFilter(blur: BlurFilter?) = Unit

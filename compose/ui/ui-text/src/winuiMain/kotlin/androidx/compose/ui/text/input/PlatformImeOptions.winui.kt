@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.viewinterop
+package androidx.compose.ui.text.input
 
-import microsoft.ui.xaml.UIElement
-
-actual class InteropView internal constructor(
-    internal val uiElement: UIElement,
-)
-
-internal fun UIElement.asInteropView(): InteropView = InteropView(this)
+actual open class PlatformImeOptions

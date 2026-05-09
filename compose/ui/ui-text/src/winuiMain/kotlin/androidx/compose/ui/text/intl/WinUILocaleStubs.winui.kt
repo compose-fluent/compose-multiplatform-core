@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.viewinterop
+package androidx.compose.ui.text.intl
 
-import microsoft.ui.xaml.UIElement
-
-actual class InteropView internal constructor(
-    internal val uiElement: UIElement,
-)
-
-internal fun UIElement.asInteropView(): InteropView = InteropView(this)
+internal actual fun createPlatformLocaleDelegate(): PlatformLocaleDelegate =
+    object : PlatformLocaleDelegate {
+        override val current: LocaleList = LocaleList(Locale("en-US"))
+    }

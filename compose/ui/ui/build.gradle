@@ -74,6 +74,11 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.UIElement")
         type("Microsoft.UI.Xaml.VerticalAlignment")
         type("Microsoft.UI.Xaml.Window")
+        type("Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop")
+        type("Microsoft.UI.Xaml.Media.MicaBackdrop")
+        type("Microsoft.UI.Xaml.Media.SystemBackdrop")
+        type("Microsoft.UI.Windowing.AppWindow")
+        type("Microsoft.UI.Xaml.Controls.ContentControl")
         type("Windows.UI.Xaml.Interop.Type")
         type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
     }
@@ -360,7 +365,7 @@ kotlin {
         if (composeWinUiJvmTargetEnabled) {
             jvm("winuiJvm")
         }
-        mingwX64("winuiMingw")
+        // Enable a WinUI mingw target after kotlin-winrt provides its mingw runtime actuals.
 
         sourceSets {
             winuiMain {
@@ -387,13 +392,6 @@ kotlin {
                 }
             }
 
-            winuiMingwMain {
-                dependsOn(winuiMain)
-            }
-
-            winuiMingwTest {
-                dependsOn(winuiTest)
-            }
         }
     }
 }
