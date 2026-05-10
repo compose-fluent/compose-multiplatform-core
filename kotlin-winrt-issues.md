@@ -135,3 +135,27 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   boxed `DependencyObject.setValue(...)` calls safe for Canvas positioning
   properties, or document a required XAML attachment precondition that
   compose-winui can detect before calling them.
+
+## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
+
+- **Status:** Open
+- **Observed in:** `Microsoft.UI.Xaml.Application.resources` and
+  `Microsoft.UI.Xaml.Controls.XamlControlsResources`
+- **Symptom:** Installing WinUI control resources from the compose-winui
+  `Application { ... }` path fails before a live `TextBox` can be validated.
+  Synchronous installation from the `Application.start` callback can crash in
+  `Microsoft.UI.Xaml.dll`; delaying to the DispatcherQueue lets
+  `Application.resources` and `mergedDictionaries` resolve, but
+  `XamlControlsResources()` still fails during construction and the callback
+  bridge reports `SetRestrictedErrorInfo failed: 参数错误。`
+- **Impact on compose-winui:** A live-window integration smoke can currently
+  host simple controls such as `Button` and `ToggleSwitch`, but enabling a live
+  `TextBox` pulls in WinUI text resources and can crash on startup or shutdown.
+- **compose-winui workaround:** `WinUIViewSample.kt` keeps `TextBox` covered by
+  the offscreen control-variety smoke, but the live `Application { Window { ... } }`
+  sample only embeds `Button` and `ToggleSwitch` until this resource setup path
+  is fixed. Search for `KWINRT-008`.
+- **Resolution target:** Make the unpackaged JVM resource setup path support
+  `XamlControlsResources` without requiring a C/C++ authoring host toolchain in
+  compose-ui, or expose a stable runtime helper that can install WinUI control
+  resources for base `Application` instances.

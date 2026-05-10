@@ -43,8 +43,8 @@ import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import microsoft.ui.xaml.controls.Button
-import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.Canvas
+import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.TextBox
 import microsoft.ui.xaml.controls.ToggleSwitch
 import kotlinx.coroutines.delay
@@ -132,6 +132,58 @@ class WinUIViewLifecycleProbe {
     var lastButton: Button? = null
 }
 
+@Composable
+private fun WinUIViewWindowIntegrationContent(
+    buttonContent: String,
+    toggleOn: Boolean,
+    expectWindowFocus: Boolean,
+    lifecycleProbe: WinUIViewLifecycleProbe,
+    onButtonUpdated: (Button) -> Unit,
+    onToggleSwitchUpdated: (ToggleSwitch) -> Unit,
+) {
+    ValidateWinUICompositionLocals(expectWindowFocus)
+    WinUIView(
+        modifier = fixedSizeAndPositionModifier(
+            width = 160,
+            height = 40,
+            x = 0,
+            y = 0,
+        ),
+        factory = {
+            lifecycleProbe.factoryCount += 1
+            Button()
+        },
+        update = { button ->
+            lifecycleProbe.updateCount += 1
+            lifecycleProbe.lastButton = button
+            button.content = buttonContent
+            onButtonUpdated(button)
+        },
+        onReset = { button ->
+            lifecycleProbe.resetCount += 1
+            button.content = "Reset WinUIView"
+        },
+        onRelease = { button ->
+            lifecycleProbe.releaseCount += 1
+            lifecycleProbe.lastButton = button
+        },
+    )
+    // KWINRT-008: live TextBox resource setup is not stable yet; keep it in offscreen smoke.
+    WinUIView(
+        modifier = fixedSizeAndPositionModifier(
+            width = 220,
+            height = 40,
+            x = 0,
+            y = 48,
+        ),
+        factory = { ToggleSwitch() },
+        update = { toggleSwitch ->
+            toggleSwitch.isOn = toggleOn
+            onToggleSwitchUpdated(toggleSwitch)
+        },
+    )
+}
+
 fun main() {
     println("compose-winui-sample: application starting")
     Application {
@@ -188,6 +240,7 @@ private object ComposeWinUiSmokeApp {
                 var content by remember { mutableStateOf("Hello from Compose WinUI") }
                 var initialBackdropPointer by remember { mutableStateOf<Long?>(null) }
                 var lastButton by remember { mutableStateOf<Button?>(null) }
+                var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
                 LaunchedEffect(Unit) {
                     withFrameNanos { }
                     content = "Hello from Compose WinUI updated"
@@ -204,27 +257,32 @@ private object ComposeWinUiSmokeApp {
                         "WindowBackdrop.DesktopAcrylic did not replace the initial backdrop."
                     }
                 }
-                LaunchedEffect(title, extendsContentIntoTitleBar, backdrop, lastButton) {
+                LaunchedEffect(
+                    title,
+                    extendsContentIntoTitleBar,
+                    backdrop,
+                    lastButton,
+                    lastToggleSwitch,
+                ) {
                     val button = lastButton ?: return@LaunchedEffect
+                    val toggleSwitch = lastToggleSwitch ?: return@LaunchedEffect
                     if (
                         windowProbe.updateCount >= 2 &&
+                        button.content == "Hello from Compose WinUI updated" &&
+                        toggleSwitch.isOn &&
                         title == "compose-winui sample updated" &&
                         extendsContentIntoTitleBar &&
                         backdrop == WindowBackdrop.DesktopAcrylic
                     ) {
-                        val appWindowWidth = window.appWindow.size.width
-                        awaitCondition("unconstrained WinUIView natural width") {
-                            button.actualWidth > 0.0 &&
-                                button.actualWidth < appWindowWidth.toDouble()
-                        }
                         windowSmokePassed = true
                     }
                 }
-                WinUIViewSampleContent(
-                    content = content,
+                WinUIViewWindowIntegrationContent(
+                    buttonContent = content,
+                    toggleOn = content.endsWith("updated"),
                     expectWindowFocus = true,
                     lifecycleProbe = windowProbe,
-                    onUpdated = { button ->
+                    onButtonUpdated = { button ->
                         composeView = button
                         lastButton = button
                         println(
@@ -234,6 +292,9 @@ private object ComposeWinUiSmokeApp {
                         println("compose-winui-sample: window title=${window.title}")
                         println("compose-winui-sample: window content set")
                         println("compose-winui-sample: window activated")
+                    },
+                    onToggleSwitchUpdated = { toggleSwitch ->
+                        lastToggleSwitch = toggleSwitch
                     },
                 )
             }

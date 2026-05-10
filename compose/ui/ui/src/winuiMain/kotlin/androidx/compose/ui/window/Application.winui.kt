@@ -44,10 +44,16 @@ fun Application(
         RuntimeScope.initializeSingleThreaded().use {
             XamlApplication.start {
                 val dispatcherQueue = DispatcherQueue.getForCurrentThread()
-                WinUIApplicationRuntime(
-                    application = XamlApplication(),
-                    dispatcherQueue = dispatcherQueue,
-                ).setContent(content)
+                val application = XamlApplication()
+                val launch = {
+                    WinUIApplicationRuntime(
+                        application = application,
+                        dispatcherQueue = dispatcherQueue,
+                    ).setContent(content)
+                }
+                if (!dispatcherQueue.tryEnqueue { launch() }) {
+                    launch()
+                }
             }
         }
     }
