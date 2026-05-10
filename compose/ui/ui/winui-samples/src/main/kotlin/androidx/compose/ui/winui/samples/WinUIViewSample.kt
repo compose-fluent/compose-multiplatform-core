@@ -210,6 +210,7 @@ private object ComposeWinUiSmokeApp {
         LaunchedEffect(Unit) {
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
+            runWinUIViewRelayoutSmoke()
             runWinUIViewContainerSyncSmoke()
             reuseSmokePassed = true
         }
@@ -798,6 +799,73 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.dispose()
         check(lifecycleProbe.releaseCount == 1) {
             "WinUIView state update smoke did not release on host disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+    }
+
+    private suspend fun runWinUIViewRelayoutSmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val width: MutableState<Int> = mutableStateOf(80)
+        val height: MutableState<Int> = mutableStateOf(30)
+        val x: MutableState<Int> = mutableStateOf(4)
+        val y: MutableState<Int> = mutableStateOf(6)
+        currentComposeView.setContent {
+            WinUIViewSampleContent(
+                modifier = fixedSizeAndPositionModifier(
+                    width = width.value,
+                    height = height.value,
+                    x = x.value,
+                    y = y.value,
+                ),
+                clipToBounds = true,
+                lifecycleProbe = lifecycleProbe,
+            )
+        }
+        awaitCondition("WinUIView initial relayout bounds") {
+            val rootCanvas = rootHost.content as? Canvas
+            val wrapper = rootCanvas?.children?.singleOrNull()
+            wrapper?.clip?.rect?.width == 80f &&
+                wrapper.clip.rect.height == 30f &&
+                lifecycleProbe.lastButton?.width == 80.0 &&
+                lifecycleProbe.lastButton?.height == 30.0
+        }
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView relayout smoke did not install an interop Canvas."
+        }
+        val wrapper = checkNotNull(rootCanvas.children.singleOrNull()) {
+            "WinUIView relayout smoke did not install a wrapper."
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUIView relayout smoke did not install a Button."
+        }
+
+        width.value = 140
+        height.value = 55
+        x.value = 11
+        y.value = 17
+        awaitCondition("WinUIView updated relayout bounds") {
+            val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
+                lifecycleProbe.lastButton === button &&
+                currentWrapper.clip.rect.width == 140f &&
+                currentWrapper.clip.rect.height == 55f &&
+                button.width == 140.0 &&
+                button.height == 55.0
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView relayout smoke recreated the Button, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView relayout smoke released the Button during relayout, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        currentComposeView.dispose()
+        check(lifecycleProbe.releaseCount == 1) {
+            "WinUIView relayout smoke did not release on host disposal, release=" +
                 "${lifecycleProbe.releaseCount}."
         }
     }
