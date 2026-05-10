@@ -17,7 +17,7 @@
 package androidx.compose.ui.viewinterop
 
 import microsoft.ui.xaml.UIElement
-import microsoft.ui.xaml.controls.ContentControl
+import microsoft.ui.xaml.controls.Canvas
 
 actual class InteropView internal constructor(
     internal val uiElement: UIElement,
@@ -26,7 +26,7 @@ actual class InteropView internal constructor(
 internal fun UIElement.asInteropView(): InteropView = InteropView(this)
 
 internal class InteropViewGroup internal constructor(
-    internal val uiElement: ContentControl,
+    internal val uiElement: Canvas,
 )
 
 internal interface WinUIInteropViewHost {

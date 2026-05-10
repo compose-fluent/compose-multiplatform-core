@@ -203,6 +203,7 @@ private object ComposeWinUiSmokeApp {
             println("compose-winui-sample: application created")
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
+            runWinUIViewUnclippedBoundsSmoke()
             runWinUIViewControlVarietySmoke()
             true
         }
@@ -455,6 +456,50 @@ private object ComposeWinUiSmokeApp {
             "WinUIView z-order smoke did not release both children: " +
                 "first=${firstProbe.releaseCount} second=${secondProbe.releaseCount}."
         }
+    }
+
+    private fun runWinUIViewUnclippedBoundsSmoke() {
+        var lastNativeCanvas: Canvas? = null
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        currentComposeView.setContent {
+            WinUIView(
+                modifier = fixedSizeAndPositionModifier(
+                    width = 80,
+                    height = 30,
+                    x = 0,
+                    y = 0,
+                ),
+                properties = WinUIInteropProperties(clipToBounds = true),
+                factory = {
+                    Canvas().apply {
+                        width = 200.0
+                        height = 90.0
+                    }
+                },
+                update = {
+                    lastNativeCanvas = it
+                },
+            )
+        }
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView unclipped bounds smoke did not install an interop Canvas."
+        }
+        val wrapper = checkNotNull(rootCanvas.children.singleOrNull()) {
+            "WinUIView unclipped bounds smoke did not install a wrapper."
+        }
+        val nativeCanvas = checkNotNull(lastNativeCanvas) {
+            "WinUIView unclipped bounds smoke did not update the native Canvas."
+        }
+        check(nativeCanvas.width == 200.0 && nativeCanvas.height == 90.0) {
+            "WinUIView child did not keep an unclipped native width: " +
+                "${nativeCanvas.width}x${nativeCanvas.height}."
+        }
+        check(wrapper.clip.rect.width == 80f && wrapper.clip.rect.height == 30f) {
+            "WinUIView wrapper clip did not match clipped Compose bounds: " +
+                "${wrapper.clip.rect.width}x${wrapper.clip.rect.height}."
+        }
+        currentComposeView.dispose()
     }
 
     private suspend fun runWinUIViewContainerSyncSmoke() {

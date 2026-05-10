@@ -62,7 +62,7 @@
 - [x] Wire initial `WinUIInteropProperties.clipToBounds` support to a WinUI `RectangleGeometry` clip on the native wrapper.
 - [x] Use an initial Canvas-backed WinUI interop root container so wrapper position and z-order are controlled by Compose tree order instead of Grid layout behavior.
 - [x] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
-- [ ] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
+- [x] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
 - [ ] Support focus transfer between Compose focus targets and WinUI controls, including Tab and Shift+Tab traversal.
 - [ ] Support basic pointer and keyboard input so native WinUI controls can handle their own interaction while Compose receives events outside interop views.
 - [ ] Defer full nested scroll parity until after basic AndroidView-equivalent lifecycle, layout, focus, and input behavior is stable.
@@ -93,6 +93,7 @@
 - [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
 - [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
+- [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.

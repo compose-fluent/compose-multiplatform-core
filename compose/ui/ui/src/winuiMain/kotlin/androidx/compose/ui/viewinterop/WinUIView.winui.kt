@@ -44,11 +44,12 @@ import microsoft.ui.xaml.HorizontalAlignment
 import microsoft.ui.xaml.Thickness
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.VerticalAlignment
-import microsoft.ui.xaml.controls.ContentControl
+import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.media.RectangleGeometry
 import windows.foundation.Rect
 import windows.foundation.Size
 import kotlin.math.ceil
+import kotlin.math.max
 
 /**
  * WinUI-specific interop switches for [WinUIView].
@@ -160,8 +161,8 @@ private class WinUIViewHolder<T : UIElement>(
     private val view: T,
 ) : InteropViewFactoryHolder(), WinUIInteropViewHost {
     private val group = InteropViewGroup(
-        ContentControl().also {
-            it.content = view
+        Canvas().also {
+            it.children.add(view)
             it.horizontalAlignment = HorizontalAlignment.Left
             it.verticalAlignment = VerticalAlignment.Top
         }
@@ -205,11 +206,16 @@ private class WinUIViewHolder<T : UIElement>(
     fun composeModifier(modifier: Modifier): Modifier = modifier.then(positionModifier)
 
     val measurePolicy = MeasurePolicy { _, constraints ->
-        val desiredSize = view.measureDesiredSize(constraints)
+        val desiredSize = view.measureUnclippedDesiredSize()
         val width = constraints.constrainWidth(desiredSize.width)
         val height = constraints.constrainHeight(desiredSize.height)
         layout(width, height) {
-            applyLayout(width, height)
+            applyLayout(
+                width = width,
+                height = height,
+                nativeWidth = max(width, desiredSize.width),
+                nativeHeight = max(height, desiredSize.height),
+            )
         }
     }
 
@@ -217,7 +223,7 @@ private class WinUIViewHolder<T : UIElement>(
 
     override fun onReuse() {
         if (!isViewAttachedToGroup) {
-            group.uiElement.content = view
+            group.uiElement.children.add(view)
             isViewAttachedToGroup = true
         } else {
             resetBlock(view)
@@ -226,24 +232,24 @@ private class WinUIViewHolder<T : UIElement>(
 
     override fun onDeactivate() {
         resetBlock(view)
-        group.uiElement.content = null
+        group.uiElement.children.clear()
         isViewAttachedToGroup = false
     }
 
     override fun onRelease() {
         releaseBlock(view)
-        group.uiElement.content = null
+        group.uiElement.children.clear()
         isViewAttachedToGroup = false
     }
 
-    private fun applyLayout(width: Int, height: Int) {
+    private fun applyLayout(width: Int, height: Int, nativeWidth: Int, nativeHeight: Int) {
         this.width = width
         this.height = height
         group.uiElement.width = width.toWinUISize()
         group.uiElement.height = height.toWinUISize()
         (view as? FrameworkElement)?.let {
-            it.width = width.toWinUISize()
-            it.height = height.toWinUISize()
+            it.width = nativeWidth.toWinUISize()
+            it.height = nativeHeight.toWinUISize()
             it.horizontalAlignment = HorizontalAlignment.Left
             it.verticalAlignment = VerticalAlignment.Top
         }
@@ -273,36 +279,47 @@ private class WinUIViewHolder<T : UIElement>(
     }
 }
 
-private fun UIElement.measureDesiredSize(constraints: Constraints): IntSize {
-    if (constraints.hasFixedWidth && constraints.hasFixedHeight) {
-        return IntSize(constraints.maxWidth, constraints.maxHeight)
-    }
-    runCatching {
+private fun UIElement.measureUnclippedDesiredSize(): IntSize {
+    val measuredSize = runCatching {
         measure(
             Size(
-                width = constraints.maxWidth.toWinUIAvailableSize(),
-                height = constraints.maxHeight.toWinUIAvailableSize(),
+                width = MaxUnboundedWinUISize,
+                height = MaxUnboundedWinUISize,
             )
         )
+        IntSize(
+            width = desiredSize.width.toComposeLayoutSize(),
+            height = desiredSize.height.toComposeLayoutSize(),
+        )
     }.getOrElse {
-        return IntSize(constraints.minWidth, constraints.minHeight)
+        IntSize.Zero
     }
+    val explicitSize = (this as? FrameworkElement)?.let {
+        IntSize(
+            width = it.width.toComposeLayoutSize(),
+            height = it.height.toComposeLayoutSize(),
+        )
+    } ?: IntSize.Zero
     return IntSize(
-        width = desiredSize.width.toComposeLayoutSize(),
-        height = desiredSize.height.toComposeLayoutSize(),
+        width = max(measuredSize.width, explicitSize.width),
+        height = max(measuredSize.height, explicitSize.height),
     )
 }
 
 private fun Int.toWinUISize(): Double =
     if (this > 0) toDouble() else Double.NaN
 
-private fun Int.toWinUIAvailableSize(): Float =
-    if (this == Constraints.Infinity) MaxUnboundedWinUISize else toFloat()
-
 private fun Float.toComposeLayoutSize(): Int =
     when {
         !isFinite() || this <= 0f -> 0
         this >= Int.MAX_VALUE.toFloat() -> Int.MAX_VALUE
+        else -> ceil(this).toInt()
+    }
+
+private fun Double.toComposeLayoutSize(): Int =
+    when {
+        !isFinite() || this <= 0.0 -> 0
+        this >= Int.MAX_VALUE.toDouble() -> Int.MAX_VALUE
         else -> ceil(this).toInt()
     }
 
