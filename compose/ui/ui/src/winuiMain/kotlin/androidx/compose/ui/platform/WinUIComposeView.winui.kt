@@ -140,7 +140,7 @@ class WinUIComposeView(
     }
 
     private fun updateRootContent(content: List<UIElement>) {
-        if (currentInteropRoots == content) return
+        if (currentInteropRoots.hasSameIdentityOrder(content)) return
         currentInteropRoots = content
         setRootContent(content)
     }
@@ -205,26 +205,88 @@ fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
 
 private class WinUIRootContentHost {
     val root = ContentControl()
-    private val interopContainer = Canvas()
+    private val interopContainer = WinUIInteropRootContainer()
     private val emptyContent = ContentControl()
     private var isContainerInstalled = false
 
     fun setRootContent(content: List<UIElement>) {
         if (content.isEmpty()) {
-            interopContainer.children.clear()
+            interopContainer.clear()
             root.content = emptyContent
             isContainerInstalled = false
             return
         }
         if (!isContainerInstalled) {
-            root.content = interopContainer
+            root.content = interopContainer.root
             isContainerInstalled = true
         }
-        if (content.size != interopContainer.children.size ||
-            content.indices.any { interopContainer.children[it] !== content[it] }
-        ) {
-            interopContainer.children.clear()
-            interopContainer.children.addAll(content)
+        interopContainer.setChildren(content)
+    }
+}
+
+private class WinUIInteropRootContainer {
+    val root = Canvas()
+    private val children = mutableListOf<UIElement>()
+
+    fun setChildren(content: List<UIElement>) {
+        removeStaleChildren(content)
+        content.forEachIndexed { targetIndex, child ->
+            if (children.getOrNull(targetIndex) === child) return@forEachIndexed
+            val existingIndex = children.indexOfIdentity(child)
+            if (existingIndex >= 0) {
+                move(existingIndex, targetIndex)
+            } else {
+                insert(targetIndex, child)
+            }
         }
+        while (children.size > content.size) {
+            removeAt(children.lastIndex)
+        }
+    }
+
+    fun clear() {
+        children.clear()
+        root.children.clear()
+    }
+
+    private fun removeStaleChildren(content: List<UIElement>) {
+        var index = 0
+        while (index < children.size) {
+            if (content.indexOfIdentity(children[index]) < 0) {
+                removeAt(index)
+            } else {
+                index += 1
+            }
+        }
+    }
+
+    private fun move(from: Int, to: Int) {
+        val child = children.removeAt(from)
+        children.add(to, child)
+        root.children.move(from.toUInt(), to.toUInt())
+    }
+
+    private fun insert(index: Int, child: UIElement) {
+        children.add(index, child)
+        root.children.add(index, child)
+    }
+
+    private fun removeAt(index: Int) {
+        children.removeAt(index)
+        root.children.removeAt(index)
+    }
+}
+
+private fun List<UIElement>.indexOfIdentity(element: UIElement): Int {
+    for (index in indices) {
+        if (this[index].nativeObject.sameIdentity(element.nativeObject)) return index
+    }
+    return -1
+}
+
+private fun List<UIElement>.hasSameIdentityOrder(other: List<UIElement>): Boolean {
+    if (size != other.size) return false
+    return indices.all { index ->
+        this[index].nativeObject.sameIdentity(other[index].nativeObject)
     }
 }

@@ -47,6 +47,7 @@ import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.TextBox
 import microsoft.ui.xaml.controls.ToggleSwitch
+import microsoft.ui.xaml.UIElement
 import kotlinx.coroutines.delay
 
 @Composable
@@ -207,6 +208,7 @@ private object ComposeWinUiSmokeApp {
         }
         LaunchedEffect(Unit) {
             runWinUIViewReuseSmoke()
+            runWinUIViewContainerSyncSmoke()
             reuseSmokePassed = true
         }
         LaunchedEffect(reuseSmokePassed, windowSmokePassed) {
@@ -455,6 +457,88 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    private suspend fun runWinUIViewContainerSyncSmoke() {
+        val firstProbe = WinUIViewLifecycleProbe()
+        val secondProbe = WinUIViewLifecycleProbe()
+        val thirdProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val includeSecond: MutableState<Boolean> = mutableStateOf(true)
+
+        currentComposeView.setContent {
+            WinUIViewSampleContent(
+                content = "first",
+                lifecycleProbe = firstProbe,
+            )
+            if (includeSecond.value) {
+                WinUIViewSampleContent(
+                    content = "second",
+                    lifecycleProbe = secondProbe,
+                )
+            }
+            WinUIViewSampleContent(
+                content = "third",
+                lifecycleProbe = thirdProbe,
+            )
+        }
+        awaitCondition("WinUIView container initial order") {
+            (rootHost.content as? Canvas)?.children?.size == 3
+        }
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView container sync smoke did not install an interop Canvas."
+        }
+        val firstWrapper = rootCanvas.children[0]
+        val secondWrapper = rootCanvas.children[1]
+        val thirdWrapper = rootCanvas.children[2]
+        assertInteropRootOrder(
+            rootCanvas = rootCanvas,
+            expected = listOf(firstWrapper, secondWrapper, thirdWrapper),
+            label = "initial order",
+        )
+
+        includeSecond.value = false
+        awaitCondition("WinUIView container middle removal") {
+            secondProbe.releaseCount == 1 &&
+                hasInteropRootOrder(rootCanvas, listOf(firstWrapper, thirdWrapper))
+        }
+        assertInteropRootOrder(
+            rootCanvas = rootCanvas,
+            expected = listOf(firstWrapper, thirdWrapper),
+            label = "middle removal order",
+        )
+        check(secondProbe.releaseCount == 1) {
+            "WinUIView container sync smoke did not release the removed child, got " +
+                "${secondProbe.releaseCount}."
+        }
+
+        includeSecond.value = true
+        awaitCondition("WinUIView container middle insertion") {
+            rootCanvas.children.size == 3 &&
+                secondProbe.factoryCount == 2 &&
+                secondProbe.releaseCount == 1
+        }
+        val reinsertedSecondWrapper = rootCanvas.children[1]
+        assertInteropRootOrder(
+            rootCanvas = rootCanvas,
+            expected = listOf(firstWrapper, reinsertedSecondWrapper, thirdWrapper),
+            label = "middle insertion order",
+        )
+        check(!reinsertedSecondWrapper.nativeObject.sameIdentity(secondWrapper.nativeObject)) {
+            "WinUIView container sync smoke reused a released middle wrapper."
+        }
+
+        currentComposeView.dispose()
+        check(
+            firstProbe.releaseCount == 1 &&
+                secondProbe.releaseCount == 2 &&
+                thirdProbe.releaseCount == 1
+        ) {
+            "WinUIView container sync smoke did not release remaining children: " +
+                "first=${firstProbe.releaseCount} second=${secondProbe.releaseCount} " +
+                "third=${thirdProbe.releaseCount}."
+        }
+    }
+
     private fun runWinUIViewControlVarietySmoke() {
         var buttonFactoryCount = 0
         var textBoxFactoryCount = 0
@@ -638,6 +722,27 @@ private object ComposeWinUiSmokeApp {
         check(condition()) {
             "Timed out waiting for $label."
         }
+    }
+}
+
+private fun assertInteropRootOrder(
+    rootCanvas: Canvas,
+    expected: List<UIElement>,
+    label: String,
+) {
+    check(rootCanvas.children.size == expected.size) {
+        "WinUIView container sync smoke expected ${expected.size} children for $label, got " +
+            "${rootCanvas.children.size}."
+    }
+    check(hasInteropRootOrder(rootCanvas, expected)) {
+        "WinUIView container sync smoke had incorrect child order for $label."
+    }
+}
+
+private fun hasInteropRootOrder(rootCanvas: Canvas, expected: List<UIElement>): Boolean {
+    if (rootCanvas.children.size != expected.size) return false
+    return expected.indices.all { index ->
+        rootCanvas.children[index].nativeObject.sameIdentity(expected[index].nativeObject)
     }
 }
 
