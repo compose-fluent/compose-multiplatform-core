@@ -209,6 +209,7 @@ private object ComposeWinUiSmokeApp {
         }
         LaunchedEffect(Unit) {
             runWinUIViewReuseSmoke()
+            runWinUIViewStateUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
             reuseSmokePassed = true
         }
@@ -757,6 +758,48 @@ private object ComposeWinUiSmokeApp {
                 "${lifecycleProbe.factoryCount} update=${lifecycleProbe.updateCount} " +
                 "reset=${lifecycleProbe.resetCount} release=${lifecycleProbe.releaseCount}"
         )
+    }
+
+    private suspend fun runWinUIViewStateUpdateSmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val content: MutableState<String> = mutableStateOf("state update initial")
+        currentComposeView.setContent {
+            WinUIViewSampleContent(
+                content = content.value,
+                lifecycleProbe = lifecycleProbe,
+            )
+        }
+        awaitCondition("WinUIView initial state update") {
+            lifecycleProbe.updateCount == 1 &&
+                lifecycleProbe.lastButton?.content == "state update initial" &&
+                (rootHost.content as? Canvas)?.children?.size == 1
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUIView state update smoke did not install a Button."
+        }
+
+        content.value = "state update changed"
+        awaitCondition("WinUIView repeated state update") {
+            lifecycleProbe.updateCount == 2 &&
+                lifecycleProbe.lastButton === button &&
+                button.content == "state update changed"
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView state update smoke recreated the Button, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView state update smoke released the Button during recomposition, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        currentComposeView.dispose()
+        check(lifecycleProbe.releaseCount == 1) {
+            "WinUIView state update smoke did not release on host disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
     }
 
     private suspend fun awaitCondition(label: String, condition: () -> Boolean) {
