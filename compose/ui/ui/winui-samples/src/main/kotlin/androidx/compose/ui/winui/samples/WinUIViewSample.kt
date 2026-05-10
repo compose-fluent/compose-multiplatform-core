@@ -45,6 +45,8 @@ import androidx.compose.ui.window.WindowBackdrop
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.Canvas
+import microsoft.ui.xaml.controls.TextBox
+import microsoft.ui.xaml.controls.ToggleSwitch
 import kotlinx.coroutines.delay
 
 @Composable
@@ -148,6 +150,7 @@ private object ComposeWinUiSmokeApp {
             println("compose-winui-sample: application created")
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
+            runWinUIViewControlVarietySmoke()
             true
         }
         LaunchedEffect(Unit) {
@@ -388,6 +391,101 @@ private object ComposeWinUiSmokeApp {
         check(firstProbe.releaseCount == 1 && secondProbe.releaseCount == 1) {
             "WinUIView z-order smoke did not release both children: " +
                 "first=${firstProbe.releaseCount} second=${secondProbe.releaseCount}."
+        }
+    }
+
+    private fun runWinUIViewControlVarietySmoke() {
+        var buttonFactoryCount = 0
+        var textBoxFactoryCount = 0
+        var toggleFactoryCount = 0
+        var releaseCount = 0
+        var lastButton: Button? = null
+        var lastTextBox: TextBox? = null
+        var lastToggleSwitch: ToggleSwitch? = null
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        currentComposeView.setContent {
+            WinUIView(
+                modifier = fixedSizeAndPositionModifier(
+                    width = 120,
+                    height = 40,
+                    x = 0,
+                    y = 0,
+                ),
+                factory = {
+                    buttonFactoryCount += 1
+                    Button()
+                },
+                onRelease = {
+                    releaseCount += 1
+                },
+                update = {
+                    it.content = "button"
+                    lastButton = it
+                },
+            )
+            WinUIView(
+                modifier = fixedSizeAndPositionModifier(
+                    width = 180,
+                    height = 40,
+                    x = 0,
+                    y = 48,
+                ),
+                factory = {
+                    textBoxFactoryCount += 1
+                    TextBox()
+                },
+                onRelease = {
+                    releaseCount += 1
+                },
+                update = {
+                    it.text = "text box"
+                    lastTextBox = it
+                },
+            )
+            WinUIView(
+                modifier = fixedSizeAndPositionModifier(
+                    width = 180,
+                    height = 40,
+                    x = 0,
+                    y = 96,
+                ),
+                factory = {
+                    toggleFactoryCount += 1
+                    ToggleSwitch()
+                },
+                onRelease = {
+                    releaseCount += 1
+                },
+                update = {
+                    it.isOn = true
+                    lastToggleSwitch = it
+                },
+            )
+        }
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView control variety smoke did not install an interop Canvas into the root host."
+        }
+        check(rootCanvas.children.size == 3) {
+            "WinUIView control variety smoke expected three native children, got " +
+                "${rootCanvas.children.size}."
+        }
+        check(buttonFactoryCount == 1 && textBoxFactoryCount == 1 && toggleFactoryCount == 1) {
+            "WinUIView control variety smoke did not create each WinUI control exactly once: " +
+                "button=$buttonFactoryCount textBox=$textBoxFactoryCount toggle=$toggleFactoryCount."
+        }
+        check(lastButton?.content == "button") {
+            "WinUIView control variety smoke did not update Button content."
+        }
+        check(lastTextBox?.text == "text box") {
+            "WinUIView control variety smoke did not update TextBox text."
+        }
+        check(lastToggleSwitch?.isOn == true) {
+            "WinUIView control variety smoke did not update ToggleSwitch isOn."
+        }
+        currentComposeView.dispose()
+        check(releaseCount == 3) {
+            "WinUIView control variety smoke did not release all controls, got $releaseCount."
         }
     }
 

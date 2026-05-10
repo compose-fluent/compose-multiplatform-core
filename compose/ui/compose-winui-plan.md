@@ -93,6 +93,7 @@
 - [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
 - [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
+- [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [ ] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button`, `TextBox`, and `ToggleSwitch`.
 - [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.
