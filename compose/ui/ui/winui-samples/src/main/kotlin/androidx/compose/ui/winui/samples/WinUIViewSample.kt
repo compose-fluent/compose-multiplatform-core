@@ -27,6 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -34,6 +37,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WinUIComposeView
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.WinUIInteropProperties
@@ -112,6 +116,7 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
     check(runCatching { uriHandler.openUri("missing-scheme") }.isFailure) {
         "WinUI LocalUriHandler did not reject a URI without a scheme."
     }
+    ValidateWinUIClipboard()
     if (expectWindowFocus) {
         check(LocalWindowInfo.current.isWindowFocused) {
             "WinUI LocalWindowInfo did not reflect the active WinUI window."
@@ -123,6 +128,40 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
             "WinUI LocalWindowInfo did not expose a positive container dp width."
         }
     }
+}
+
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+private fun ValidateWinUIClipboard() {
+    val clipboardManager = LocalClipboardManager.current
+    if (!WinUIClipboardSmokeState.managerPassed) {
+        clipboardManager.setText(AnnotatedString("compose-winui clipboard manager"))
+        val clipboardManagerText = clipboardManager.getText()?.text
+        check(clipboardManagerText == "compose-winui clipboard manager") {
+            "WinUI LocalClipboardManager did not round-trip text: actual=$clipboardManagerText."
+        }
+        WinUIClipboardSmokeState.managerPassed = true
+    }
+    val clipboard = LocalClipboard.current
+    if (!WinUIClipboardSmokeState.clipboardPassed) {
+        LaunchedEffect(clipboard) {
+            if (WinUIClipboardSmokeState.clipboardPassed) return@LaunchedEffect
+            // KWINRT-012: keep the WinRT clipboard smoke to one write per sample
+            // run; repeated offscreen compositions can hit transient
+            // OpenClipboard failures while still validating the Compose locals.
+            WinUIClipboardSmokeState.clipboardPassed = true
+            clipboard.setClipEntry(ClipEntry.withPlainText("compose-winui clipboard"))
+            val clipboardText = clipboard.getClipEntry()?.getPlainText()
+            check(clipboardText == "compose-winui clipboard") {
+                "WinUI LocalClipboard did not round-trip plain text: actual=$clipboardText."
+            }
+        }
+    }
+}
+
+private object WinUIClipboardSmokeState {
+    var managerPassed: Boolean = false
+    var clipboardPassed: Boolean = false
 }
 
 class WinUIViewLifecycleProbe {

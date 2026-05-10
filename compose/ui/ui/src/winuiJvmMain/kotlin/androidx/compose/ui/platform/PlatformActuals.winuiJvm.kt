@@ -23,15 +23,6 @@ import androidx.compose.ui.node.UiApplier
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.awaitCancellation
 
-actual class ClipEntry constructor(val nativeClipEntry: Any?) {
-    actual val clipMetadata: ClipMetadata
-        get() = ClipMetadata()
-}
-
-actual class ClipMetadata
-
-actual typealias NativeClipboard = Any
-
 actual val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>
     get() = androidx.lifecycle.compose.LocalLifecycleOwner
 

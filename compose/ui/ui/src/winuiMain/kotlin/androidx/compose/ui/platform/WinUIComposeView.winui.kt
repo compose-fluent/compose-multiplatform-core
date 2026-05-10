@@ -174,21 +174,25 @@ internal class WinUIFrameClock(
     private val dispatcherQueue: DispatcherQueue,
 ) : MonotonicFrameClock {
     private var isFrameScheduled = false
+    private var isCancelled = false
     private val frameClock = BroadcastFrameClock(::scheduleFrame)
 
     override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
         frameClock.withFrameNanos(onFrame)
 
     fun cancel() {
+        isCancelled = true
         frameClock.cancel(CancellationException("WinUIComposeView disposed"))
     }
 
     private fun scheduleFrame() {
-        if (isFrameScheduled) return
+        if (isCancelled || isFrameScheduled) return
         isFrameScheduled = true
         if (!dispatcherQueue.tryEnqueue {
                 isFrameScheduled = false
-                frameClock.sendFrame(System.nanoTime())
+                if (!isCancelled) {
+                    frameClock.sendFrame(System.nanoTime())
+                }
             }
         ) {
             isFrameScheduled = false

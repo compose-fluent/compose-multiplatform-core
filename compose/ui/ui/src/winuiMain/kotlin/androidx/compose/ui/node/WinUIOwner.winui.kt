@@ -56,20 +56,19 @@ import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.platform.AccessibilityManager
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.NativeClipboard
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.WinUIClipboard
+import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.semantics.EmptySemanticsModifier
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.spatial.RectManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.createFontFamilyResolver
@@ -107,9 +106,10 @@ internal class WinUIOwner(
     override val hapticFeedBack: HapticFeedback = NoOpHapticFeedback
     override val inputModeManager: InputModeManager =
         InputModeManagerImpl(InputMode.Keyboard, InputModeChangeRequester { true })
+    private val winUIClipboard = WinUIClipboard()
     @Suppress("DEPRECATION")
-    override val clipboardManager: ClipboardManager = NoOpClipboardManager
-    override val clipboard: Clipboard = NoOpClipboard
+    override val clipboardManager: ClipboardManager = WinUIClipboardManager(winUIClipboard)
+    override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = NoOpAccessibilityManager
     override val graphicsContext: GraphicsContext = UnsupportedGraphicsContext
     override val textToolbar: TextToolbar = NoOpTextToolbar
@@ -334,32 +334,6 @@ private object NoOpHapticFeedback : HapticFeedback {
 }
 
 @Suppress("DEPRECATION")
-private object NoOpClipboardManager : ClipboardManager {
-    private var text: AnnotatedString? = null
-
-    override fun setText(annotatedString: AnnotatedString) {
-        text = annotatedString
-    }
-
-    override fun getText(): AnnotatedString? = text
-
-    override fun getClip(): ClipEntry? = null
-
-    override fun setClip(clipEntry: ClipEntry?) = Unit
-
-    override val nativeClipboard: NativeClipboard
-        get() = error("WinUI native clipboard is not implemented yet.")
-}
-
-private object NoOpClipboard : Clipboard {
-    override suspend fun getClipEntry(): ClipEntry? = null
-
-    override suspend fun setClipEntry(clipEntry: ClipEntry?) = Unit
-
-    override val nativeClipboard: NativeClipboard
-        get() = error("WinUI native clipboard is not implemented yet.")
-}
-
 private object NoOpAccessibilityManager : AccessibilityManager {
     override fun calculateRecommendedTimeoutMillis(
         originalTimeoutMillis: Long,
