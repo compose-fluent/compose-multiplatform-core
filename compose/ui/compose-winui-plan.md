@@ -93,6 +93,7 @@
 - [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
 - [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
+- [x] Add repository-local WinUIView smoke validation for updating interop properties and clearing native clip.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.

@@ -211,6 +211,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
             runWinUIViewRelayoutSmoke()
+            runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
             reuseSmokePassed = true
         }
@@ -870,6 +871,66 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    private suspend fun runWinUIViewPropertiesUpdateSmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val clipToBounds: MutableState<Boolean> = mutableStateOf(true)
+        val isUserInteractionEnabled: MutableState<Boolean> = mutableStateOf(false)
+        currentComposeView.setContent {
+            WinUIViewSampleContent(
+                modifier = fixedSizeAndPositionModifier(
+                    width = 90,
+                    height = 35,
+                    x = 0,
+                    y = 0,
+                ),
+                isUserInteractionEnabled = isUserInteractionEnabled.value,
+                clipToBounds = clipToBounds.value,
+                lifecycleProbe = lifecycleProbe,
+            )
+        }
+        awaitCondition("WinUIView initial properties") {
+            val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            val clip = wrapper?.readClipRectOrNull()
+            wrapper?.isHitTestVisible == false &&
+                lifecycleProbe.lastButton?.isHitTestVisible == false &&
+                clip?.width == 90f &&
+                clip.height == 35f
+        }
+        val wrapper = checkNotNull((rootHost.content as? Canvas)?.children?.singleOrNull()) {
+            "WinUIView properties smoke did not install a wrapper."
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUIView properties smoke did not install a Button."
+        }
+
+        clipToBounds.value = false
+        isUserInteractionEnabled.value = true
+        awaitCondition("WinUIView updated properties") {
+            val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
+                lifecycleProbe.lastButton === button &&
+                currentWrapper.isHitTestVisible &&
+                button.isHitTestVisible &&
+                currentWrapper.readClipRectOrNull() == null
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView properties smoke recreated the Button, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView properties smoke released the Button during property update, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        currentComposeView.dispose()
+        check(lifecycleProbe.releaseCount == 1) {
+            "WinUIView properties smoke did not release on host disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+    }
+
     private suspend fun awaitCondition(label: String, condition: () -> Boolean) {
         repeat(100) {
             if (condition()) return
@@ -901,6 +962,9 @@ private fun hasInteropRootOrder(rootCanvas: Canvas, expected: List<UIElement>): 
         rootCanvas.children[index].nativeObject.sameIdentity(expected[index].nativeObject)
     }
 }
+
+private fun UIElement.readClipRectOrNull() =
+    runCatching { clip.rect }.getOrNull()
 
 private fun fixedSizeAndPositionModifier(width: Int, height: Int, x: Int, y: Int): Modifier =
     Modifier.layout { measurable, _ ->
