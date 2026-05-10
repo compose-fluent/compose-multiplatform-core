@@ -159,3 +159,33 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `XamlControlsResources` without requiring a C/C++ authoring host toolchain in
   compose-ui, or expose a stable runtime helper that can install WinUI control
   resources for base `Application` instances.
+
+## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
+
+- **Status:** Open
+- **Observed in:** `Canvas.children` / `Panel.children` returning `UIElement`
+  values whose native runtime class is a derived XAML type such as `Canvas` or
+  `FrameworkElement`
+- **Symptom:** After retrieving a child through `Canvas.children`, Kotlin
+  casts such as `as? Canvas` or `as? FrameworkElement` do not reliably produce
+  the derived projection wrapper, even when the underlying COM identity is a
+  `Canvas`. Generated runtime-class `Metadata.wrap(...)` and interface wrappers
+  such as `IFrameworkElement` are internal, so compose-winui sample code has no
+  stable public way to re-project the base `UIElement` wrapper as the desired
+  derived runtime class or interface.
+- **Impact on compose-winui:** Repository-local smoke validation can verify
+  wrapper identity, `UIElement` properties such as `clip`, and the user-owned
+  native view dimensions, but cannot directly assert wrapper
+  `FrameworkElement.width`, `height`, or `margin` after reading the wrapper back
+  from `Canvas.children`. More generally, consumer code cannot safely downcast
+  XAML collection/event values to richer generated projections.
+- **compose-winui workaround:** `WinUIView.winui.kt` keeps a strongly typed
+  `Canvas` wrapper inside `WinUIViewHolder` when applying size, margin, and
+  clipping. `WinUIViewSample.kt` avoids derived-wrapper reads from
+  `Canvas.children` and validates relayout through `UIElement.clip`, stable COM
+  identity, and the user `Button` dimensions instead. Search for `KWINRT-009`.
+- **Resolution target:** Expose a stable public projection API that can wrap an
+  `IInspectable` / `IUnknown` as a requested generated runtime class or
+  interface, or make collection projections preserve/recover concrete
+  runtime-class wrappers so normal Kotlin type checks work for projected XAML
+  inheritance.
