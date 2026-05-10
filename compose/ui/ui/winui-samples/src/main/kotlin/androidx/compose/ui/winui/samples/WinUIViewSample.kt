@@ -44,7 +44,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.ContentControl
-import microsoft.ui.xaml.controls.Grid
+import microsoft.ui.xaml.controls.Canvas
 import kotlinx.coroutines.delay
 
 @Composable
@@ -257,10 +257,10 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val rootGrid = checkNotNull(rootHost.content as? Grid) {
-            "WinUIView lifecycle smoke did not install an interop Grid into the root host."
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView lifecycle smoke did not install an interop Canvas into the root host."
         }
-        val wrapper = checkNotNull(rootGrid.children.singleOrNull()) {
+        val wrapper = checkNotNull(rootCanvas.children.singleOrNull()) {
             "WinUIView lifecycle smoke did not install a wrapper into the root host."
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
@@ -304,7 +304,7 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        check(rootHost.content !is Grid) {
+        check(rootHost.content !is Canvas) {
             "WinUIComposeView did not clear WinUIView content after it left composition."
         }
         check(lifecycleProbe.releaseCount == 1) {
@@ -319,10 +319,10 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val recreatedRootGrid = checkNotNull(rootHost.content as? Grid) {
-            "WinUIView lifecycle smoke did not reinstall an interop Grid after re-entering composition."
+        val recreatedRootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView lifecycle smoke did not reinstall an interop Canvas after re-entering composition."
         }
-        val recreatedWrapper = checkNotNull(recreatedRootGrid.children.singleOrNull()) {
+        val recreatedWrapper = checkNotNull(recreatedRootCanvas.children.singleOrNull()) {
             "WinUIView lifecycle smoke did not recreate a wrapper after re-entering composition."
         }
         val recreatedButton = checkNotNull(lifecycleProbe.lastButton) {
@@ -369,11 +369,11 @@ private object ComposeWinUiSmokeApp {
                 lifecycleProbe = secondProbe,
             )
         }
-        val rootGrid = checkNotNull(rootHost.content as? Grid) {
-            "WinUIView z-order smoke did not install an interop Grid into the root host."
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView z-order smoke did not install an interop Canvas into the root host."
         }
-        check(rootGrid.children.size == 2) {
-            "WinUIView z-order smoke expected two native children, got ${rootGrid.children.size}."
+        check(rootCanvas.children.size == 2) {
+            "WinUIView z-order smoke expected two native children, got ${rootCanvas.children.size}."
         }
         val firstButton = checkNotNull(firstProbe.lastButton) {
             "WinUIView z-order smoke first factory did not create a Button."
@@ -404,10 +404,10 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val rootGrid = checkNotNull(rootHost.content as? Grid) {
-            "WinUIView reuse smoke did not install an interop Grid into the root host."
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView reuse smoke did not install an interop Canvas into the root host."
         }
-        val wrapper = checkNotNull(rootGrid.children.singleOrNull()) {
+        val wrapper = checkNotNull(rootCanvas.children.singleOrNull()) {
             "WinUIView reuse smoke did not install a wrapper into the root host."
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
@@ -421,7 +421,7 @@ private object ComposeWinUiSmokeApp {
         }
         active.value = false
         awaitCondition("reusable WinUIView deactivation") {
-            lifecycleProbe.resetCount == 1 && rootHost.content !is Grid
+            lifecycleProbe.resetCount == 1 && rootHost.content !is Canvas
         }
         check(lifecycleProbe.factoryCount == 1) {
             "Reusable WinUIView should not recreate while deactivating, got " +
@@ -440,7 +440,7 @@ private object ComposeWinUiSmokeApp {
             lifecycleProbe.updateCount == 2
         }
         check(
-            (rootHost.content as? Grid)?.children?.singleOrNull()?.nativeObject
+            (rootHost.content as? Canvas)?.children?.singleOrNull()?.nativeObject
                 ?.sameIdentity(wrapper.nativeObject) == true
         ) {
             "Reusable WinUIView did not keep its wrapper across deactivation."

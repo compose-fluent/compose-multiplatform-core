@@ -251,6 +251,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun applyPosition(x: Float, y: Float) {
+        // KWINRT-007: Canvas.Left/Top attached property setters crash in the offscreen smoke host.
         group.uiElement.margin = Thickness(
             left = x.toDouble(),
             top = y.toDouble(),

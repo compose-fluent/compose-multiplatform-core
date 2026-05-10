@@ -30,8 +30,8 @@ import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
+import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
-import microsoft.ui.xaml.controls.Grid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -205,7 +205,7 @@ fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
 
 private class WinUIRootContentHost {
     val root = ContentControl()
-    private val interopContainer = Grid()
+    private val interopContainer = Canvas()
     private val emptyContent = ContentControl()
     private var isContainerInstalled = false
 

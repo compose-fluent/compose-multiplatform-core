@@ -112,3 +112,26 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Resolution target:** Generate nullable Kotlin setters for WinRT runtime
   class properties whose metadata permits null, including
   `Microsoft.UI.Xaml.UIElement.Clip`.
+
+## KWINRT-007: Canvas attached property setters can crash the WinUI runtime
+
+- **Status:** Open
+- **Observed in:** `Canvas.setLeft(UIElement, Double)`,
+  `Canvas.setTop(UIElement, Double)`, and `DependencyObject.setValue(...)` with
+  `Canvas.LeftProperty` / `Canvas.TopProperty`
+- **Symptom:** Setting Canvas positioning attached properties during the
+  repository-local offscreen `WinUIComposeView` smoke can crash in
+  `Microsoft.UI.Xaml.dll` with `EXCEPTION_ACCESS_VIOLATION` before an HRESULT is
+  returned to Kotlin.
+- **Impact on compose-winui:** A Canvas-backed interop root is the desired
+  container for absolute wrapper placement, but compose-winui cannot currently
+  use the generated Canvas attached-property setter path safely in all smoke
+  hosts.
+- **compose-winui workaround:** `WinUIView.winui.kt` uses a Canvas root
+  container for tree-order/z-order, but writes wrapper position through
+  `FrameworkElement.margin` instead of `Canvas.Left` / `Canvas.Top`. Search for
+  `KWINRT-007`.
+- **Resolution target:** Make generated static attached-property setters and
+  boxed `DependencyObject.setValue(...)` calls safe for Canvas positioning
+  properties, or document a required XAML attachment precondition that
+  compose-winui can detect before calling them.
