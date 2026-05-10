@@ -16,6 +16,12 @@
 
 package androidx.compose.ui.text.font
 
+/**
+ * Create a WinUI font family resolver for use by WinUI compose owners.
+ */
+fun createFontFamilyResolver(): FontFamily.Resolver =
+    FontFamilyResolverImpl(WinUIPlatformFontLoader())
+
 @Suppress("DEPRECATION", "KmpDeprecationMismatch")
 @Deprecated(
     "This exists to bridge existing Font.ResourceLoader APIs, and should be removed with them",

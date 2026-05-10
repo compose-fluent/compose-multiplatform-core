@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.WinUIComposeView
+import androidx.compose.ui.unit.IntSize
 import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.Guid
@@ -34,6 +35,8 @@ import io.github.composefluent.winrt.runtime.WinRtTypeSignature
 import microsoft.ui.composition.Compositor
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.windowing.AppWindow
+import microsoft.ui.windowing.AppWindowChangedEventArgs
+import microsoft.ui.windowing.IAppWindow
 import microsoft.ui.xaml.IWindow
 import microsoft.ui.xaml.WindowEventArgs
 import microsoft.ui.xaml.media.DesktopAcrylicBackdrop
@@ -112,6 +115,9 @@ private class WinUIWindowNode(
     private var closedDelegate: WinRtDelegateHandle? = createWindowClosedDelegate(::handleClosed)
     private var closedToken: EventRegistrationToken? =
         addWindowClosedHandler(window, requireNotNull(closedDelegate))
+    private var appWindowChangedDelegate: WinRtDelegateHandle? =
+        createAppWindowChangedDelegate(::updateWindowInfo)
+    private var appWindowChangedToken: EventRegistrationToken? = null
 
     var onCloseRequest: () -> Unit = {}
 
@@ -136,9 +142,9 @@ private class WinUIWindowNode(
         set(value) {
             field = value
             val systemBackdrop = value.createSystemBackdrop()
-            if (systemBackdrop != null) {
-                window.systemBackdrop = systemBackdrop
-            }
+            // KWINRT-004: generated Window.systemBackdrop cannot currently be set to null.
+            if (systemBackdrop == null) return
+            window.systemBackdrop = systemBackdrop
         }
 
     var content: @Composable WindowScope.() -> Unit = {}
@@ -148,11 +154,14 @@ private class WinUIWindowNode(
             val view = composeView ?: WinUIComposeView().also {
                 composeView = it
                 window.content = it.root
+                registerAppWindowChangedHandler()
             }
             if (!isActivated) {
                 window.activate()
                 isActivated = true
             }
+            view.setWindowFocused(isActivated)
+            updateWindowInfo()
             view.setContent {
                 this@WinUIWindowNode.field()
             }
@@ -163,6 +172,7 @@ private class WinUIWindowNode(
         isReleased = true
         isClosingFromRelease = true
         disposeContent()
+        removeAppWindowChangedHandler()
         removeClosedHandler()
         if (isActivated) {
             runCatching { window.close() }
@@ -174,6 +184,7 @@ private class WinUIWindowNode(
         if (isReleased) return
         isReleased = true
         disposeContent()
+        removeAppWindowChangedHandler()
         removeClosedHandler()
         if (!isClosingFromRelease) {
             onCloseRequest()
@@ -181,8 +192,34 @@ private class WinUIWindowNode(
     }
 
     private fun disposeContent() {
-        composeView?.disposeComposition()
+        composeView?.dispose()
         composeView = null
+    }
+
+    private fun updateWindowInfo() {
+        val view = composeView ?: return
+        val appWindowSize = window.appWindow.size
+        view.setWindowContainerSize(
+            IntSize(
+                width = appWindowSize.width,
+                height = appWindowSize.height,
+            )
+        )
+    }
+
+    private fun registerAppWindowChangedHandler() {
+        if (appWindowChangedToken != null) return
+        appWindowChangedToken =
+            addAppWindowChangedHandler(window.appWindow, requireNotNull(appWindowChangedDelegate))
+    }
+
+    private fun removeAppWindowChangedHandler() {
+        val token = appWindowChangedToken ?: return
+        val delegate = appWindowChangedDelegate
+        appWindowChangedToken = null
+        appWindowChangedDelegate = null
+        runCatching { removeAppWindowChangedHandler(window.appWindow, token) }
+        delegate?.close()
     }
 
     private fun removeClosedHandler() {
@@ -192,6 +229,69 @@ private class WinUIWindowNode(
         closedDelegate = null
         runCatching { removeWindowClosedHandler(window, token) }
         delegate?.close()
+    }
+}
+
+private fun createAppWindowChangedDelegate(
+    onChanged: () -> Unit,
+): WinRtDelegateHandle =
+    WinRtDelegateBridge.createUnitDelegate(
+        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
+            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
+            WinRtTypeSignature.runtimeClass(
+                AppWindow.Metadata.TYPE_NAME,
+                WinRtTypeSignature.guid(AppWindow.Metadata.DEFAULT_INTERFACE_IID),
+            ),
+            WinRtTypeSignature.runtimeClass(
+                AppWindowChangedEventArgs.Metadata.TYPE_NAME,
+                WinRtTypeSignature.guid(AppWindowChangedEventArgs.Metadata.DEFAULT_INTERFACE_IID),
+            ),
+        ),
+        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
+    ) { arguments ->
+        (arguments.getOrNull(1) as? IInspectableReference)?.close()
+        onChanged()
+    }
+
+private fun addAppWindowChangedHandler(
+    appWindow: AppWindow,
+    delegate: WinRtDelegateHandle,
+): EventRegistrationToken =
+    // KWINRT-001: use direct IAppWindow ABI registration until generated event sources are stable.
+    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
+        delegate.createReference().use { delegateReference ->
+            PlatformAbi.confinedScope().use { scope ->
+                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
+                HResult(
+                    ComVtableInvoker.invokeArgs(
+                        instance = appWindowInterface.pointer,
+                        slot = IAppWindow.Metadata.CHANGED_ADD_SLOT,
+                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
+                        arg1 = tokenOut,
+                    ),
+                ).requireSuccess("AppWindow.Changed add handler")
+                EventRegistrationToken.fromAbi(tokenOut)
+            }
+        }
+    }
+
+private fun removeAppWindowChangedHandler(
+    appWindow: AppWindow,
+    token: EventRegistrationToken,
+) {
+    // KWINRT-001: pair with the manual AppWindow.Changed registration above.
+    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
+        PlatformAbi.confinedScope().use { scope ->
+            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
+            EventRegistrationToken.copyTo(token, tokenAbi)
+            HResult(
+                ComVtableInvoker.invokeArgs(
+                    instance = appWindowInterface.pointer,
+                    slot = IAppWindow.Metadata.CHANGED_REMOVE_SLOT,
+                    arg0 = tokenAbi,
+                ),
+            ).requireSuccess("AppWindow.Changed remove handler")
+        }
     }
 }
 
@@ -217,6 +317,7 @@ private fun addWindowClosedHandler(
     window: XamlWindow,
     delegate: WinRtDelegateHandle,
 ): EventRegistrationToken =
+    // KWINRT-001: use direct IWindow ABI registration until generated event sources are stable.
     window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
         delegate.createReference().use { delegateReference ->
             PlatformAbi.confinedScope().use { scope ->
@@ -238,6 +339,7 @@ private fun removeWindowClosedHandler(
     window: XamlWindow,
     token: EventRegistrationToken,
 ) {
+    // KWINRT-001: pair with the manual Window.Closed registration above.
     window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
         PlatformAbi.confinedScope().use { scope ->
             val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())

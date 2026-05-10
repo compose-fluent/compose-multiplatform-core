@@ -16,6 +16,7 @@
 
 package androidx.compose.ui
 
+import androidx.compose.ui.platform.WinUIScheduler
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -25,7 +26,15 @@ private val WinUiPostExecutor = Executors.newSingleThreadScheduledExecutor { run
 }
 
 internal actual fun postDelayed(delayMillis: Long, block: () -> Unit): Any {
-    return WinUiPostExecutor.schedule(block, delayMillis, TimeUnit.MILLISECONDS)
+    return WinUiPostExecutor.schedule(
+        {
+            if (!WinUIScheduler.dispatch(block)) {
+                block()
+            }
+        },
+        delayMillis,
+        TimeUnit.MILLISECONDS,
+    )
 }
 
 internal actual fun removePost(token: Any?) {

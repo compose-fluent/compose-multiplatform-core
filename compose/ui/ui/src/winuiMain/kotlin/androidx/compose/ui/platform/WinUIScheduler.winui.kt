@@ -14,22 +14,20 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.viewinterop
+package androidx.compose.ui.platform
 
-import microsoft.ui.xaml.UIElement
-import microsoft.ui.xaml.controls.ContentControl
+import microsoft.ui.dispatching.DispatcherQueue
 
-actual class InteropView internal constructor(
-    internal val uiElement: UIElement,
-)
+internal object WinUIScheduler {
+    private var dispatcherQueue: DispatcherQueue? = null
 
-internal fun UIElement.asInteropView(): InteropView = InteropView(this)
+    fun register(dispatcherQueue: DispatcherQueue) {
+        if (this.dispatcherQueue == null) {
+            this.dispatcherQueue = dispatcherQueue
+        }
+    }
 
-internal class InteropViewGroup internal constructor(
-    internal val uiElement: ContentControl,
-)
-
-internal interface WinUIInteropViewHost {
-    val interopRoot: UIElement
-    val isInteropViewActive: Boolean
+    fun dispatch(block: () -> Unit): Boolean {
+        return dispatcherQueue?.tryEnqueue(block) == true
+    }
 }

@@ -22,12 +22,20 @@ import androidx.compose.runtime.ComposeNodeLifecycleCallback
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.platform.GlobalSnapshotManager
+import androidx.compose.ui.platform.WinUIDispatcher
+import androidx.compose.ui.platform.WinUIFrameClock
+import androidx.compose.ui.platform.WinUIScheduler
 import io.github.composefluent.winrt.runtime.RuntimeScope
 import io.github.composefluent.winrt.runtime.WinRtWinUiResourceManagerBootstrap
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.Application as XamlApplication
-import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 fun Application(
     content: @Composable ApplicationScope.() -> Unit,
@@ -35,8 +43,10 @@ fun Application(
     WinRtWindowsAppSdkBootstrap.initialize().use {
         RuntimeScope.initializeSingleThreaded().use {
             XamlApplication.start {
+                val dispatcherQueue = DispatcherQueue.getForCurrentThread()
                 WinUIApplicationRuntime(
                     application = XamlApplication(),
+                    dispatcherQueue = dispatcherQueue,
                 ).setContent(content)
             }
         }
@@ -54,19 +64,32 @@ internal interface WinUIApplicationContext : ApplicationScope {
 
 private class WinUIApplicationRuntime(
     private val application: XamlApplication,
+    private val dispatcherQueue: DispatcherQueue,
 ) : WinUIApplicationContext {
     private val resourceRegistration =
         WinRtWinUiResourceManagerBootstrap.registerForApplication(application)
-    private val recomposer = Recomposer(EmptyCoroutineContext)
+    private val frameClock = WinUIFrameClock(dispatcherQueue)
+    private val recomposerParentJob = SupervisorJob()
+    private val recomposerContext =
+        WinUIDispatcher(dispatcherQueue) + frameClock + recomposerParentJob
+    private val recomposer = Recomposer(recomposerContext)
     private val root = WinUIApplicationNode()
     private val composition = Composition(
         applier = WinUIApplicationApplier(root),
         parent = recomposer,
     )
+    private val recomposerJob: Job
 
-    private var dispatcherQueue: DispatcherQueue? = null
     private var isDisposeRequested = false
     private var isDisposed = false
+
+    init {
+        WinUIScheduler.register(dispatcherQueue)
+        GlobalSnapshotManager.ensureStarted(dispatcherQueue)
+        recomposerJob = CoroutineScope(recomposerContext).launch {
+            recomposer.runRecomposeAndApplyChanges()
+        }
+    }
 
     fun setContent(content: @Composable ApplicationScope.() -> Unit) {
         composition.setContent {
@@ -77,21 +100,18 @@ private class WinUIApplicationRuntime(
     override fun exitApplication() {
         if (isDisposeRequested) return
         isDisposeRequested = true
-        val queue = dispatcherQueue
-        if (queue != null) {
-            val enqueued = queue.tryEnqueue {
-                dispose()
-                application.exit()
-            }
-            if (enqueued) return
+        val enqueued = dispatcherQueue.tryEnqueue {
+            dispose()
+            application.exit()
         }
+        if (enqueued) return
         dispose()
         application.exit()
     }
 
     override fun attachWindow(dispatcherQueue: DispatcherQueue) {
-        if (this.dispatcherQueue == null) {
-            this.dispatcherQueue = dispatcherQueue
+        check(this.dispatcherQueue == dispatcherQueue) {
+            "WinUI windows must be created on the application DispatcherQueue."
         }
     }
 
@@ -100,6 +120,9 @@ private class WinUIApplicationRuntime(
         isDisposed = true
         composition.dispose()
         recomposer.close()
+        recomposerJob.cancel()
+        recomposerParentJob.cancel()
+        frameClock.cancel()
         root.removeAll()
         resourceRegistration?.close()
     }

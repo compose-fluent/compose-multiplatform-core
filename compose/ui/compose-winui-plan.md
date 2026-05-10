@@ -22,18 +22,22 @@
 
 ## compose-ui platform abstractions
 - [x] Add initial `WinUIComposeView` in `winuiMain`, mirroring the role of Android's root owner rather than desktop's Skiko scene layer.
-- [ ] Replace the initial `WinUIComposeView` placeholder with a real WinUI `Owner`, recomposer, and frame scheduler.
+- [x] Replace the initial `WinUIComposeView` placeholder with a real WinUI `Owner`, recomposer, and frame scheduler.
 - [ ] Implement the `Owner` contract for WinUI: root `LayoutNode`, measure/layout scheduling, drawing invalidation, snapshot observation, semantics owner, focus owner, pointer processing, and test root support.
-- [ ] Implement a WinUI `setContent` entry point that creates a `Composition` with `UiApplier` and provides WinUI composition locals.
+- [x] Wire the initial WinUI `Owner` to Compose `MeasureAndLayoutDelegate`, root constraints, root measure policy, and positioned-callback dispatch so layout work is no longer a no-op.
+- [x] Attach the WinUI root `LayoutNode` to an initial `WinUIOwner` so reusable node lifecycle goes through common `LayoutNode.onReuse()` instead of a WinUI-only rootless path.
+- [x] Implement a WinUI `setContent` entry point that creates a `Composition` with `UiApplier` and provides WinUI composition locals.
 - [x] Add an initial `Window.setContent` entry point that creates a `WinUIComposeView`, installs its root into the WinUI `Window`, and returns the view for lifecycle management.
 - [x] Add initial `Application { Window { ... } }` domains for WinUI JVM, including Windows App SDK bootstrap, RuntimeScope initialization, WinUI resource manager registration, and a window scope backed by `WinUIComposeView`.
 - [x] Keep the WinUI application domain in `Application.winui.kt` and the WinUI window domain in `Window.winui.kt`.
 - [x] Expose initial WinUI window capabilities from the generated `microsoft.ui.xaml.Window`: `extendsContentIntoTitleBar`, `WindowBackdrop`, and `WindowScope` access to `window`, `appWindow`, `compositor`, and `dispatcherQueue`.
-- [x] Add concrete backdrop projection types for Mica and Desktop Acrylic through explicit Windows App SDK `type(...)` entries and validate `WindowBackdrop.Mica` in the sample.
+- [x] Add concrete backdrop projection types for Mica and Desktop Acrylic through explicit Windows App SDK `type(...)` entries and validate Mica-to-DesktopAcrylic updates in the sample.
 - [x] Add an initial `Window(onCloseRequest = ...)` close-request hook and close the native WinUI window when its Compose node is released.
 - [x] Move initial WinUI application/window disposal onto the WinUI UI thread via `DispatcherQueue` for `exitApplication` and window close/removal paths.
 - [ ] Broaden the initial close/removal work into full declarative multi-window lifetime semantics, including cancelable close policy if WinUI exposes a suitable pre-close event.
 - [ ] Provide WinUI actuals for common platform hooks such as time, delayed posting, view configuration, window info, URI handling, clipboard, haptics, semantics region, focusability, platform velocity tracking, and fillable data.
+- [x] Route initial WinUI JVM delayed posting back through the registered WinUI `DispatcherQueue` instead of running callbacks directly on the scheduler thread.
+- [x] Provide initial WinUI composition locals for density, layout direction, view configuration, font resolution, URI handling, active-window focus state, and AppWindow-backed container size.
 - [ ] Provide initial WinUI text input and IME integration hooks, with minimal stubs only where behavior is explicitly deferred.
 - [ ] Provide WinUI accessibility integration hooks that can later map Compose semantics to UI Automation.
 - [ ] Ensure lifecycle, retained values, and saveable state behavior have WinUI equivalents instead of relying on Android `ViewTree*Owner` APIs.
@@ -49,11 +53,13 @@
 
 ## WinUIView interop
 - [x] Add public `WinUIView` composable API for embedding a WinUI `UIElement` in Compose UI.
-- [ ] Match Android `AndroidView` lifecycle semantics: `factory` creates the view, `update` runs after creation and on recomposition, `onReset` opts into reuse, and `onRelease` runs once when the instance is permanently discarded.
+- [x] Match Android `AndroidView` lifecycle semantics: `factory` creates the view, `update` runs after creation and on recomposition, `onReset` opts into reuse, and `onRelease` runs once when the instance is permanently discarded.
 - [x] Add initial `WinUIInteropProperties` for interaction, native accessibility participation, clipping/overlay behavior, and future WinUI-specific interop switches.
 - [x] Add `InteropView` actual for WinUI `UIElement`.
-- [ ] Add `InteropViewGroup` actual for the WinUI wrapper/panel used to host interop children.
+- [x] Add initial `InteropViewGroup` for the WinUI wrapper used to host interop children.
 - [ ] Implement a WinUI view holder that owns the user `UIElement`, wrapper element, modifier updates, density updates, lifecycle callbacks, and event-token cleanup.
+- [x] Add initial WinUIView measure policy plus size and root-position propagation from Compose layout to the WinUI wrapper and `FrameworkElement` child.
+- [x] Wire initial `WinUIInteropProperties.clipToBounds` support to a WinUI `RectangleGeometry` clip on the native wrapper.
 - [ ] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
 - [ ] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
 - [ ] Support focus transfer between Compose focus targets and WinUI controls, including Tab and Shift+Tab traversal.
@@ -71,14 +77,21 @@
 ## Tests and validation
 - [x] Add a repository-local compose-winui sample that compiles against `:compose:ui:ui` and calls `WinUIView { Button() }`.
 - [x] Add a runnable Windows App SDK/WinUI smoke task for the compose-winui sample so projection/runtime wiring is validated outside `kotlin-winrt`'s own samples.
-- [x] Add repository-local WinUIView lifecycle smoke validation for factory, initial update, and release.
+- [x] Add repository-local WinUIView lifecycle smoke validation for factory, initial update, leaving composition, re-entering composition, and final release.
 - [x] Add repository-local window smoke validation for `Application { Window { ... } }`, title propagation, `WindowScope.window`, and `WindowBackdrop.Mica`.
-- [ ] Upgrade the compose-winui sample to render Compose content inside `WinUIComposeView` once the WinUI Owner, recomposer, and frame scheduler are implemented.
+- [x] Add repository-local application-domain recomposition smoke validation for state-driven `Window` title, titlebar, and backdrop parameter updates.
+- [x] Upgrade the compose-winui sample to render Compose content inside `WinUIComposeView` once the WinUI Owner, recomposer, and frame scheduler are implemented.
 - [x] Add compile validation for the new WinUI JVM source set.
+- [x] Add repository-local reusable `WinUIView` smoke validation for reset on deactivation, reactivation without recreation, and final release on disposal.
+- [x] Add repository-local composition-local smoke validation for WinUI density, layout direction, view configuration, font resolver, and URI handler.
+- [x] Add repository-local `WindowInfo` smoke validation for active window focus plus positive container px/dp size.
+- [x] Add repository-local owner disposal smoke coverage by disposing `WinUIComposeView` after lifecycle/reuse validation and using `dispose()` from the WinUI window release path.
 - [ ] Add compile validation for the new WinUI mingwX64 source set after `kotlin-winrt` supports mingw.
 - [ ] Add tests proving WinUI source sets do not depend on `skikoMain`, `desktopMain`, AWT, Swing, or Skiko AWT classes.
 - [ ] Add lifecycle tests for `WinUIView`: factory once, update after creation, repeated update on state changes, reset on reuse, release on final disposal.
 - [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
+- [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
+- [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [ ] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button`, `TextBox`, and `ToggleSwitch`.
 - [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.

@@ -33,6 +33,13 @@ plugins {
     id("JetBrainsAndroidXPlugin")
 }
 
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+
 androidXMultiplatform {
     androidLibrary {
         compileSdk = 35
@@ -43,7 +50,9 @@ androidXMultiplatform {
             it.consumerKeepRules.files.add(new File("proguard-rules.pro"))
         }
     }
-    desktop()
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
     mac()
     ios()
     js()
@@ -201,6 +210,36 @@ androidXMultiplatform {
         // TODO: Align it with AOSP or make explicit
         configureEach {
             languageSettings.optIn("androidx.compose.ui.text.ExperimentalTextApi")
+        }
+    }
+}
+
+kotlin {
+    if (composeWinUiGradlePluginAvailable) {
+        if (composeWinUiJvmTargetEnabled) {
+            jvm("winuiJvm")
+        }
+        // Enable a WinUI mingw target after kotlin-winrt provides its mingw runtime actuals.
+
+        sourceSets {
+            winuiMain {
+                dependsOn(commonMain)
+            }
+
+            winuiTest {
+                dependsOn(commonTest)
+            }
+
+            if (composeWinUiJvmTargetEnabled) {
+                winuiJvmMain {
+                    dependsOn(winuiMain)
+                    dependsOn(jvmAndAndroidMain)
+                }
+                winuiJvmTest {
+                    dependsOn(winuiTest)
+                }
+            }
+
         }
     }
 }

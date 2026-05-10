@@ -43,6 +43,7 @@ internal class UiApplier(
     }
 
     override fun onEndChanges() {
+        super.onEndChanges()
         root.owner?.onEndApplyChanges()
         onEndChangesCallback()
     }

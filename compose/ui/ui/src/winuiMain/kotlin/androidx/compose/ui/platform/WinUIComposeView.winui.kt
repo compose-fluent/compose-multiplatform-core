@@ -16,16 +16,30 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
-import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.node.WinUIOwner
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
+import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
 import microsoft.ui.xaml.controls.ContentControl
-import kotlin.coroutines.EmptyCoroutineContext
+import microsoft.ui.xaml.controls.Grid
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -35,23 +49,38 @@ import kotlin.coroutines.EmptyCoroutineContext
  */
 class WinUIComposeView(
     val root: UIElement,
-    private val setRootContent: (UIElement?) -> Unit,
+    private val setRootContent: (List<UIElement>) -> Unit,
 ) {
     constructor() : this(WinUIRootContentHost())
 
-    internal val rootNode = LayoutNode()
+    internal val rootNode = LayoutNode().also {
+        it.measurePolicy = RootMeasurePolicy
+    }
+    internal val owner = WinUIOwner(rootNode, onInteropTreeChanged = ::syncRootContent)
 
     private var recomposer: Recomposer? = null
+    private var recomposerJob: Job? = null
+    private var frameClock: WinUIFrameClock? = null
     private var composition: Composition? = null
     private var content: (@Composable () -> Unit)? = null
-    private var currentRootContent: UIElement? = null
+    private var currentInteropRoots: List<UIElement> = emptyList()
+    private var isDisposed = false
 
     fun setContent(content: @Composable () -> Unit) {
+        check(!isDisposed) {
+            "Cannot set content on a disposed WinUIComposeView."
+        }
         this.content = content
         val currentComposition = composition ?: createComposition().also {
             composition = it
         }
-        currentComposition.setContent(content)
+        currentComposition.setContent {
+            ProvideCommonCompositionLocals(
+                owner = owner,
+                uriHandler = createWinUIUriHandler(),
+                content = content,
+            )
+        }
         syncRootContent()
     }
 
@@ -60,14 +89,43 @@ class WinUIComposeView(
         composition = null
         recomposer?.close()
         recomposer = null
+        recomposerJob?.cancel()
+        recomposerJob = null
+        frameClock?.cancel()
+        frameClock = null
         content = null
-        updateRootContent(null)
+        updateRootContent(emptyList())
         rootNode.removeAll()
     }
 
+    fun dispose() {
+        if (isDisposed) return
+        isDisposed = true
+        disposeComposition()
+        owner.dispose()
+    }
+
+    internal fun setWindowFocused(isWindowFocused: Boolean) {
+        owner.setWindowFocused(isWindowFocused)
+    }
+
+    internal fun setWindowContainerSize(size: IntSize) {
+        owner.setWindowContainerSize(size)
+    }
+
     private fun createComposition(): Composition {
-        val currentRecomposer = Recomposer(EmptyCoroutineContext)
+        WinUIScheduler.register(root.dispatcherQueue)
+        GlobalSnapshotManager.ensureStarted(root.dispatcherQueue)
+        val dispatcher = WinUIDispatcher(root.dispatcherQueue)
+        val currentFrameClock = WinUIFrameClock(root.dispatcherQueue)
+        val recomposerParentJob = SupervisorJob()
+        val recomposerContext = dispatcher + currentFrameClock + recomposerParentJob
+        val currentRecomposer = Recomposer(recomposerContext)
         recomposer = currentRecomposer
+        recomposerJob = CoroutineScope(recomposerContext).launch {
+            currentRecomposer.runRecomposeAndApplyChanges()
+        }
+        frameClock = currentFrameClock
         val applier = UiApplier(rootNode, ::syncRootContent)
         return Composition(
             applier = applier,
@@ -76,16 +134,66 @@ class WinUIComposeView(
     }
 
     private fun syncRootContent() {
-        updateRootContent(rootNode.firstInteropView())
+        updateRootContent(rootNode.collectWinUIInteropRoots())
+        owner.measureAndLayout(sendPointerUpdate = false)
+        updateRootContent(rootNode.collectWinUIInteropRoots())
     }
 
-    private fun updateRootContent(content: UIElement?) {
-        if (currentRootContent === content) return
-        currentRootContent = content
+    private fun updateRootContent(content: List<UIElement>) {
+        if (currentInteropRoots == content) return
+        currentInteropRoots = content
         setRootContent(content)
     }
 
     private constructor(host: WinUIRootContentHost) : this(host.root, host::setRootContent)
+}
+
+internal class WinUIDispatcher(
+    private val dispatcherQueue: DispatcherQueue,
+) : CoroutineDispatcher() {
+    init {
+        // KWINRT-002: force generated interface projection registry loading before hasThreadAccess.
+        runCatching {
+            Class.forName(
+                "io.github.composefluent.winrt.projections.support.WinRTInterfaceProjectionRegistry"
+            ).getDeclaredMethod("register").invoke(null)
+        }
+    }
+
+    override fun isDispatchNeeded(context: CoroutineContext): Boolean =
+        runCatching { !dispatcherQueue.hasThreadAccess }.getOrDefault(true)
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        if (!dispatcherQueue.tryEnqueue { block.run() }) {
+            block.run()
+        }
+    }
+}
+
+internal class WinUIFrameClock(
+    private val dispatcherQueue: DispatcherQueue,
+) : MonotonicFrameClock {
+    private var isFrameScheduled = false
+    private val frameClock = BroadcastFrameClock(::scheduleFrame)
+
+    override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
+        frameClock.withFrameNanos(onFrame)
+
+    fun cancel() {
+        frameClock.cancel(CancellationException("WinUIComposeView disposed"))
+    }
+
+    private fun scheduleFrame() {
+        if (isFrameScheduled) return
+        isFrameScheduled = true
+        if (!dispatcherQueue.tryEnqueue {
+                isFrameScheduled = false
+                frameClock.sendFrame(System.nanoTime())
+            }
+        ) {
+            isFrameScheduled = false
+        }
+    }
 }
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
@@ -95,16 +203,28 @@ fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
     return composeView
 }
 
-@OptIn(InternalComposeUiApi::class)
-private fun LayoutNode.firstInteropView(): UIElement? {
-    return getInteropView()?.uiElement ?: children.firstNotNullOfOrNull { it.firstInteropView() }
-}
-
 private class WinUIRootContentHost {
     val root = ContentControl()
+    private val interopContainer = Grid()
     private val emptyContent = ContentControl()
+    private var isContainerInstalled = false
 
-    fun setRootContent(content: UIElement?) {
-        root.content = content ?: emptyContent
+    fun setRootContent(content: List<UIElement>) {
+        if (content.isEmpty()) {
+            interopContainer.children.clear()
+            root.content = emptyContent
+            isContainerInstalled = false
+            return
+        }
+        if (!isContainerInstalled) {
+            root.content = interopContainer
+            isContainerInstalled = true
+        }
+        if (content.size != interopContainer.children.size ||
+            content.indices.any { interopContainer.children[it] !== content[it] }
+        ) {
+            interopContainer.children.clear()
+            interopContainer.children.addAll(content)
+        }
     }
 }
