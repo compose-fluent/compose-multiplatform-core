@@ -24,14 +24,22 @@ import androidx.compose.runtime.Updater
 import androidx.compose.runtime.currentComposer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
+import androidx.compose.ui.focus.FocusEnterExitScope
+import androidx.compose.ui.focus.FocusProperties
+import androidx.compose.ui.focus.FocusPropertiesModifierNode
+import androidx.compose.ui.focus.FocusTargetNode
+import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.materialize
+import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
@@ -41,6 +49,7 @@ import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.Guid
 import io.github.composefluent.winrt.runtime.HResult
 import io.github.composefluent.winrt.runtime.PlatformAbi
+import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
 import microsoft.ui.xaml.Thickness
@@ -232,7 +241,14 @@ private class WinUIViewHolder<T : UIElement>(
         releaseCleanups += cleanup
     }
 
-    private fun composeModifier(modifier: Modifier): Modifier = modifier.then(positionModifier)
+    private fun composeModifier(modifier: Modifier): Modifier =
+        modifier
+            .winUIFocusInteropModifier(
+                canFocus = ::canRequestFocus,
+                requestFocus = ::requestNativeFocus,
+                clearFocus = ::clearNativeFocus,
+            )
+            .then(positionModifier)
 
     private val measurePolicy = MeasurePolicy { _, constraints ->
         val desiredSize = view.measureUnclippedDesiredSize()
@@ -318,6 +334,22 @@ private class WinUIViewHolder<T : UIElement>(
         }
     }
 
+    private fun canRequestFocus(): Boolean =
+        isViewAttachedToGroup && properties.isUserInteractionEnabled && view.isTabStop
+
+    private fun requestNativeFocus(): Boolean =
+        runCatching {
+            canRequestFocus() && view.focus(FocusState.Programmatic)
+        }.getOrDefault(false)
+
+    private fun clearNativeFocus() {
+        runCatching {
+            if (view.focusState != FocusState.Unfocused) {
+                view.focus(FocusState.Unfocused)
+            }
+        }
+    }
+
     private fun attachViewToGroup() {
         group.uiElement.children.add(view)
         isViewAttachedToGroup = true
@@ -355,6 +387,105 @@ private class WinUIViewHolder<T : UIElement>(
         if (clipGeometry == null) return
         clipGeometry = null
         setClip(group.uiElement, null)
+    }
+}
+
+private fun Modifier.winUIFocusInteropModifier(
+    canFocus: () -> Boolean,
+    requestFocus: () -> Boolean,
+    clearFocus: () -> Unit,
+): Modifier =
+    this
+        .then(WinUIFocusGroupPropertiesElement(requestFocus))
+        .focusTarget()
+        .then(WinUIFocusTargetPropertiesElement(canFocus))
+        .then(WinUIFocusTargetInteropElement(clearFocus))
+
+private data class WinUIFocusGroupPropertiesElement(
+    val requestFocus: () -> Boolean,
+) : ModifierNodeElement<WinUIFocusGroupPropertiesNode>() {
+    override fun create(): WinUIFocusGroupPropertiesNode =
+        WinUIFocusGroupPropertiesNode(requestFocus)
+
+    override fun update(node: WinUIFocusGroupPropertiesNode) {
+        node.requestFocus = requestFocus
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIFocusGroupProperties"
+    }
+}
+
+private class WinUIFocusGroupPropertiesNode(
+    var requestFocus: () -> Boolean,
+) : Modifier.Node(), FocusPropertiesModifierNode {
+    private val onEnter: FocusEnterExitScope.() -> Unit = {
+        if (!requestFocus()) {
+            cancelFocusChange()
+        }
+    }
+
+    override fun applyFocusProperties(focusProperties: FocusProperties) {
+        focusProperties.canFocus = false
+        focusProperties.onEnter = onEnter
+    }
+}
+
+private data class WinUIFocusTargetPropertiesElement(
+    val canFocus: () -> Boolean,
+) : ModifierNodeElement<WinUIFocusTargetPropertiesNode>() {
+    override fun create(): WinUIFocusTargetPropertiesNode = WinUIFocusTargetPropertiesNode(canFocus)
+
+    override fun update(node: WinUIFocusTargetPropertiesNode) {
+        node.canFocus = canFocus
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIFocusTargetProperties"
+    }
+}
+
+private class WinUIFocusTargetPropertiesNode(
+    var canFocus: () -> Boolean,
+) : Modifier.Node(), FocusPropertiesModifierNode {
+    override fun applyFocusProperties(focusProperties: FocusProperties) {
+        focusProperties.canFocus = canFocus()
+    }
+}
+
+private data class WinUIFocusTargetInteropElement(
+    val clearFocus: () -> Unit,
+) : ModifierNodeElement<WinUIFocusTargetInteropNode>() {
+    override fun create(): WinUIFocusTargetInteropNode =
+        WinUIFocusTargetInteropNode(clearFocus)
+
+    override fun update(node: WinUIFocusTargetInteropNode) {
+        node.clearFocus = clearFocus
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIFocusTargetInterop"
+    }
+}
+
+private class WinUIFocusTargetInteropNode(
+    var clearFocus: () -> Unit,
+) : DelegatingNode() {
+    init {
+        delegate(FocusTargetNode(isInteropViewHost = true, onFocusChange = ::onFocusStateChange))
+    }
+
+    private fun onFocusStateChange(
+        previousState: androidx.compose.ui.focus.FocusState,
+        currentState: androidx.compose.ui.focus.FocusState,
+    ) {
+        if (!isAttached) return
+        val wasFocused = previousState.isFocused
+        val isFocused = currentState.isFocused
+        if (wasFocused == isFocused) return
+        if (!isFocused) {
+            clearFocus()
+        }
     }
 }
 

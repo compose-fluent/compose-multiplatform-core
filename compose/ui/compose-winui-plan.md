@@ -108,6 +108,7 @@
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
 - [x] Add repository-local WinUI owner focus smoke validation for Compose `FocusRequester` requests accepted while attempting native WinUI root focus.
+- [ ] Add repository-local WinUIView smoke validation for Compose `FocusRequester` focus transfer to a native WinUI control after native `UIElement.focus(FocusState.Programmatic)` succeeds for embedded controls (`KWINRT-017`).
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [ ] Resolve the current Windows JVM sample shutdown blocker where JDK 25 FFM upcalls can abort with `upcallLinker.cpp:66` after early WinUIView smoke validation (`KWINRT-013`).
@@ -118,3 +119,4 @@
 
 ## kotlin-winrt blockers
 - `KWINRT-016`: Generated WinUI event sources currently fail on JVM when compose-winui accesses `Button.click`, throwing `IncompatibleClassChangeError: Expecting non-static method ... WinRtGeneratedEventSourceRuntime.createEventSourceFactory(...)`. Re-enable repository-local native event-token registration/release smoke coverage after the generated projection and runtime call shape match again.
+- `KWINRT-017`: Live embedded WinUI controls currently reject programmatic focus from compose-winui. The repository-local `WinUIView` focus-transfer smoke reached a native `Button` in the active WinUI window, but `Button.focus(FocusState.Programmatic)` returned `false`, so Compose correctly canceled the interop focus request. Re-enable Compose `FocusRequester` to native WinUI control smoke coverage after this succeeds.
