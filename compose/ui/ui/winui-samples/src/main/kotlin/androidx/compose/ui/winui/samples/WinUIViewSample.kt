@@ -381,6 +381,12 @@ private object ComposeWinUiSmokeApp {
         check(!button.isHitTestVisible) {
             "WinUIView did not apply isUserInteractionEnabled=false to the native Button."
         }
+        check(!button.isTabStop) {
+            "WinUIView did not remove the native Button from Tab focus when disabled."
+        }
+        check(!button.isEnabled) {
+            "WinUIView did not disable the native Button control when interaction was disabled."
+        }
         check(button.width == 123.0 && button.height == 45.0) {
             "WinUIView did not apply Compose size to the native Button: " +
                 "${button.width}x${button.height}."
@@ -936,6 +942,8 @@ private object ComposeWinUiSmokeApp {
             val clip = wrapper?.readClipRectOrNull()
             wrapper?.isHitTestVisible == false &&
                 lifecycleProbe.lastButton?.isHitTestVisible == false &&
+                lifecycleProbe.lastButton?.isTabStop == false &&
+                lifecycleProbe.lastButton?.isEnabled == false &&
                 clip?.width == 90f &&
                 clip.height == 35f
         }
@@ -954,6 +962,8 @@ private object ComposeWinUiSmokeApp {
                 lifecycleProbe.lastButton === button &&
                 currentWrapper.isHitTestVisible &&
                 button.isHitTestVisible &&
+                button.isTabStop &&
+                button.isEnabled &&
                 currentWrapper.readClipRectOrNull() == null
         }
         check(lifecycleProbe.factoryCount == 1) {

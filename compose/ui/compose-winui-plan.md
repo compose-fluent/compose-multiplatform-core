@@ -61,6 +61,7 @@
 - [ ] Implement a WinUI view holder that owns the user `UIElement`, wrapper element, modifier updates, density updates, lifecycle callbacks, and event-token cleanup.
 - [x] Add initial WinUIView measure policy plus size and root-position propagation from Compose layout to the WinUI wrapper and `FrameworkElement` child.
 - [x] Wire initial `WinUIInteropProperties.clipToBounds` support to a WinUI `RectangleGeometry` clip on the native wrapper.
+- [x] Wire initial `WinUIInteropProperties.isUserInteractionEnabled` support to WinUI hit testing, user-element Tab focus, and `Control.isEnabled`.
 - [x] Use an initial Canvas-backed WinUI interop root container so wrapper position and z-order are controlled by Compose tree order instead of Grid layout behavior.
 - [x] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
 - [x] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
@@ -96,6 +97,7 @@
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
 - [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
 - [x] Add repository-local WinUIView smoke validation for updating interop properties and clearing native clip.
+- [x] Add repository-local WinUIView smoke validation for updating native interaction state across hit testing, Tab focus, and `Control.isEnabled`.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.

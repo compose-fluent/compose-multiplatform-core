@@ -45,6 +45,7 @@ import microsoft.ui.xaml.Thickness
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.VerticalAlignment
 import microsoft.ui.xaml.controls.Canvas
+import microsoft.ui.xaml.controls.Control
 import microsoft.ui.xaml.media.RectangleGeometry
 import windows.foundation.Rect
 import windows.foundation.Size
@@ -171,6 +172,10 @@ private class WinUIViewHolder<T : UIElement>(
     private var width = 0
     private var height = 0
     private var clipGeometry: RectangleGeometry? = null
+    private val initialGroupHitTestVisible = group.uiElement.isHitTestVisible
+    private val initialViewHitTestVisible = view.isHitTestVisible
+    private val initialViewTabStop = view.isTabStop
+    private val initialControlEnabled = (view as? Control)?.isEnabled
 
     override val interopRoot: UIElement
         get() = group.uiElement
@@ -188,8 +193,7 @@ private class WinUIViewHolder<T : UIElement>(
     var properties: WinUIInteropProperties = WinUIInteropProperties()
         set(value) {
             field = value
-            group.uiElement.isHitTestVisible = value.isUserInteractionEnabled
-            view.isHitTestVisible = value.isUserInteractionEnabled
+            applyInteraction(value.isUserInteractionEnabled)
             updateClip()
         }
 
@@ -264,6 +268,16 @@ private class WinUIViewHolder<T : UIElement>(
             right = 0.0,
             bottom = 0.0,
         )
+    }
+
+    private fun applyInteraction(isUserInteractionEnabled: Boolean) {
+        group.uiElement.isHitTestVisible = initialGroupHitTestVisible && isUserInteractionEnabled
+        view.isHitTestVisible = initialViewHitTestVisible && isUserInteractionEnabled
+        view.isTabStop = initialViewTabStop && isUserInteractionEnabled
+        (view as? Control)?.let { control ->
+            control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
+                isUserInteractionEnabled
+        }
     }
 
     private fun updateClip() {
