@@ -27,6 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.autoSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
+import androidx.compose.runtime.retain.LocalRetainedValuesStore
+import androidx.compose.runtime.retain.retain
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -68,6 +71,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
@@ -138,8 +143,17 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
     check(LocalLifecycleOwner.current.lifecycle.currentState == Lifecycle.State.RESUMED) {
         "WinUI LocalLifecycleOwner was not provided in a resumed state."
     }
+    check(LocalSavedStateRegistryOwner.current != null) {
+        "WinUI LocalSavedStateRegistryOwner was not provided."
+    }
+    check(LocalViewModelStoreOwner.current != null) {
+        "WinUI LocalViewModelStoreOwner was not provided."
+    }
     check(LocalSaveableStateRegistry.current != null) {
         "WinUI LocalSaveableStateRegistry was not provided."
+    }
+    check(LocalRetainedValuesStore.current !== ForgetfulRetainedValuesStore) {
+        "WinUI LocalRetainedValuesStore was not provided."
     }
     val uriHandler = checkNotNull(LocalUriHandler.current) {
         "WinUI LocalUriHandler was not provided by WinUIComposeView."
@@ -342,6 +356,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
             runWinUISaveableStateSmoke()
+            runWinUIRetainedValuesSmoke()
             runWinUITextInputSessionSmoke()
             reuseSmokePassed = true
         }
@@ -619,6 +634,37 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: saveable state restored")
+    }
+
+    private fun runWinUIRetainedValuesSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var factoryCalls = 0
+        var firstValue: Any? = null
+        currentComposeView.setRetainedValuesSmokeContent(
+            createValue = { Any().also { factoryCalls++ } },
+            onValue = { firstValue = it },
+        )
+        check(firstValue != null) {
+            "WinUI retain did not create its initial value."
+        }
+        check(factoryCalls == 1) {
+            "WinUI retain factory was called $factoryCalls times for initial content."
+        }
+        currentComposeView.disposeComposition()
+
+        var restoredValue: Any? = null
+        currentComposeView.setRetainedValuesSmokeContent(
+            createValue = { Any().also { factoryCalls++ } },
+            onValue = { restoredValue = it },
+        )
+        check(restoredValue === firstValue) {
+            "WinUI retain did not restore across disposeComposition."
+        }
+        check(factoryCalls == 1) {
+            "WinUI retain factory was called again while restoring."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: retained value restored")
     }
 
     private fun runWinUIViewZOrderSmoke() {
@@ -1339,6 +1385,24 @@ private fun WinUIComposeView.setSaveableStateSmokeContent(
 ) {
     setContent {
         WinUISaveableStateSmokeContent(onState)
+    }
+}
+
+@Composable
+private fun WinUIRetainedValuesSmokeContent(
+    createValue: () -> Any,
+    onValue: (Any) -> Unit,
+) {
+    val value = retain { createValue() }
+    onValue(value)
+}
+
+private fun WinUIComposeView.setRetainedValuesSmokeContent(
+    createValue: () -> Any,
+    onValue: (Any) -> Unit,
+) {
+    setContent {
+        WinUIRetainedValuesSmokeContent(createValue, onValue)
     }
 }
 

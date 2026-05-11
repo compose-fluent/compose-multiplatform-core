@@ -385,7 +385,12 @@ kotlin {
                 dependsOn(commonMain)
                 kotlin.srcDir(layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin"))
                 dependencies {
+                    def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
+                    def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
                     implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
+                    implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
+                    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
+                    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
                 }
             }
 

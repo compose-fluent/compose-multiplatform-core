@@ -19,7 +19,6 @@ package androidx.compose.ui.node
 import androidx.collection.IntObjectMap
 import androidx.collection.MutableIntObjectMap
 import androidx.collection.mutableIntObjectMapOf
-import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
 import androidx.compose.runtime.retain.RetainedValuesStore
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -91,9 +90,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.InteropView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import kotlinx.coroutines.CoroutineScope
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
@@ -103,6 +99,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 internal class WinUIOwner(
     override val root: LayoutNode,
     private val focusRoot: UIElement,
+    override val retainedValuesStore: RetainedValuesStore,
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
     private val onInteropTreeChanged: () -> Unit = {},
 ) : Owner {
@@ -136,9 +133,7 @@ internal class WinUIOwner(
     override val focusOwner: FocusOwner = FocusOwnerImpl(WinUIPlatformFocusOwner(focusRoot), this)
     private val mutableWindowInfo = WindowInfoImpl()
     override val windowInfo: WindowInfo = mutableWindowInfo
-    override val retainedValuesStore: RetainedValuesStore = ForgetfulRetainedValuesStore
     override val rectManager: RectManager = RectManager()
-    internal val lifecycleOwner: LifecycleOwner = WinUILifecycleOwner()
     private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
@@ -168,7 +163,6 @@ internal class WinUIOwner(
         if (root.isAttached) {
             root.detach()
         }
-        (lifecycleOwner as WinUILifecycleOwner).destroy()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
     }
@@ -354,19 +348,6 @@ private object NoOpAccessibilityManager : AccessibilityManager {
         containsText: Boolean,
         containsControls: Boolean,
     ): Long = originalTimeoutMillis
-}
-
-private class WinUILifecycleOwner : LifecycleOwner {
-    private val registry = LifecycleRegistry.createUnsafe(this).apply {
-        currentState = Lifecycle.State.RESUMED
-    }
-
-    override val lifecycle: Lifecycle
-        get() = registry
-
-    fun destroy() {
-        registry.currentState = Lifecycle.State.DESTROYED
-    }
 }
 
 private object UnsupportedGraphicsContext : GraphicsContext {

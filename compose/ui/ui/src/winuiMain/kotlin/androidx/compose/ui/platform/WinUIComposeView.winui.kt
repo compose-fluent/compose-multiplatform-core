@@ -20,6 +20,7 @@ import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LocalHostDefaultProvider
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.remember
@@ -31,6 +32,9 @@ import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.enableSavedStateHandles
+import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
@@ -60,9 +64,18 @@ class WinUIComposeView(
     internal val rootNode = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
     }
+    private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
+        enforceMainThread = false,
+    ).apply {
+        enableSavedStateHandles()
+        setLifecycleState(Lifecycle.State.RESUMED)
+    }
+    private val hostDefaultProvider = WinUIHostDefaultProvider(architectureComponentsOwner)
+    private val retainedValuesStore = WinUIRetainedValuesStore()
     internal val owner = WinUIOwner(
         root = rootNode,
         focusRoot = root,
+        retainedValuesStore = retainedValuesStore,
         onInteropTreeChanged = ::syncRootContent,
     )
 
@@ -91,8 +104,12 @@ class WinUIComposeView(
                 }
             }
             CompositionLocalProvider(
-                androidx.lifecycle.compose.LocalLifecycleOwner provides owner.lifecycleOwner,
+                androidx.lifecycle.compose.LocalLifecycleOwner provides
+                    architectureComponentsOwner.lifecycleOwner,
+                LocalSavedStateRegistryOwner provides
+                    architectureComponentsOwner.savedStateRegistryOwner,
                 LocalSaveableStateRegistry provides registry,
+                LocalHostDefaultProvider provides hostDefaultProvider,
             ) {
                 ProvideCommonCompositionLocals(
                     owner = owner,
@@ -101,13 +118,18 @@ class WinUIComposeView(
                 )
             }
         }
+        retainedValuesStore.stopRetainingExitedValues()
         syncRootContent()
     }
 
     fun disposeComposition() {
-        saveableState = saveableStateRegistry?.performSave()
-        saveableStateRegistry = null
-        composition?.dispose()
+        val currentComposition = composition
+        if (currentComposition != null) {
+            saveableState = saveableStateRegistry?.performSave()
+            saveableStateRegistry = null
+            retainedValuesStore.startRetainingExitedValues()
+            currentComposition.dispose()
+        }
         composition = null
         recomposer?.close()
         recomposer = null
@@ -124,6 +146,8 @@ class WinUIComposeView(
         if (isDisposed) return
         isDisposed = true
         disposeComposition()
+        retainedValuesStore.dispose()
+        architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
     }
 
