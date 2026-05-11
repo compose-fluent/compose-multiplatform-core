@@ -338,6 +338,8 @@ private object ComposeWinUiSmokeApp {
     fun launch(applicationScope: ApplicationScope) {
         var reuseSmokePassed by remember { mutableStateOf(false) }
         var windowSmokePassed by remember { mutableStateOf(false) }
+        var secondaryWindowVisible by remember { mutableStateOf(true) }
+        var secondaryWindowClosePassed by remember { mutableStateOf(false) }
         remember {
             println("compose-winui-sample: application created")
             runWinUILifecycleOwnerSmoke()
@@ -360,10 +362,11 @@ private object ComposeWinUiSmokeApp {
             runWinUITextInputSessionSmoke()
             reuseSmokePassed = true
         }
-        LaunchedEffect(reuseSmokePassed, windowSmokePassed) {
+        LaunchedEffect(reuseSmokePassed, windowSmokePassed, secondaryWindowClosePassed) {
             if (
                 reuseSmokePassed &&
                 windowSmokePassed &&
+                secondaryWindowClosePassed &&
                 java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")
             ) {
                 applicationScope.exitApplication()
@@ -456,6 +459,24 @@ private object ComposeWinUiSmokeApp {
                         lastToggleSwitch = toggleSwitch
                     },
                 )
+            }
+            if (secondaryWindowVisible) {
+                Window(
+                    onCloseRequest = {
+                        secondaryWindowClosePassed = true
+                        secondaryWindowVisible = false
+                        println("compose-winui-sample: secondary window close request")
+                    },
+                    title = "compose-winui secondary",
+                ) {
+                    check(window.title == "compose-winui secondary") {
+                        "Secondary WinUI window title was not applied."
+                    }
+                    LaunchedEffect(Unit) {
+                        withFrameNanos { }
+                        window.close()
+                    }
+                }
             }
         }
     }

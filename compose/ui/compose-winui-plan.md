@@ -83,6 +83,7 @@
 - [x] Add a runnable Windows App SDK/WinUI smoke task for the compose-winui sample so projection/runtime wiring is validated outside `kotlin-winrt`'s own samples.
 - [x] Add repository-local WinUIView lifecycle smoke validation for factory, initial update, leaving composition, re-entering composition, and final release.
 - [x] Add repository-local window smoke validation for `Application { Window { ... } }`, title propagation, `WindowScope.window`, and `WindowBackdrop.Mica`.
+- [x] Add repository-local secondary `Window` close/removal smoke validation for native close triggering `onCloseRequest` and Compose state removal while another WinUI window remains active.
 - [x] Add repository-local application-domain recomposition smoke validation for state-driven `Window` title, titlebar, and backdrop parameter updates.
 - [x] Upgrade the compose-winui sample to render Compose content inside `WinUIComposeView` once the WinUI Owner, recomposer, and frame scheduler are implemented.
 - [x] Add compile validation for the new WinUI JVM source set.
