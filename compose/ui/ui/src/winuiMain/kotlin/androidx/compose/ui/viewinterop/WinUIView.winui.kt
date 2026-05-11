@@ -324,9 +324,21 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun clearNativeState() {
+        restoreInteraction()
         clearClip()
         group.uiElement.children.clear()
         isViewAttachedToGroup = false
+    }
+
+    private fun restoreInteraction() {
+        group.uiElement.isHitTestVisible = initialGroupHitTestVisible
+        view.isHitTestVisible = initialViewHitTestVisible
+        view.isTabStop = initialViewTabStop
+        (view as? Control)?.let { control ->
+            initialControlEnabled?.let {
+                control.isEnabled = it
+            }
+        }
     }
 
     private fun updateClip() {

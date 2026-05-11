@@ -428,6 +428,15 @@ private object ComposeWinUiSmokeApp {
         check(lifecycleProbe.releaseCount == 1) {
             "Expected one WinUIView release call, got ${lifecycleProbe.releaseCount}."
         }
+        check(wrapper.isHitTestVisible) {
+            "WinUIView did not restore wrapper hit testing on release."
+        }
+        check(button.isHitTestVisible && button.isTabStop && button.isEnabled) {
+            "WinUIView did not restore native Button interaction state on release."
+        }
+        check(wrapper.readClipRectOrNull() == null) {
+            "WinUIView did not clear the native wrapper clip on release."
+        }
         showInterop = true
         currentComposeView.setContent {
             if (showInterop) {
