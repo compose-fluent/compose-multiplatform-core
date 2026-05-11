@@ -104,6 +104,7 @@
 - [ ] Add repository-local WinUIView smoke validation for toggling native accessibility participation through `AutomationProperties.AccessibilityView` after `KWINRT-014` and `KWINRT-015` are resolved.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
+- [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.

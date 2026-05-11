@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -249,6 +250,7 @@ private object ComposeWinUiSmokeApp {
             true
         }
         LaunchedEffect(Unit) {
+            runWinUIViewPlacementSmoke()
             runWinUIViewDensitySmoke()
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
@@ -930,6 +932,72 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    private suspend fun runWinUIViewPlacementSmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val isPlaced: MutableState<Boolean> = mutableStateOf(true)
+        currentComposeView.setContent {
+            ConditionalPlacement(isPlaced.value) {
+                WinUIViewSampleContent(
+                    lifecycleProbe = lifecycleProbe,
+                )
+            }
+        }
+        awaitCondition("WinUIView initial placement") {
+            lifecycleProbe.lastButton != null &&
+                (rootHost.content as? Canvas)?.children?.size == 1
+        }
+        val rootCanvas = checkNotNull(rootHost.content as? Canvas) {
+            "WinUIView placement smoke did not install an interop Canvas."
+        }
+        val wrapper = checkNotNull(rootCanvas.children.singleOrNull()) {
+            "WinUIView placement smoke did not install a wrapper."
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUIView placement smoke did not install a Button."
+        }
+
+        isPlaced.value = false
+        awaitCondition("WinUIView unplacement") {
+            rootHost.content !is Canvas
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView placement smoke recreated the Button during unplacement, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView placement smoke released the Button during unplacement, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        isPlaced.value = true
+        awaitCondition("WinUIView replacement") {
+            (rootHost.content as? Canvas)?.children?.singleOrNull()?.nativeObject
+                ?.sameIdentity(wrapper.nativeObject) == true &&
+                lifecycleProbe.lastButton === button
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView placement smoke recreated the Button during replacement, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView placement smoke released the Button before disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        currentComposeView.dispose()
+        check(lifecycleProbe.releaseCount == 1) {
+            "WinUIView placement smoke did not release on host disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+        println(
+            "compose-winui-sample: placement toggle factory=" +
+                "${lifecycleProbe.factoryCount} update=${lifecycleProbe.updateCount} " +
+                "release=${lifecycleProbe.releaseCount}"
+        )
+    }
+
     private suspend fun runWinUIViewDensitySmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1104,3 +1172,18 @@ private fun fixedSizeAndPositionModifier(width: Int, height: Int, x: Int, y: Int
             placeable.place(x, y)
         }
     }
+
+@Composable
+private fun ConditionalPlacement(
+    isPlaced: Boolean,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content) { measurables, constraints ->
+        val placeable = measurables.single().measure(constraints)
+        layout(placeable.width, placeable.height) {
+            if (isPlaced) {
+                placeable.place(0, 0)
+            }
+        }
+    }
+}

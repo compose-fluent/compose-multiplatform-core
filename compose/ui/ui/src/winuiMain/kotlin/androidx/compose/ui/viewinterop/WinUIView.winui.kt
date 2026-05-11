@@ -425,6 +425,7 @@ private const val MaxUnboundedWinUISize = 1_000_000f
 
 @OptIn(InternalComposeUiApi::class)
 internal fun LayoutNode.findWinUIInteropRoot(): UIElement? {
+    if (!isPlaced) return null
     val interopHolder = interopViewFactoryHolder
     val interopHost = interopHolder as? WinUIInteropViewHost
     if (interopHost != null) {
@@ -443,6 +444,7 @@ internal fun LayoutNode.collectWinUIInteropRoots(): List<UIElement> {
 
 @OptIn(InternalComposeUiApi::class)
 private fun LayoutNode.collectWinUIInteropRootsInto(result: MutableList<UIElement>) {
+    if (!isPlaced) return
     val interopHolder = interopViewFactoryHolder
     val interopHost = interopHolder as? WinUIInteropViewHost
     val interopRoot = if (interopHost != null) {
