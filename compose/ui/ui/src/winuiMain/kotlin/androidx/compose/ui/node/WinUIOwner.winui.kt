@@ -23,6 +23,7 @@ import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
 import androidx.compose.runtime.retain.RetainedValuesStore
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.SessionMutex
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.autofill.AutofillTree
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
+import androidx.compose.ui.platform.awaitWinUiTextInputCancellation
 import androidx.compose.ui.semantics.EmptySemanticsModifier
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.spatial.RectManager
@@ -89,7 +91,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.InteropView
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.CoroutineScope
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
 import kotlin.coroutines.CoroutineContext
@@ -133,6 +135,7 @@ internal class WinUIOwner(
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val retainedValuesStore: RetainedValuesStore = ForgetfulRetainedValuesStore
     override val rectManager: RectManager = RectManager()
+    private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
     override val fontFamilyResolver: FontFamily.Resolver = createFontFamilyResolver()
@@ -299,9 +302,11 @@ internal class WinUIOwner(
 
     override suspend fun textInputSession(
         session: suspend PlatformTextInputSessionScope.() -> Nothing
-    ): Nothing {
-        return session(NoOpPlatformTextInputSessionScope)
-    }
+    ): Nothing =
+        textInputSessionMutex.withSessionCancellingPrevious(
+            sessionInitializer = ::WinUIPlatformTextInputSession,
+            session = session,
+        )
 
     override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen
 
@@ -416,12 +421,17 @@ private object NoOpPlatformTextInputService : PlatformTextInputService {
     ) = Unit
 }
 
-private object NoOpPlatformTextInputSessionScope : PlatformTextInputSessionScope {
-    override val coroutineContext: CoroutineContext = EmptyCoroutineContext
+private class WinUIPlatformTextInputSession(
+    coroutineScope: CoroutineScope,
+) : PlatformTextInputSessionScope, CoroutineScope by coroutineScope {
+    private val inputMethodSessionMutex = SessionMutex<Nothing?>()
 
-    override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
-        awaitCancellation()
-    }
+    override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing =
+        inputMethodSessionMutex.withSessionCancellingPrevious(
+            sessionInitializer = { null },
+        ) {
+            awaitWinUiTextInputCancellation()
+        }
 }
 
 private class WinUIPlatformFocusOwner(

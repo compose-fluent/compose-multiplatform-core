@@ -38,7 +38,9 @@ import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
@@ -47,7 +49,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.WinUIComposeView
+import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -64,7 +69,10 @@ import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.TextBox
 import microsoft.ui.xaml.controls.ToggleSwitch
 import microsoft.ui.xaml.UIElement
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun WinUIViewSampleContent(
@@ -321,6 +329,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
+            runWinUITextInputSessionSmoke()
             reuseSmokePassed = true
         }
         LaunchedEffect(reuseSmokePassed, windowSmokePassed) {
@@ -1225,6 +1234,30 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    private suspend fun runWinUITextInputSessionSmoke() {
+        val probe = WinUITextInputSessionSmokeProbe()
+        val currentComposeView = WinUIComposeView()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUITextInputSessionSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        awaitCondition("WinUI text input first session cancellation") {
+            probe.firstInputStarted &&
+                probe.firstInputCancelled &&
+                probe.secondInputStarted &&
+                !probe.secondInputCancelled
+        }
+        currentComposeView.dispose()
+        awaitCondition("WinUI text input disposal cancellation") {
+            probe.secondInputCancelled
+        }
+        println("compose-winui-sample: text input session cancellation")
+    }
+
     private suspend fun awaitCondition(label: String, condition: () -> Boolean) {
         repeat(100) {
             if (condition()) return
@@ -1232,6 +1265,72 @@ private object ComposeWinUiSmokeApp {
         }
         check(condition()) {
             "Timed out waiting for $label."
+        }
+    }
+}
+
+private class WinUITextInputSessionSmokeProbe {
+    var firstInputStarted: Boolean = false
+    var firstInputCancelled: Boolean = false
+    var secondInputStarted: Boolean = false
+    var secondInputCancelled: Boolean = false
+}
+
+private object WinUITextInputSmokeRequest : PlatformTextInputMethodRequest
+
+private fun Modifier.winUITextInputSessionSmoke(
+    probe: WinUITextInputSessionSmokeProbe
+): Modifier = this then WinUITextInputSessionSmokeElement(probe)
+
+private data class WinUITextInputSessionSmokeElement(
+    private val probe: WinUITextInputSessionSmokeProbe,
+) : ModifierNodeElement<WinUITextInputSessionSmokeNode>() {
+    override fun create(): WinUITextInputSessionSmokeNode =
+        WinUITextInputSessionSmokeNode(probe)
+
+    override fun update(node: WinUITextInputSessionSmokeNode) {
+        node.probe = probe
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUITextInputSessionSmoke"
+    }
+}
+
+private class WinUITextInputSessionSmokeNode(
+    var probe: WinUITextInputSessionSmokeProbe,
+) : Modifier.Node(), PlatformTextInputModifierNode {
+    override fun onAttach() {
+        coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runTextInputSession(isFirstSession = true)
+        }
+        coroutineScope.launch {
+            while (!probe.firstInputStarted) {
+                delay(1)
+            }
+            runTextInputSession(isFirstSession = false)
+        }
+    }
+
+    private suspend fun runTextInputSession(isFirstSession: Boolean) {
+        try {
+            establishTextInputSession {
+                if (isFirstSession) {
+                    probe.firstInputStarted = true
+                } else {
+                    probe.secondInputStarted = true
+                }
+                try {
+                    startInputMethod(WinUITextInputSmokeRequest)
+                } finally {
+                    if (isFirstSession) {
+                        probe.firstInputCancelled = true
+                    } else {
+                        probe.secondInputCancelled = true
+                    }
+                }
+            }
+        } catch (_: CancellationException) {
         }
     }
 }
