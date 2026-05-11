@@ -93,6 +93,7 @@
 - [x] Add repository-local composition-local smoke validation for WinUI `LocalClipboardManager` and `LocalClipboard` plain-text round-trips.
 - [x] Add repository-local FillableData smoke validation for WinUI text, boolean, list-index, and date-millis values.
 - [x] Add repository-local `WindowInfo` smoke validation for active window focus plus positive container px/dp size.
+- [x] Add repository-local `WindowInfo` smoke validation for `Window.Activated` focus loss when a secondary WinUI window is activated and closed.
 - [x] Add repository-local owner disposal smoke coverage by disposing `WinUIComposeView` after lifecycle/reuse validation and using `dispose()` from the WinUI window release path.
 - [x] Add repository-local WinUI text input session lifecycle smoke validation for session replacement and disposal cancellation while the native IME connection remains deferred.
 - [x] Add repository-local WinUI `LocalLifecycleOwner` smoke validation for resumed composition state and destroyed state after `WinUIComposeView.dispose()`.

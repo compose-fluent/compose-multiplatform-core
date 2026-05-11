@@ -79,6 +79,8 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.UIElement")
         type("Microsoft.UI.Xaml.VerticalAlignment")
         type("Microsoft.UI.Xaml.Window")
+        type("Microsoft.UI.Xaml.WindowActivatedEventArgs")
+        type("Microsoft.UI.Xaml.WindowActivationState")
         type("Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop")
         type("Microsoft.UI.Xaml.Media.MicaBackdrop")
         type("Microsoft.UI.Xaml.Media.RectangleGeometry")

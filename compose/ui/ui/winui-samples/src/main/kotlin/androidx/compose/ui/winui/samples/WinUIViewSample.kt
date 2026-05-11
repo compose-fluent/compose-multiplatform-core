@@ -18,6 +18,7 @@ package androidx.compose.ui.winui.samples
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReusableContentHost
 import androidx.compose.runtime.MutableState
@@ -127,7 +128,10 @@ fun WinUIViewSampleContent(
 }
 
 @Composable
-private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
+private fun ValidateWinUICompositionLocals(
+    expectWindowFocus: Boolean,
+    allowWindowFocusChanges: Boolean = false,
+) {
     check(LocalDensity.current.density == 1f) {
         "WinUI LocalDensity was not provided by WinUIComposeView."
     }
@@ -164,13 +168,16 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
     ValidateWinUIClipboard()
     ValidateWinUIFillableData()
     if (expectWindowFocus) {
-        check(LocalWindowInfo.current.isWindowFocused) {
-            "WinUI LocalWindowInfo did not reflect the active WinUI window."
+        val windowInfo = LocalWindowInfo.current
+        if (!allowWindowFocusChanges) {
+            check(windowInfo.isWindowFocused) {
+                "WinUI LocalWindowInfo did not reflect the active WinUI window."
+            }
         }
-        check(LocalWindowInfo.current.containerSize.width > 0) {
+        check(windowInfo.containerSize.width > 0) {
             "WinUI LocalWindowInfo did not expose a positive container width."
         }
-        check(LocalWindowInfo.current.containerDpSize.width.value > 0f) {
+        check(windowInfo.containerDpSize.width.value > 0f) {
             "WinUI LocalWindowInfo did not expose a positive container dp width."
         }
     }
@@ -253,8 +260,19 @@ private fun WinUIViewWindowIntegrationContent(
     lifecycleProbe: WinUIViewLifecycleProbe,
     onButtonUpdated: (Button) -> Unit,
     onToggleSwitchUpdated: (ToggleSwitch) -> Unit,
+    onWindowFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
-    ValidateWinUICompositionLocals(expectWindowFocus)
+    ValidateWinUICompositionLocals(
+        expectWindowFocus = expectWindowFocus,
+        allowWindowFocusChanges = onWindowFocusChanged != null,
+    )
+    if (expectWindowFocus && onWindowFocusChanged != null) {
+        val windowFocused = LocalWindowInfo.current.isWindowFocused
+        DisposableEffect(windowFocused) {
+            onWindowFocusChanged(windowFocused)
+            onDispose {}
+        }
+    }
     ValidateWinUIOwnerFocus()
     WinUIView(
         modifier = fixedSizeAndPositionModifier(
@@ -340,6 +358,8 @@ private object ComposeWinUiSmokeApp {
         var windowSmokePassed by remember { mutableStateOf(false) }
         var secondaryWindowVisible by remember { mutableStateOf(true) }
         var secondaryWindowClosePassed by remember { mutableStateOf(false) }
+        var mainWindowFocusedOnce by remember { mutableStateOf(false) }
+        var mainWindowDeactivatedPassed by remember { mutableStateOf(false) }
         remember {
             println("compose-winui-sample: application created")
             runWinUILifecycleOwnerSmoke()
@@ -458,11 +478,27 @@ private object ComposeWinUiSmokeApp {
                     onToggleSwitchUpdated = { toggleSwitch ->
                         lastToggleSwitch = toggleSwitch
                     },
+                    onWindowFocusChanged = { focused ->
+                        if (focused && !mainWindowFocusedOnce) {
+                            mainWindowFocusedOnce = true
+                            println("compose-winui-sample: main window activated")
+                        }
+                        if (!focused && !mainWindowDeactivatedPassed) {
+                            mainWindowDeactivatedPassed = true
+                            println("compose-winui-sample: main window deactivated")
+                        }
+                    },
                 )
             }
             if (secondaryWindowVisible) {
                 Window(
                     onCloseRequest = {
+                        check(mainWindowFocusedOnce) {
+                            "Primary WinUI window did not report an activated state."
+                        }
+                        check(mainWindowDeactivatedPassed) {
+                            "Primary WinUI window did not report deactivation for secondary activation."
+                        }
                         secondaryWindowClosePassed = true
                         secondaryWindowVisible = false
                         println("compose-winui-sample: secondary window close request")
@@ -474,6 +510,12 @@ private object ComposeWinUiSmokeApp {
                     }
                     LaunchedEffect(Unit) {
                         withFrameNanos { }
+                        awaitCondition("primary WinUI window activation") {
+                            mainWindowFocusedOnce
+                        }
+                        awaitCondition("primary WinUI window deactivation") {
+                            mainWindowDeactivatedPassed
+                        }
                         window.close()
                     }
                 }

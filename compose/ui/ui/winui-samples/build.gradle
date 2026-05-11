@@ -67,6 +67,8 @@ winRt {
     type("Microsoft.UI.Xaml.UIElement")
     type("Microsoft.UI.Xaml.VerticalAlignment")
     type("Microsoft.UI.Xaml.Window")
+    type("Microsoft.UI.Xaml.WindowActivatedEventArgs")
+    type("Microsoft.UI.Xaml.WindowActivationState")
     type("Microsoft.UI.Xaml.Media.RectangleGeometry")
     type("Microsoft.UI.Dispatching.IDispatcherQueue2")
     type("Microsoft.UI.Xaml.Controls.Button")
