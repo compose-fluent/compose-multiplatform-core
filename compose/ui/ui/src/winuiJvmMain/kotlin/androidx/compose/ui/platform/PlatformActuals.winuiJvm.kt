@@ -16,27 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.runtime.AbstractApplier
-import androidx.compose.runtime.ProvidableCompositionLocal
-import androidx.compose.ui.node.LayoutNode
-import androidx.compose.ui.node.UiApplier
-import androidx.lifecycle.LifecycleOwner
-import kotlinx.coroutines.awaitCancellation
-
-actual val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>
-    get() = androidx.lifecycle.compose.LocalLifecycleOwner
-
-actual interface PlatformTextInputMethodRequest
-
-actual interface PlatformTextInputSession {
-    actual suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing
-}
-
-internal suspend fun awaitWinUiTextInputCancellation(): Nothing = awaitCancellation()
-
-internal actual fun createApplier(container: LayoutNode): AbstractApplier<LayoutNode> =
-    UiApplier(container)
-
 internal actual class SynchronizedObject
 
 @Suppress("NOTHING_TO_INLINE")
