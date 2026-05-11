@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-@file:JvmName("KeyEvent_winuiJvmKt")
-@file:JvmMultifileClass
-
 package androidx.compose.ui.input.key
 
 import androidx.compose.ui.InternalComposeUiApi
@@ -26,8 +23,6 @@ import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
-import kotlin.jvm.JvmMultifileClass
-import kotlin.jvm.JvmName
 
 actual typealias NativeKeyEvent = Any
 

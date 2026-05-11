@@ -19,7 +19,6 @@ package androidx.compose.ui.input.pointer
 import androidx.collection.LongSparseArray
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.util.fastForEach
-import kotlin.jvm.JvmStatic
 
 internal actual typealias NativePointerButtons = Int
 internal actual typealias NativePointerKeyboardModifiers = Int
@@ -103,7 +102,6 @@ actual class PointerEvent internal constructor(
         internal set
 
     companion object {
-        @JvmStatic
         private fun calculatePointerEventType(changes: List<PointerInputChange>): PointerEventType {
             if (changes.isEmpty()) return PointerEventType.Unknown
             changes.fastForEach {

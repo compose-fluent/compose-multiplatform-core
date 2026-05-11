@@ -16,6 +16,8 @@
 
 package androidx.compose.ui.input.key
 
+import kotlin.jvm.JvmInline
+
 @JvmInline
 actual value class Key(val keyCode: Long) {
     actual companion object {

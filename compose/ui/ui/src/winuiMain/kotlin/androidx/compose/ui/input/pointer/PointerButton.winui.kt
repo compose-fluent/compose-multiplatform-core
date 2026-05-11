@@ -16,6 +16,8 @@
 
 package androidx.compose.ui.input.pointer
 
+import kotlin.jvm.JvmInline
+
 @JvmInline
 value class PointerButton(val index: Int) {
     companion object {
