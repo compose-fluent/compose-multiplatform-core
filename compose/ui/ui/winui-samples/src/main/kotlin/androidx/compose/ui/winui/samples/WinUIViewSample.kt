@@ -1009,15 +1009,22 @@ private object ComposeWinUiSmokeApp {
                 WinUIView(
                     modifier = Modifier.layout { measurable, _ ->
                         observedDensity = this.density
-                        val placeable = measurable.measure(Constraints.fixed(80, 30))
+                        val placeable = measurable.measure(
+                            Constraints.fixed(
+                                width = maxOf(1, (40f * this.density).toInt()),
+                                height = maxOf(1, (20f * this.density).toInt()),
+                            )
+                        )
                         layout(placeable.width, placeable.height) {
                             placeable.place(0, 0)
                         }
                     },
+                    properties = WinUIInteropProperties(clipToBounds = true),
                     factory = {
                         lifecycleProbe.factoryCount += 1
                         Button().apply {
-                            content = "density smoke"
+                            width = 1.0
+                            height = 1.0
                         }
                     },
                     update = { button ->
@@ -1033,9 +1040,17 @@ private object ComposeWinUiSmokeApp {
             }
         }
         awaitCondition("WinUIView initial density") {
+            val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            val clip = wrapper?.readClipRectOrNull()
             observedDensity == 1f &&
                 lifecycleProbe.lastButton != null &&
-                (rootHost.content as? Canvas)?.children?.size == 1
+                clip?.width == 40f &&
+                clip?.height == 20f &&
+                lifecycleProbe.lastButton?.width == 40.0 &&
+                lifecycleProbe.lastButton?.height == 20.0
+        }
+        val wrapper = checkNotNull((rootHost.content as? Canvas)?.children?.singleOrNull()) {
+            "WinUIView density smoke did not install a wrapper."
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
             "WinUIView density smoke did not install a Button."
@@ -1043,7 +1058,15 @@ private object ComposeWinUiSmokeApp {
 
         localDensity.value = 2f
         awaitCondition("WinUIView updated density") {
-            observedDensity == 2f && lifecycleProbe.lastButton === button
+            val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            val clip = currentWrapper?.readClipRectOrNull()
+            currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
+                observedDensity == 2f &&
+                lifecycleProbe.lastButton === button &&
+                clip?.width == 80f &&
+                clip?.height == 40f &&
+                button.width == 80.0 &&
+                button.height == 40.0
         }
         check(lifecycleProbe.factoryCount == 1) {
             "WinUIView density smoke recreated the Button, factory=" +

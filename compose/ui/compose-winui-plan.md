@@ -94,7 +94,7 @@
 - [ ] Add compile validation for the new WinUI mingwX64 source set after `kotlin-winrt` supports mingw.
 - [ ] Add tests proving WinUI source sets do not depend on `skikoMain`, `desktopMain`, AWT, Swing, or Skiko AWT classes.
 - [x] Add lifecycle tests for `WinUIView`: factory once, update after creation, repeated update on state changes, reset on reuse, release on final disposal.
-- [ ] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
+- [x] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
 - [x] Add repository-local WinUIView smoke validation for installing a native clip rectangle from `clipToBounds=true`.
 - [x] Add repository-local WinUIView smoke validation for updating interop properties and clearing native clip.
