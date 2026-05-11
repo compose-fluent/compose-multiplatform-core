@@ -74,7 +74,7 @@
 - [x] Use local `E:\Documents\AndroidStudioProjects\kotlin-winrt` as the development dependency source for WinRT runtime and generated WinUI projections.
 - [ ] Verify `kotlin-winrt` full projection generation includes required WinUI types: `Application`, `Window`, `UIElement`, `FrameworkElement`, `Panel`, `Grid`, `Canvas`, `ContentControl`, `XamlControlsResources`, DispatcherQueue, focus/input event types, and required collection types.
 - [ ] Reuse `kotlin-winrt` Windows App SDK bootstrap and resource manager support for unpackaged WinUI applications.
-- [ ] Reuse `kotlin-winrt` COM reference management, event-token management, activation factory lookup, and XAML metadata provider support.
+- [ ] Reuse `kotlin-winrt` COM reference management, event-token management, activation factory lookup, and XAML metadata provider support, including generated WinUI event sources after `KWINRT-016` is resolved.
 - [ ] Add missing projection/runtime capabilities to `kotlin-winrt` first when compose-winui requires WinUI APIs that are not yet projected.
 - [ ] Keep target-specific native interop code inside `winuiJvmMain`, and later `winuiMingwMain`; keep shared Compose/WinUI behavior in `winuiMain`.
 
@@ -100,6 +100,7 @@
 - [x] Add repository-local WinUIView smoke validation for updating interop properties and clearing native clip.
 - [x] Add repository-local WinUIView smoke validation for updating native interaction state across hit testing, Tab focus, and `Control.isEnabled`.
 - [x] Add repository-local WinUIView smoke validation for restoring native interaction state and clearing native clip on release.
+- [ ] Add repository-local WinUIView smoke validation for native WinUI event-token registration and release cleanup after generated WinUI event sources are usable from compose-winui (`KWINRT-016`).
 - [ ] Add repository-local WinUIView smoke validation for toggling native accessibility participation through `AutomationProperties.AccessibilityView` after `KWINRT-014` and `KWINRT-015` are resolved.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
@@ -112,3 +113,6 @@
 - [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
+
+## kotlin-winrt blockers
+- `KWINRT-016`: Generated WinUI event sources currently fail on JVM when compose-winui accesses `Button.click`, throwing `IncompatibleClassChangeError: Expecting non-static method ... WinRtGeneratedEventSourceRuntime.createEventSourceFactory(...)`. Re-enable repository-local native event-token registration/release smoke coverage after the generated projection and runtime call shape match again.
