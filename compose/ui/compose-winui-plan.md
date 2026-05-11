@@ -4,7 +4,7 @@
 - [x] Implement compose-winui as a standalone `compose-ui` platform target, comparable in responsibility to `androidMain`.
 - [x] Keep `winuiMain` independent from `skikoMain`, `desktopMain`, AWT, and Swing.
 - [x] Use `kotlin-winrt` as the WinRT and WinUI projection/runtime foundation instead of duplicating COM or Windows App SDK bootstrap code in `compose-ui`.
-- [ ] Share WinUI-specific Compose semantics in `winuiMain`, with `winuiJvmMain` providing current JVM runtime details and `winuiMingwMain` deferred until `kotlin-winrt` provides mingw support.
+- [x] Share WinUI-specific Compose semantics in `winuiMain`, with `winuiJvmMain` providing current JVM runtime details and `winuiMingwMain` deferred until `kotlin-winrt` provides mingw support.
 - [ ] Treat Android `AndroidView` interop as the behavioral reference for factory, update, reuse, detach, release, layout, focus, and input behavior.
 
 ## Gradle targets and source sets
