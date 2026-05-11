@@ -280,3 +280,51 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   callback removal, then either retain/close callback stubs in a shutdown-safe
   order or avoid callbacks from native threads that the JVM cannot attach during
   shutdown.
+
+## KWINRT-014: Generated attached dependency property getters can rewrap with module-mangled internals
+
+- **Status:** Open
+- **Observed in:** `Microsoft.UI.Xaml.Automation.AutomationProperties.accessibilityViewProperty`
+  returning `Microsoft.UI.Xaml.DependencyProperty`
+- **Symptom:** Accessing the generated static attached dependency property can
+  throw `NoSuchMethodError` for an internal wrapper such as
+  `DependencyProperty.Metadata.wrap$ui(...)` when both `:compose:ui:ui` and a
+  repository-local sample generate WinUI projection classes with the same FQNs
+  but different Kotlin module-name mangling.
+- **Impact on compose-winui:** `WinUIInteropProperties.isNativeAccessibilityEnabled`
+  needs to toggle `AutomationProperties.AccessibilityView`, but cannot safely
+  restore the default value by reading `AutomationProperties.accessibilityViewProperty`
+  and calling `DependencyObject.clearValue(...)` from compose-ui while sample
+  projections are also on the runtime classpath.
+- **compose-winui workaround:** Keep
+  `WinUIInteropProperties.isNativeAccessibilityEnabled` behavior deferred for
+  now; do not use the generated `accessibilityViewProperty` getter from
+  compose-ui while repository-local samples also generate WinUI projections.
+- **Resolution target:** Expose public, non-mangled wrappers for generated
+  runtime-class values returned from static attached property getters, or avoid
+  duplicate generated projection FQNs across dependent Gradle modules.
+
+## KWINRT-015: AutomationProperties.SetAccessibilityView can native-crash detached XAML elements
+
+- **Status:** Open
+- **Observed in:** `Microsoft.UI.Xaml.Automation.AutomationProperties.setAccessibilityView(...)`
+  called on `Canvas` / `Button` instances created in repository-local
+  `WinUIComposeView` offscreen smoke tests before the root is attached to a
+  native `Window`.
+- **Symptom:** Calling the generated public static setter in the detached
+  `WinUIView` holder path can abort the JVM with a native
+  `EXCEPTION_ACCESS_VIOLATION (0xc0000005)` in `Microsoft.UI.Xaml.dll` shortly
+  after `compose-winui-sample: application created`, before the lifecycle smoke
+  prints its first validation line.
+- **Impact on compose-winui:** `WinUIInteropProperties.isNativeAccessibilityEnabled`
+  cannot be safely wired to `AutomationProperties.AccessibilityView` from the
+  holder constructor/property update path that also runs for offscreen
+  repository-local smoke validation.
+- **compose-winui workaround:** Keep native accessibility participation
+  behavior deferred until compose-winui has an attachment-aware path for
+  applying WinUI automation properties, or kotlin-winrt/WinUI provides a safe
+  way to set attached automation properties on detached elements.
+- **Resolution target:** Determine whether the crash is a Windows App SDK
+  detached-element restriction or a kotlin-winrt projection/lifetime issue, then
+  provide a safe application point or runtime guard for attached automation
+  properties.
