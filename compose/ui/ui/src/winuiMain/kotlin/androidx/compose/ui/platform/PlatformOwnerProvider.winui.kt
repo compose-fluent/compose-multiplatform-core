@@ -44,10 +44,13 @@ internal interface PlatformArchitectureComponentsOwner {
     val savedStateRegistryOwner: SavedStateRegistryOwner
 }
 
+/**
+ * Default implementation of [PlatformArchitectureComponentsOwner].
+ */
 @InternalComposeUiApi
 internal class DefaultArchitectureComponentsOwner(
     savedState: SavedState? = null,
-    enforceMainThread: Boolean = true,
+    enforceMainThread: Boolean = true
 ) : PlatformArchitectureComponentsOwner,
     LifecycleOwner,
     ViewModelStoreOwner,
@@ -94,7 +97,7 @@ internal class DefaultArchitectureComponentsOwner(
 
 private fun defaultViewModelCreationExtras(
     savedStateRegistryOwner: SavedStateRegistryOwner,
-    viewModelStoreOwner: ViewModelStoreOwner,
+    viewModelStoreOwner: ViewModelStoreOwner
 ): CreationExtras = MutableCreationExtras().also {
     it[SAVED_STATE_REGISTRY_OWNER_KEY] = savedStateRegistryOwner
     it[VIEW_MODEL_STORE_OWNER_KEY] = viewModelStoreOwner

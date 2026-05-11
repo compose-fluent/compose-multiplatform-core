@@ -71,8 +71,12 @@ import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.Canvas
@@ -363,6 +367,7 @@ private object ComposeWinUiSmokeApp {
         remember {
             println("compose-winui-sample: application created")
             runWinUILifecycleOwnerSmoke()
+            runWinUIViewModelOwnerSmoke()
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
             runWinUIViewUnclippedBoundsSmoke()
@@ -669,6 +674,47 @@ private object ComposeWinUiSmokeApp {
             "WinUI lifecycle owner did not enter DESTROYED state on dispose."
         }
         println("compose-winui-sample: lifecycle owner resumed and destroyed")
+    }
+
+    private fun runWinUIViewModelOwnerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var viewModelStoreOwnerProvided = false
+        var firstViewModel: WinUISavedStateViewModel? = null
+        currentComposeView.setContent {
+            viewModelStoreOwnerProvided = LocalViewModelStoreOwner.current != null
+            firstViewModel = viewModel(key = "winui-saved-state-view-model") {
+                WinUISavedStateViewModel(createSavedStateHandle())
+            }
+        }
+        val initialViewModel = checkNotNull(firstViewModel) {
+            "WinUI viewModel() did not create a ViewModel."
+        }
+        check(viewModelStoreOwnerProvided) {
+            "WinUI LocalViewModelStoreOwner was not provided through host defaults."
+        }
+        check(initialViewModel.savedStateHandle.get<String>("value") == "initial") {
+            "WinUI SavedStateHandle did not expose its initial value."
+        }
+        initialViewModel.savedStateHandle["value"] = "updated"
+        currentComposeView.disposeComposition()
+
+        var restoredViewModel: WinUISavedStateViewModel? = null
+        currentComposeView.setContent {
+            restoredViewModel = viewModel(key = "winui-saved-state-view-model") {
+                WinUISavedStateViewModel(createSavedStateHandle())
+            }
+        }
+        check(restoredViewModel === initialViewModel) {
+            "WinUI ViewModelStore did not retain the ViewModel across disposeComposition."
+        }
+        check(restoredViewModel?.savedStateHandle?.get<String>("value") == "updated") {
+            "WinUI SavedStateHandle did not preserve the updated value."
+        }
+        currentComposeView.dispose()
+        check(initialViewModel.cleared) {
+            "WinUI ViewModelStore was not cleared when the lifecycle reached DESTROYED."
+        }
+        println("compose-winui-sample: viewmodel owner saved state and cleared")
     }
 
     private suspend fun runWinUISaveableStateSmoke() {
@@ -1477,6 +1523,23 @@ private class WinUITextInputSessionSmokeProbe {
 }
 
 private object WinUITextInputSmokeRequest : PlatformTextInputMethodRequest
+
+private class WinUISavedStateViewModel(
+    val savedStateHandle: SavedStateHandle,
+) : ViewModel() {
+    var cleared = false
+        private set
+
+    init {
+        if (!savedStateHandle.contains("value")) {
+            savedStateHandle["value"] = "initial"
+        }
+    }
+
+    override fun onCleared() {
+        cleared = true
+    }
+}
 
 private fun Modifier.winUITextInputSessionSmoke(
     probe: WinUITextInputSessionSmokeProbe
