@@ -27,6 +27,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.FillableData
+import androidx.compose.ui.autofill.createFromBoolean
+import androidx.compose.ui.autofill.createFromDateMillis
+import androidx.compose.ui.autofill.createFromListIndex
+import androidx.compose.ui.autofill.createFromText
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
@@ -124,6 +129,7 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
         "WinUI LocalUriHandler did not reject a URI without a scheme."
     }
     ValidateWinUIClipboard()
+    ValidateWinUIFillableData()
     if (expectWindowFocus) {
         check(LocalWindowInfo.current.isWindowFocused) {
             "WinUI LocalWindowInfo did not reflect the active WinUI window."
@@ -134,6 +140,33 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
         check(LocalWindowInfo.current.containerDpSize.width.value > 0f) {
             "WinUI LocalWindowInfo did not expose a positive container dp width."
         }
+    }
+}
+
+private fun ValidateWinUIFillableData() {
+    val textData = checkNotNull(FillableData.createFromText("compose-winui autofill")) {
+        "WinUI FillableData did not create text data."
+    }
+    check(textData.textValue?.toString() == "compose-winui autofill") {
+        "WinUI FillableData did not expose text value."
+    }
+    val booleanData = checkNotNull(FillableData.createFromBoolean(true)) {
+        "WinUI FillableData did not create boolean data."
+    }
+    check(booleanData.booleanValue == true) {
+        "WinUI FillableData did not expose boolean value."
+    }
+    val listData = checkNotNull(FillableData.createFromListIndex(3)) {
+        "WinUI FillableData did not create list index data."
+    }
+    check(listData.getListIndexOrDefault(-1) == 3) {
+        "WinUI FillableData did not expose list index value."
+    }
+    val dateData = checkNotNull(FillableData.createFromDateMillis(1234L)) {
+        "WinUI FillableData did not create date millis data."
+    }
+    check(dateData.getDateMillisOrDefault(-1L) == 1234L) {
+        "WinUI FillableData did not expose date millis value."
     }
 }
 

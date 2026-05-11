@@ -80,10 +80,46 @@ actual sealed interface ContentType {
     actual operator fun plus(other: ContentType): ContentType
 }
 
-actual fun FillableData.Companion.createFromBoolean(booleanValue: Boolean): FillableData? = null
+private data class WinUITextFillableData(
+    private val value: String,
+) : FillableData {
+    override val textValue: CharSequence
+        get() = value
+}
 
-actual fun FillableData.Companion.createFromText(textValue: CharSequence): FillableData? = null
+private data class WinUIBooleanFillableData(
+    private val value: Boolean,
+) : FillableData {
+    override val booleanValue: Boolean
+        get() = value
+}
 
-actual fun FillableData.Companion.createFromListIndex(listIndexValue: Int): FillableData? = null
+private data class WinUIListIndexFillableData(
+    private val value: Int,
+) : FillableData {
+    override val listIndexValue: Int
+        get() = value
 
-actual fun FillableData.Companion.createFromDateMillis(dateMillisValue: Long): FillableData? = null
+    override fun getListIndexOrDefault(defaultValue: Int): Int = value
+}
+
+private data class WinUIDateMillisFillableData(
+    private val value: Long,
+) : FillableData {
+    override val dateMillisValue: Long
+        get() = value
+
+    override fun getDateMillisOrDefault(defaultValue: Long): Long = value
+}
+
+actual fun FillableData.Companion.createFromBoolean(booleanValue: Boolean): FillableData? =
+    WinUIBooleanFillableData(booleanValue)
+
+actual fun FillableData.Companion.createFromText(textValue: CharSequence): FillableData? =
+    WinUITextFillableData(textValue.toString())
+
+actual fun FillableData.Companion.createFromListIndex(listIndexValue: Int): FillableData? =
+    WinUIListIndexFillableData(listIndexValue)
+
+actual fun FillableData.Companion.createFromDateMillis(dateMillisValue: Long): FillableData? =
+    WinUIDateMillisFillableData(dateMillisValue)
