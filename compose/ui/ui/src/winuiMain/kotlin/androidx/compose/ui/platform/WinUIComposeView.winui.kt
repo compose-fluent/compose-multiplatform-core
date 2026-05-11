@@ -19,6 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
 import androidx.compose.ui.layout.RootMeasurePolicy
@@ -79,11 +80,15 @@ class WinUIComposeView(
             composition = it
         }
         currentComposition.setContent {
-            ProvideCommonCompositionLocals(
-                owner = owner,
-                uriHandler = createWinUIUriHandler(),
-                content = content,
-            )
+            CompositionLocalProvider(
+                androidx.lifecycle.compose.LocalLifecycleOwner provides owner.lifecycleOwner,
+            ) {
+                ProvideCommonCompositionLocals(
+                    owner = owner,
+                    uriHandler = createWinUIUriHandler(),
+                    content = content,
+                )
+            }
         }
         syncRootContent()
     }

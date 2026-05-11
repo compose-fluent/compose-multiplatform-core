@@ -63,6 +63,8 @@ import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
@@ -129,6 +131,9 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
     }
     check(LocalFontFamilyResolver.current.resolve().value != null) {
         "WinUI LocalFontFamilyResolver was not provided by WinUIComposeView."
+    }
+    check(LocalLifecycleOwner.current.lifecycle.currentState == Lifecycle.State.RESUMED) {
+        "WinUI LocalLifecycleOwner was not provided in a resumed state."
     }
     val uriHandler = checkNotNull(LocalUriHandler.current) {
         "WinUI LocalUriHandler was not provided by WinUIComposeView."
@@ -315,6 +320,7 @@ private object ComposeWinUiSmokeApp {
         var windowSmokePassed by remember { mutableStateOf(false) }
         remember {
             println("compose-winui-sample: application created")
+            runWinUILifecycleOwnerSmoke()
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
             runWinUIViewUnclippedBoundsSmoke()
@@ -562,6 +568,22 @@ private object ComposeWinUiSmokeApp {
                 "${lifecycleProbe.factoryCount} update=${lifecycleProbe.updateCount} " +
                 "reset=${lifecycleProbe.resetCount} release=${lifecycleProbe.releaseCount}"
         )
+    }
+
+    private fun runWinUILifecycleOwnerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var lifecycle: Lifecycle? = null
+        currentComposeView.setContent {
+            lifecycle = LocalLifecycleOwner.current.lifecycle
+        }
+        check(lifecycle?.currentState == Lifecycle.State.RESUMED) {
+            "WinUI lifecycle owner did not enter RESUMED state."
+        }
+        currentComposeView.dispose()
+        check(lifecycle?.currentState == Lifecycle.State.DESTROYED) {
+            "WinUI lifecycle owner did not enter DESTROYED state on dispose."
+        }
+        println("compose-winui-sample: lifecycle owner resumed and destroyed")
     }
 
     private fun runWinUIViewZOrderSmoke() {

@@ -91,6 +91,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.InteropView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import kotlinx.coroutines.CoroutineScope
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
@@ -135,6 +138,7 @@ internal class WinUIOwner(
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val retainedValuesStore: RetainedValuesStore = ForgetfulRetainedValuesStore
     override val rectManager: RectManager = RectManager()
+    internal val lifecycleOwner: LifecycleOwner = WinUILifecycleOwner()
     private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
@@ -164,6 +168,7 @@ internal class WinUIOwner(
         if (root.isAttached) {
             root.detach()
         }
+        (lifecycleOwner as WinUILifecycleOwner).destroy()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
     }
@@ -349,6 +354,19 @@ private object NoOpAccessibilityManager : AccessibilityManager {
         containsText: Boolean,
         containsControls: Boolean,
     ): Long = originalTimeoutMillis
+}
+
+private class WinUILifecycleOwner : LifecycleOwner {
+    private val registry = LifecycleRegistry.createUnsafe(this).apply {
+        currentState = Lifecycle.State.RESUMED
+    }
+
+    override val lifecycle: Lifecycle
+        get() = registry
+
+    fun destroy() {
+        registry.currentState = Lifecycle.State.DESTROYED
+    }
 }
 
 private object UnsupportedGraphicsContext : GraphicsContext {
