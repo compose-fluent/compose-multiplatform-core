@@ -16,8 +16,7 @@
 
 package androidx.compose.ui.autofill
 
-@JvmInline
-private value class PlatformContentDataType(val value: Int) : ContentDataType
+private data class PlatformContentDataType(val value: Int) : ContentDataType
 
 actual sealed interface ContentDataType {
     actual companion object {
@@ -29,8 +28,7 @@ actual sealed interface ContentDataType {
     }
 }
 
-@JvmInline
-private value class PlatformContentType(val value: Long) : ContentType {
+private data class PlatformContentType(val value: Long) : ContentType {
     override fun plus(other: ContentType): ContentType {
         other as PlatformContentType
         return PlatformContentType(value or other.value)
