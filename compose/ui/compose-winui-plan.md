@@ -107,6 +107,7 @@
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
+- [x] Add repository-local WinUI owner focus smoke validation for Compose `FocusRequester` requests accepted while attempting native WinUI root focus.
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [ ] Resolve the current Windows JVM sample shutdown blocker where JDK 25 FFM upcalls can abort with `upcallLinker.cpp:66` after early WinUIView smoke validation (`KWINRT-013`).

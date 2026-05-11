@@ -56,7 +56,11 @@ class WinUIComposeView(
     internal val rootNode = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
     }
-    internal val owner = WinUIOwner(rootNode, onInteropTreeChanged = ::syncRootContent)
+    internal val owner = WinUIOwner(
+        root = rootNode,
+        focusRoot = root,
+        onInteropTreeChanged = ::syncRootContent,
+    )
 
     private var recomposer: Recomposer? = null
     private var recomposerJob: Job? = null

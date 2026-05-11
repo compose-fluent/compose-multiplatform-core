@@ -90,11 +90,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.InteropView
 import kotlinx.coroutines.awaitCancellation
+import microsoft.ui.xaml.FocusState
+import microsoft.ui.xaml.UIElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
 internal class WinUIOwner(
     override val root: LayoutNode,
+    private val focusRoot: UIElement,
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
     private val onInteropTreeChanged: () -> Unit = {},
 ) : Owner {
@@ -125,7 +128,7 @@ internal class WinUIOwner(
     override val pointerIconService: PointerIconService = WinUIPointerIconService()
     override val semanticsOwner: SemanticsOwner =
         SemanticsOwner(root, EmptySemanticsModifier(), layoutNodes)
-    override val focusOwner: FocusOwner = FocusOwnerImpl(NoOpPlatformFocusOwner, this)
+    override val focusOwner: FocusOwner = FocusOwnerImpl(WinUIPlatformFocusOwner(focusRoot), this)
     private val mutableWindowInfo = WindowInfoImpl()
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val retainedValuesStore: RetainedValuesStore = ForgetfulRetainedValuesStore
@@ -421,13 +424,27 @@ private object NoOpPlatformTextInputSessionScope : PlatformTextInputSessionScope
     }
 }
 
-private object NoOpPlatformFocusOwner : PlatformFocusOwner {
+private class WinUIPlatformFocusOwner(
+    private val focusRoot: UIElement,
+) : PlatformFocusOwner {
     override fun requestOwnerFocus(
         focusDirection: FocusDirection?,
         previouslyFocusedRect: Rect?,
-    ): Boolean = true
+    ): Boolean {
+        runCatching {
+            focusRoot.isTabStop = true
+            focusRoot.focus(FocusState.Programmatic)
+        }
+        return true
+    }
 
-    override fun clearOwnerFocus() = Unit
+    override fun clearOwnerFocus() {
+        runCatching {
+            if (focusRoot.focusState != FocusState.Unfocused) {
+                focusRoot.focus(FocusState.Unfocused)
+            }
+        }
+    }
 
     override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
 

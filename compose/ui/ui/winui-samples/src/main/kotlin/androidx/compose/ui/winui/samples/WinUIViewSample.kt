@@ -27,6 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.ClipEntry
@@ -185,6 +189,7 @@ private fun WinUIViewWindowIntegrationContent(
     onToggleSwitchUpdated: (ToggleSwitch) -> Unit,
 ) {
     ValidateWinUICompositionLocals(expectWindowFocus)
+    ValidateWinUIOwnerFocus()
     WinUIView(
         modifier = fixedSizeAndPositionModifier(
             width = 160,
@@ -225,6 +230,32 @@ private fun WinUIViewWindowIntegrationContent(
             onToggleSwitchUpdated(toggleSwitch)
         },
     )
+}
+
+@Composable
+private fun ValidateWinUIOwnerFocus() {
+    val focusRequester = remember { FocusRequester() }
+    var focusObserved by remember { mutableStateOf(false) }
+    Layout(
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { focusObserved = it.isFocused }
+            .focusTarget(),
+        content = {},
+    ) { _, _ ->
+        layout(1, 1) {}
+    }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        check(focusRequester.requestFocus()) {
+            "WinUI Compose focus requester could not accept owner focus request."
+        }
+        withFrameNanos { }
+        check(focusObserved) {
+            "WinUI Compose focus requester did not observe focused state."
+        }
+        println("compose-winui-sample: owner focus request accepted")
+    }
 }
 
 fun main() {
@@ -289,6 +320,7 @@ private object ComposeWinUiSmokeApp {
             ) {
                 var content by remember { mutableStateOf("Hello from Compose WinUI") }
                 var initialBackdropPointer by remember { mutableStateOf<Long?>(null) }
+                var backdropSmokePassed by remember { mutableStateOf(false) }
                 var lastButton by remember { mutableStateOf<Button?>(null) }
                 var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
                 LaunchedEffect(Unit) {
@@ -302,15 +334,21 @@ private object ComposeWinUiSmokeApp {
                 if (initialBackdropPointer == null) {
                     initialBackdropPointer = backdropPointer
                 }
-                if (backdrop == WindowBackdrop.DesktopAcrylic) {
-                    check(backdropPointer != initialBackdropPointer) {
-                        "WindowBackdrop.DesktopAcrylic did not replace the initial backdrop."
+                LaunchedEffect(backdrop) {
+                    if (backdrop == WindowBackdrop.DesktopAcrylic) {
+                        val initialPointer = checkNotNull(initialBackdropPointer)
+                        awaitCondition("WindowBackdrop.DesktopAcrylic replacement") {
+                            val currentPointer = window.systemBackdrop.nativeObject.pointer.value
+                            currentPointer != 0L && currentPointer != initialPointer
+                        }
+                        backdropSmokePassed = true
                     }
                 }
                 LaunchedEffect(
                     title,
                     extendsContentIntoTitleBar,
                     backdrop,
+                    backdropSmokePassed,
                     lastButton,
                     lastToggleSwitch,
                 ) {
@@ -322,7 +360,8 @@ private object ComposeWinUiSmokeApp {
                         toggleSwitch.isOn &&
                         title == "compose-winui sample updated" &&
                         extendsContentIntoTitleBar &&
-                        backdrop == WindowBackdrop.DesktopAcrylic
+                        backdrop == WindowBackdrop.DesktopAcrylic &&
+                        backdropSmokePassed
                     ) {
                         windowSmokePassed = true
                     }
