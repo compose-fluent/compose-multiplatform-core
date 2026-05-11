@@ -24,6 +24,9 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
+import androidx.compose.runtime.saveable.autoSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -134,6 +137,9 @@ private fun ValidateWinUICompositionLocals(expectWindowFocus: Boolean) {
     }
     check(LocalLifecycleOwner.current.lifecycle.currentState == Lifecycle.State.RESUMED) {
         "WinUI LocalLifecycleOwner was not provided in a resumed state."
+    }
+    check(LocalSaveableStateRegistry.current != null) {
+        "WinUI LocalSaveableStateRegistry was not provided."
     }
     val uriHandler = checkNotNull(LocalUriHandler.current) {
         "WinUI LocalUriHandler was not provided by WinUIComposeView."
@@ -335,6 +341,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
+            runWinUISaveableStateSmoke()
             runWinUITextInputSessionSmoke()
             reuseSmokePassed = true
         }
@@ -584,6 +591,34 @@ private object ComposeWinUiSmokeApp {
             "WinUI lifecycle owner did not enter DESTROYED state on dispose."
         }
         println("compose-winui-sample: lifecycle owner resumed and destroyed")
+    }
+
+    private suspend fun runWinUISaveableStateSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var savedState: MutableState<String>? = null
+        var observedValue: String? = null
+        currentComposeView.setSaveableStateSmokeContent { state ->
+            savedState = state
+            observedValue = state.value
+        }
+        check(savedState?.value == "initial") {
+            "WinUI rememberSaveable did not create its initial value."
+        }
+        savedState?.value = "updated"
+        awaitCondition("WinUI rememberSaveable state update") {
+            observedValue == "updated"
+        }
+        currentComposeView.disposeComposition()
+
+        var restoredValue: String? = null
+        currentComposeView.setSaveableStateSmokeContent { state ->
+            restoredValue = state.value
+        }
+        check(restoredValue == "updated") {
+            "WinUI rememberSaveable did not restore across disposeComposition: $restoredValue."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: saveable state restored")
     }
 
     private fun runWinUIViewZOrderSmoke() {
@@ -1288,6 +1323,22 @@ private object ComposeWinUiSmokeApp {
         check(condition()) {
             "Timed out waiting for $label."
         }
+    }
+}
+
+@Composable
+private fun WinUISaveableStateSmokeContent(
+    onState: (MutableState<String>) -> Unit,
+) {
+    val state = rememberSaveable(stateSaver = autoSaver()) { mutableStateOf("initial") }
+    onState(state)
+}
+
+private fun WinUIComposeView.setSaveableStateSmokeContent(
+    onState: (MutableState<String>) -> Unit,
+) {
+    setContent {
+        WinUISaveableStateSmokeContent(onState)
     }
 }
 

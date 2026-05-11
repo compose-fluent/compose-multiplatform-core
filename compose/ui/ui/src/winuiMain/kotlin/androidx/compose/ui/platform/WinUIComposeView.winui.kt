@@ -22,6 +22,9 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
+import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
@@ -67,6 +70,8 @@ class WinUIComposeView(
     private var recomposerJob: Job? = null
     private var frameClock: WinUIFrameClock? = null
     private var composition: Composition? = null
+    private var saveableState: Map<String, List<Any?>>? = null
+    private var saveableStateRegistry: SaveableStateRegistry? = null
     private var content: (@Composable () -> Unit)? = null
     private var currentInteropRoots: List<UIElement> = emptyList()
     private var isDisposed = false
@@ -80,8 +85,14 @@ class WinUIComposeView(
             composition = it
         }
         currentComposition.setContent {
+            val registry = remember {
+                SaveableStateRegistry(saveableState) { true }.also {
+                    saveableStateRegistry = it
+                }
+            }
             CompositionLocalProvider(
                 androidx.lifecycle.compose.LocalLifecycleOwner provides owner.lifecycleOwner,
+                LocalSaveableStateRegistry provides registry,
             ) {
                 ProvideCommonCompositionLocals(
                     owner = owner,
@@ -94,6 +105,8 @@ class WinUIComposeView(
     }
 
     fun disposeComposition() {
+        saveableState = saveableStateRegistry?.performSave()
+        saveableStateRegistry = null
         composition?.dispose()
         composition = null
         recomposer?.close()
