@@ -17,6 +17,7 @@
 package androidx.compose.ui.winui.samples
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReusableContentHost
 import androidx.compose.runtime.MutableState
@@ -39,6 +40,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.WinUIInteropProperties
 import androidx.compose.ui.viewinterop.WinUIView
@@ -247,6 +249,7 @@ private object ComposeWinUiSmokeApp {
             true
         }
         LaunchedEffect(Unit) {
+            runWinUIViewDensitySmoke()
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
             runWinUIViewRelayoutSmoke()
@@ -916,6 +919,74 @@ private object ComposeWinUiSmokeApp {
             "WinUIView relayout smoke did not release on host disposal, release=" +
                 "${lifecycleProbe.releaseCount}."
         }
+    }
+
+    private suspend fun runWinUIViewDensitySmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val localDensity: MutableState<Float> = mutableStateOf(1f)
+        var observedDensity = 0f
+        currentComposeView.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(localDensity.value)) {
+                WinUIView(
+                    modifier = Modifier.layout { measurable, _ ->
+                        observedDensity = this.density
+                        val placeable = measurable.measure(Constraints.fixed(80, 30))
+                        layout(placeable.width, placeable.height) {
+                            placeable.place(0, 0)
+                        }
+                    },
+                    factory = {
+                        lifecycleProbe.factoryCount += 1
+                        Button().apply {
+                            content = "density smoke"
+                        }
+                    },
+                    update = { button ->
+                        lifecycleProbe.updateCount += 1
+                        lifecycleProbe.lastButton = button
+                    },
+                    onReset = { lifecycleProbe.resetCount += 1 },
+                    onRelease = { button ->
+                        lifecycleProbe.releaseCount += 1
+                        lifecycleProbe.lastButton = button
+                    },
+                )
+            }
+        }
+        awaitCondition("WinUIView initial density") {
+            observedDensity == 1f &&
+                lifecycleProbe.lastButton != null &&
+                (rootHost.content as? Canvas)?.children?.size == 1
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUIView density smoke did not install a Button."
+        }
+
+        localDensity.value = 2f
+        awaitCondition("WinUIView updated density") {
+            observedDensity == 2f && lifecycleProbe.lastButton === button
+        }
+        check(lifecycleProbe.factoryCount == 1) {
+            "WinUIView density smoke recreated the Button, factory=" +
+                "${lifecycleProbe.factoryCount}."
+        }
+        check(lifecycleProbe.releaseCount == 0) {
+            "WinUIView density smoke released the Button during density update, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+
+        currentComposeView.dispose()
+        check(lifecycleProbe.releaseCount == 1) {
+            "WinUIView density smoke did not release on host disposal, release=" +
+                "${lifecycleProbe.releaseCount}."
+        }
+        println(
+            "compose-winui-sample: density update factory=" +
+                "${lifecycleProbe.factoryCount} update=${lifecycleProbe.updateCount} " +
+                "release=${lifecycleProbe.releaseCount}"
+        )
     }
 
     private suspend fun runWinUIViewPropertiesUpdateSmoke() {

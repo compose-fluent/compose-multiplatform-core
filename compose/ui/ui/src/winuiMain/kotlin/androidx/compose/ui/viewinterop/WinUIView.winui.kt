@@ -31,7 +31,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.materialize
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
@@ -100,12 +102,14 @@ fun <T : UIElement> WinUIView(
     update: (T) -> Unit = WinUIViewNoOpUpdate,
 ) {
     val materializedModifier = currentComposer.materialize(modifier)
+    val density = LocalDensity.current
     if (onReset != null) {
         ReusableComposeNode<LayoutNode, UiApplier>(
-            factory = createWinUIViewNodeFactory(factory),
+            factory = createWinUIViewNodeFactory(factory, density),
             update = {
                 updateWinUIViewHolderParams<T>(
                     modifier = materializedModifier,
+                    density = density,
                     properties = properties,
                 )
                 set(onReset) { requireWinUIViewHolder<T>().resetBlock = it }
@@ -115,10 +119,11 @@ fun <T : UIElement> WinUIView(
         )
     } else {
         ComposeNode<LayoutNode, UiApplier>(
-            factory = createWinUIViewNodeFactory(factory),
+            factory = createWinUIViewNodeFactory(factory, density),
             update = {
                 updateWinUIViewHolderParams<T>(
                     modifier = materializedModifier,
+                    density = density,
                     properties = properties,
                 )
                 set(update) { requireWinUIViewHolder<T>().updateBlock = it }
@@ -129,25 +134,28 @@ fun <T : UIElement> WinUIView(
 }
 
 @Composable
-private fun <T : UIElement> createWinUIViewNodeFactory(factory: () -> T): () -> LayoutNode {
+private fun <T : UIElement> createWinUIViewNodeFactory(
+    factory: () -> T,
+    density: Density,
+): () -> LayoutNode {
     return {
-        val holder = WinUIViewHolder(view = factory())
-        LayoutNode().also {
-            it.interopViewFactoryHolder = holder
-            it.measurePolicy = holder.measurePolicy
-        }
+        WinUIViewHolder(
+            view = factory(),
+            initialDensity = density,
+        ).layoutNode
     }
 }
 
 private fun <T : UIElement> Updater<LayoutNode>.updateWinUIViewHolderParams(
     modifier: Modifier,
+    density: Density,
     properties: WinUIInteropProperties,
 ) {
     set(modifier) {
         val holder = requireWinUIViewHolder<T>()
         holder.modifier = it
-        this.modifier = holder.composeModifier(it)
     }
+    set(density) { requireWinUIViewHolder<T>().density = it }
     set(properties) { requireWinUIViewHolder<T>().properties = it }
 }
 
@@ -160,6 +168,7 @@ private val WinUIViewNoOpUpdate: UIElement.() -> Unit = {}
 
 private class WinUIViewHolder<T : UIElement>(
     private val view: T,
+    initialDensity: Density,
 ) : InteropViewFactoryHolder(), WinUIInteropViewHost {
     private val group = InteropViewGroup(
         Canvas().also {
@@ -176,6 +185,7 @@ private class WinUIViewHolder<T : UIElement>(
     private val initialViewHitTestVisible = view.isHitTestVisible
     private val initialViewTabStop = view.isTabStop
     private val initialControlEnabled = (view as? Control)?.isEnabled
+    private val releaseCleanups = mutableListOf<() -> Unit>()
 
     override val interopRoot: UIElement
         get() = group.uiElement
@@ -184,6 +194,17 @@ private class WinUIViewHolder<T : UIElement>(
         get() = isViewAttachedToGroup
 
     var modifier: Modifier = Modifier
+        set(value) {
+            field = value
+            layoutNode.modifier = composeModifier(value)
+        }
+
+    var density: Density = initialDensity
+        set(value) {
+            if (field == value) return
+            field = value
+            layoutNode.density = value
+        }
 
     private val positionModifier = Modifier.onGloballyPositioned { coordinates ->
         val bounds = coordinates.boundsInRoot()
@@ -207,9 +228,13 @@ private class WinUIViewHolder<T : UIElement>(
 
     var releaseBlock: (T) -> Unit = WinUIViewNoOpUpdate
 
-    fun composeModifier(modifier: Modifier): Modifier = modifier.then(positionModifier)
+    private fun registerReleaseCleanup(cleanup: () -> Unit) {
+        releaseCleanups += cleanup
+    }
 
-    val measurePolicy = MeasurePolicy { _, constraints ->
+    private fun composeModifier(modifier: Modifier): Modifier = modifier.then(positionModifier)
+
+    private val measurePolicy = MeasurePolicy { _, constraints ->
         val desiredSize = view.measureUnclippedDesiredSize()
         val width = constraints.constrainWidth(desiredSize.width)
         val height = constraints.constrainHeight(desiredSize.height)
@@ -223,12 +248,22 @@ private class WinUIViewHolder<T : UIElement>(
         }
     }
 
+    val layoutNode: LayoutNode = LayoutNode().also {
+        it.interopViewFactoryHolder = this
+        it.measurePolicy = measurePolicy
+    }
+
+    init {
+        layoutNode.density = density
+        layoutNode.modifier = composeModifier(modifier)
+        registerReleaseCleanup(::clearNativeState)
+    }
+
     override fun getInteropView(): InteropView = view.asInteropView()
 
     override fun onReuse() {
         if (!isViewAttachedToGroup) {
-            group.uiElement.children.add(view)
-            isViewAttachedToGroup = true
+            attachViewToGroup()
         } else {
             resetBlock(view)
         }
@@ -241,9 +276,12 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     override fun onRelease() {
-        releaseBlock(view)
-        group.uiElement.children.clear()
-        isViewAttachedToGroup = false
+        try {
+            releaseBlock(view)
+        } finally {
+            releaseCleanups.asReversed().forEach { it.invoke() }
+            releaseCleanups.clear()
+        }
     }
 
     private fun applyLayout(width: Int, height: Int, nativeWidth: Int, nativeHeight: Int) {
@@ -280,16 +318,31 @@ private class WinUIViewHolder<T : UIElement>(
         }
     }
 
+    private fun attachViewToGroup() {
+        group.uiElement.children.add(view)
+        isViewAttachedToGroup = true
+    }
+
+    private fun clearNativeState() {
+        clearClip()
+        group.uiElement.children.clear()
+        isViewAttachedToGroup = false
+    }
+
     private fun updateClip() {
         if (!properties.clipToBounds) {
-            if (clipGeometry == null) return
-            clipGeometry = null
-            setClip(group.uiElement, null)
+            clearClip()
             return
         }
         val clip = clipGeometry ?: RectangleGeometry().also { clipGeometry = it }
         clip.rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
         setClip(group.uiElement, clip)
+    }
+
+    private fun clearClip() {
+        if (clipGeometry == null) return
+        clipGeometry = null
+        setClip(group.uiElement, null)
     }
 }
 

@@ -58,7 +58,7 @@
 - [x] Add initial `WinUIInteropProperties` for interaction, native accessibility participation, clipping/overlay behavior, and future WinUI-specific interop switches.
 - [x] Add `InteropView` actual for WinUI `UIElement`.
 - [x] Add initial `InteropViewGroup` for the WinUI wrapper used to host interop children.
-- [ ] Implement a WinUI view holder that owns the user `UIElement`, wrapper element, modifier updates, density updates, lifecycle callbacks, and event-token cleanup.
+- [x] Implement an initial WinUI view holder that owns the user `UIElement`, wrapper element, modifier updates, density updates, lifecycle callbacks, and native release cleanup hooks for event tokens.
 - [x] Add initial WinUIView measure policy plus size and root-position propagation from Compose layout to the WinUI wrapper and `FrameworkElement` child.
 - [x] Wire initial `WinUIInteropProperties.clipToBounds` support to a WinUI `RectangleGeometry` clip on the native wrapper.
 - [x] Wire initial `WinUIInteropProperties.isUserInteractionEnabled` support to WinUI hit testing, user-element Tab focus, and `Control.isEnabled`.
