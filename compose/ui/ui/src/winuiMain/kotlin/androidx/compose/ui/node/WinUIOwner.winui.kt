@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.ReusableGraphicsLayerScope
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.isIdentity
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -56,6 +58,7 @@ import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.platform.AccessibilityManager
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.invertTo
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.SoftwareKeyboardController
@@ -277,7 +280,7 @@ internal class WinUIOwner(
         drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
         invalidateParentLayer: () -> Unit,
         explicitLayer: GraphicsLayer?,
-    ): OwnedLayer = WinUIOwnerLayer(drawBlock)
+    ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer)
 
     override fun onSemanticsChange() = Unit
 
@@ -500,39 +503,118 @@ private object WinUIFontResourceLoader : Font.ResourceLoader {
 
 private class WinUIOwnerLayer(
     private var drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
+    private var invalidateParentLayer: () -> Unit,
 ) : OwnedLayer {
     private val matrix = Matrix()
+    private val inverseMatrix = Matrix()
+    private var isInverseMatrixDirty = true
+    private var isInverseMatrixValid = true
+    private var isIdentity = true
+    private var isDestroyed = false
+    private var position = IntOffset.Zero
+    private var size = IntSize.Zero
+    private var transformOrigin = TransformOrigin.Center
+    private var translationX = 0f
+    private var translationY = 0f
+    private var rotationX = 0f
+    private var rotationY = 0f
+    private var rotationZ = 0f
+    private var scaleX = 1f
+    private var scaleY = 1f
+    private var clip = false
 
-    override fun updateLayerProperties(scope: ReusableGraphicsLayerScope) = Unit
+    override fun updateLayerProperties(scope: ReusableGraphicsLayerScope) {
+        transformOrigin = scope.transformOrigin
+        translationX = scope.translationX
+        translationY = scope.translationY
+        rotationX = scope.rotationX
+        rotationY = scope.rotationY
+        rotationZ = scope.rotationZ
+        scaleX = scope.scaleX
+        scaleY = scope.scaleY
+        clip = scope.clip
+        updateMatrix()
+        invalidate()
+    }
 
-    override fun isInLayer(position: Offset): Boolean = true
+    override fun isInLayer(position: Offset): Boolean {
+        if (!clip) return true
+        return position.x >= 0f &&
+            position.y >= 0f &&
+            position.x < size.width &&
+            position.y < size.height
+    }
 
-    override fun move(position: IntOffset) = Unit
+    override fun move(position: IntOffset) {
+        if (position == this.position) return
+        this.position = position
+        invalidateParentLayer()
+    }
 
-    override fun resize(size: IntSize) = Unit
+    override fun resize(size: IntSize) {
+        if (size == this.size) return
+        this.size = size
+        updateMatrix()
+        invalidate()
+    }
 
     override fun drawLayer(canvas: Canvas, parentLayer: GraphicsLayer?) {
+        canvas.save()
+        canvas.concat(matrix)
+        canvas.translate(position.x.toFloat(), position.y.toFloat())
+        if (clip) {
+            canvas.clipRect(Rect(0f, 0f, size.width.toFloat(), size.height.toFloat()))
+        }
         drawBlock(canvas, parentLayer)
+        canvas.restore()
     }
 
     override fun updateDisplayList() = Unit
 
-    override fun invalidate() = Unit
+    override fun invalidate() {
+        if (!isDestroyed) {
+            invalidateParentLayer()
+        }
+    }
 
-    override fun destroy() = Unit
+    override fun destroy() {
+        isDestroyed = true
+    }
 
-    override fun mapOffset(point: Offset, inverse: Boolean): Offset = point
+    override fun mapOffset(point: Offset, inverse: Boolean): Offset {
+        val targetMatrix = if (inverse) {
+            getInverseMatrix() ?: return Offset.Infinite
+        } else {
+            matrix
+        }
+        return if (isIdentity) point else targetMatrix.map(point)
+    }
 
-    override fun mapBounds(rect: MutableRect, inverse: Boolean) = Unit
+    override fun mapBounds(rect: MutableRect, inverse: Boolean) {
+        val targetMatrix = if (inverse) getInverseMatrix() else matrix
+        if (!isIdentity) {
+            if (targetMatrix == null) {
+                rect.set(0f, 0f, 0f, 0f)
+            } else {
+                targetMatrix.map(rect)
+            }
+        }
+    }
 
     override fun reuseLayer(
         drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
         invalidateParentLayer: () -> Unit,
     ) {
         this.drawBlock = drawBlock
+        this.invalidateParentLayer = invalidateParentLayer
+        isDestroyed = false
+        resetLayerState()
+        invalidate()
     }
 
-    override fun transform(matrix: Matrix) = Unit
+    override fun transform(matrix: Matrix) {
+        matrix.timesAssign(this.matrix)
+    }
 
     override val underlyingMatrix: Matrix get() = matrix
 
@@ -540,5 +622,60 @@ private class WinUIOwnerLayer(
 
     override var isFrameRateFromParent: Boolean = false
 
-    override fun inverseTransform(matrix: Matrix) = Unit
+    override fun inverseTransform(matrix: Matrix) {
+        getInverseMatrix()?.let { matrix.timesAssign(it) }
+    }
+
+    private fun updateMatrix() {
+        val pivotX = transformOrigin.pivotFractionX * size.width
+        val pivotY = transformOrigin.pivotFractionY * size.height
+        matrix.resetToPivotedTransform(
+            pivotX = pivotX,
+            pivotY = pivotY,
+            translationX = translationX,
+            translationY = translationY,
+            rotationX = rotationX,
+            rotationY = rotationY,
+            rotationZ = rotationZ,
+            scaleX = scaleX,
+            scaleY = scaleY,
+        )
+        isIdentity = matrix.isIdentity()
+        isInverseMatrixDirty = true
+    }
+
+    private fun getInverseMatrix(): Matrix? {
+        if (!isInverseMatrixDirty) {
+            return if (isInverseMatrixValid) inverseMatrix else null
+        }
+        isInverseMatrixDirty = false
+        if (isIdentity) {
+            inverseMatrix.reset()
+            isInverseMatrixValid = true
+            return inverseMatrix
+        }
+        isInverseMatrixValid = matrix.invertTo(inverseMatrix)
+        return if (isInverseMatrixValid) inverseMatrix else null
+    }
+
+    private fun resetLayerState() {
+        position = IntOffset.Zero
+        size = IntSize.Zero
+        transformOrigin = TransformOrigin.Center
+        translationX = 0f
+        translationY = 0f
+        rotationX = 0f
+        rotationY = 0f
+        rotationZ = 0f
+        scaleX = 1f
+        scaleY = 1f
+        clip = false
+        frameRate = 0f
+        isFrameRateFromParent = false
+        matrix.reset()
+        inverseMatrix.reset()
+        isIdentity = true
+        isInverseMatrixDirty = false
+        isInverseMatrixValid = true
+    }
 }

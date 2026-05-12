@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
@@ -391,6 +392,7 @@ private object ComposeWinUiSmokeApp {
             runWinUILayoutSnapshotInvalidationSmoke()
             runWinUILayoutCompletedListenerSmoke()
             runWinUILayoutRectChangedSmoke()
+            runWinUIOwnerLayerTransformSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1403,6 +1405,47 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: layout rect changed")
+    }
+
+    private suspend fun runWinUIOwnerLayerTransformSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val translationX: MutableState<Float> = mutableStateOf(0f)
+        var bounds: RelativeLayoutBounds? = null
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier
+                    .graphicsLayer {
+                        this.translationX = translationX.value
+                        clip = true
+                    }
+                    .onLayoutRectChanged(
+                        throttleMillis = 0,
+                        debounceMillis = 0,
+                    ) {
+                        bounds = it
+                    },
+                content = {},
+            ) { _, _ ->
+                layout(20, 10) {}
+            }
+        }
+        awaitCondition("WinUI owner layer initial transform bounds") {
+            val currentBounds = bounds
+            currentBounds?.positionInRoot?.x == 0 &&
+                currentBounds.positionInRoot.y == 0 &&
+                currentBounds.width == 20 &&
+                currentBounds.height == 10
+        }
+        translationX.value = 12f
+        awaitCondition("WinUI owner layer updated transform bounds") {
+            val currentBounds = bounds
+            currentBounds?.positionInRoot?.x == 12 &&
+                currentBounds.positionInRoot.y == 0 &&
+                currentBounds.width == 20 &&
+                currentBounds.height == 10
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: owner layer transform")
     }
 
     private suspend fun runWinUIViewPlacementSmoke() {

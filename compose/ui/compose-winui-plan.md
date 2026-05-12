@@ -28,6 +28,7 @@
 - [x] Schedule WinUI `Owner` measure/layout passes from measure, relayout, positioned-callback, and snapshot-observed layout invalidations.
 - [x] Schedule WinUI layout-completed listener delivery even when listener registration is the only pending layout work.
 - [x] Wire WinUI `Owner` layout-node tracking into `RectManager` and remove stale rect entries on detach.
+- [x] Wire initial WinUI `Owner` layer invalidation, size, position, clipping, and transform matrix state so layout bounds observers can see layer translations.
 - [x] Attach the WinUI root `LayoutNode` to an initial `WinUIOwner` so reusable node lifecycle goes through common `LayoutNode.onReuse()` instead of a WinUI-only rootless path.
 - [x] Implement a WinUI `setContent` entry point that creates a `Composition` with `UiApplier` and provides WinUI composition locals.
 - [x] Add an initial `Window.setContent` entry point that creates a `WinUIComposeView`, installs its root into the WinUI `Window`, and returns the view for lifecycle management.
@@ -122,6 +123,7 @@
 - [x] Add repository-local WinUI owner smoke validation for snapshot-observed layout state invalidating measure/layout without recomposition.
 - [x] Add repository-local WinUI owner smoke validation for layout-completed listener dispatch after installing an `OnPlacedModifier`.
 - [x] Add repository-local WinUI owner smoke validation for `onLayoutRectChanged` occlusion and detach cleanup.
+- [x] Add repository-local WinUI owner smoke validation for graphics-layer translation propagating through `onLayoutRectChanged` bounds.
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
