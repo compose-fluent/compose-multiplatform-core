@@ -32,7 +32,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.focus.FocusOwnerImpl
-import androidx.compose.ui.focus.PlatformFocusOwner
+import androidx.compose.ui.focus.WinUIPlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
@@ -100,7 +100,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.InteropView
-import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -483,33 +482,6 @@ private object NoOpPlatformTextInputService : PlatformTextInputService {
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
     ) = Unit
-}
-
-private class WinUIPlatformFocusOwner(
-    private val focusRoot: UIElement,
-) : PlatformFocusOwner {
-    override fun requestOwnerFocus(
-        focusDirection: FocusDirection?,
-        previouslyFocusedRect: Rect?,
-    ): Boolean {
-        runCatching {
-            focusRoot.isTabStop = true
-            focusRoot.focus(FocusState.Programmatic)
-        }
-        return true
-    }
-
-    override fun clearOwnerFocus() {
-        runCatching {
-            if (focusRoot.focusState != FocusState.Unfocused) {
-                focusRoot.focus(FocusState.Unfocused)
-            }
-        }
-    }
-
-    override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
-
-    override fun getEmbeddedViewFocusRect(): Rect? = null
 }
 
 private object NoOpDragAndDropManager : DragAndDropManager {
