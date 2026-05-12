@@ -70,12 +70,12 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.TextToolbar
-import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WinUIPlatformTextInputSession
+import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.platform.WinUIViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
@@ -128,7 +128,7 @@ internal class WinUIOwner(
     override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager
     override val graphicsContext: GraphicsContext = WinUIGraphicsContext
-    override val textToolbar: TextToolbar = NoOpTextToolbar
+    override val textToolbar: TextToolbar = WinUITextToolbar
     @Suppress("DEPRECATION")
     override val autofillTree: AutofillTree = AutofillTree()
     @Suppress("DEPRECATION")
@@ -416,20 +416,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object NoOpTextToolbar : TextToolbar {
-    override fun showMenu(
-        rect: Rect,
-        onCopyRequested: (() -> Unit)?,
-        onPasteRequested: (() -> Unit)?,
-        onCutRequested: (() -> Unit)?,
-        onSelectAllRequested: (() -> Unit)?,
-    ) = Unit
-
-    override fun hide() = Unit
-
-    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
 }
 
 private object NoOpSoftwareKeyboardController : SoftwareKeyboardController {
