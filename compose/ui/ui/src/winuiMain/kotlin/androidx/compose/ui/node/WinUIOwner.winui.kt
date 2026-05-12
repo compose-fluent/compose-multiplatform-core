@@ -75,6 +75,7 @@ import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WinUIPlatformTextInputSession
+import androidx.compose.ui.platform.WinUISoftwareKeyboardController
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.platform.WinUIViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
@@ -137,7 +138,7 @@ internal class WinUIOwner(
     override val density: Density = Density(1f)
     @Suppress("DEPRECATION")
     override val textInputService: TextInputService = TextInputService(NoOpPlatformTextInputService)
-    override val softwareKeyboardController: SoftwareKeyboardController = NoOpSoftwareKeyboardController
+    override val softwareKeyboardController: SoftwareKeyboardController = WinUISoftwareKeyboardController
     override val pointerIconService: PointerIconService = WinUIPointerIconService()
     override val semanticsOwner: SemanticsOwner =
         SemanticsOwner(root, EmptySemanticsModifier(), layoutNodes)
@@ -416,12 +417,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object NoOpSoftwareKeyboardController : SoftwareKeyboardController {
-    override fun show() = Unit
-
-    override fun hide() = Unit
 }
 
 private object NoOpPlatformTextInputService : PlatformTextInputService {
