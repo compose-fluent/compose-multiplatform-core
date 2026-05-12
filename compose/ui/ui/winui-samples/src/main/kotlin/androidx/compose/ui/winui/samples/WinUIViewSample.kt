@@ -402,6 +402,7 @@ private object ComposeWinUiSmokeApp {
             runWinUILayoutRectChangedSmoke()
             runWinUIOwnerLayerTransformSmoke()
             runWinUIRootKeyEventSmoke()
+            runWinUIRootFocusTraversalKeySmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1506,6 +1507,79 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: root key event")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIRootFocusTraversalKeySmoke() {
+        val currentComposeView = WinUIComposeView()
+        val firstRequester = FocusRequester()
+        val secondRequester = FocusRequester()
+        var firstFocused = false
+        var secondFocused = false
+        currentComposeView.setContent {
+            Layout(
+                content = {
+                    Layout(
+                        modifier = Modifier
+                            .focusRequester(firstRequester)
+                            .onFocusChanged {
+                                firstFocused = it.isFocused
+                            }
+                            .focusTarget(),
+                        content = {},
+                    ) { _, _ ->
+                        layout(1, 1) {}
+                    }
+                    Layout(
+                        modifier = Modifier
+                            .focusRequester(secondRequester)
+                            .onFocusChanged {
+                                secondFocused = it.isFocused
+                            }
+                            .focusTarget(),
+                        content = {},
+                    ) { _, _ ->
+                        layout(1, 1) {}
+                    }
+                },
+            ) { measurables, _ ->
+                val first = measurables[0].measure(Constraints.fixed(1, 1))
+                val second = measurables[1].measure(Constraints.fixed(1, 1))
+                layout(2, 1) {
+                    first.place(0, 0)
+                    second.place(1, 0)
+                }
+            }
+        }
+        withFrameNanos { }
+        check(firstRequester.requestFocus()) {
+            "WinUI root focus traversal smoke could not focus the first target."
+        }
+        awaitCondition("WinUI root focus traversal first target focused") {
+            firstFocused && !secondFocused
+        }
+        check(
+            currentComposeView.rootForTest().sendKeyEvent(
+                KeyEvent(key = Key.Tab, type = KeyEventType.KeyDown)
+            )
+        ) {
+            "WinUI RootForTest did not consume Tab focus traversal."
+        }
+        awaitCondition("WinUI root focus traversal second target focused") {
+            !firstFocused && secondFocused
+        }
+        check(
+            currentComposeView.rootForTest().sendKeyEvent(
+                KeyEvent(key = Key.Tab, type = KeyEventType.KeyDown, isShiftPressed = true)
+            )
+        ) {
+            "WinUI RootForTest did not consume Shift+Tab focus traversal."
+        }
+        awaitCondition("WinUI root focus traversal returned to first target") {
+            firstFocused && !secondFocused
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: root focus traversal key event")
     }
 
     private suspend fun runWinUIViewPlacementSmoke() {
