@@ -71,6 +71,7 @@ import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WinUIPlatformTextInputSession
@@ -124,7 +125,7 @@ internal class WinUIOwner(
     @Suppress("DEPRECATION")
     override val clipboardManager: ClipboardManager = WinUIClipboardManager(winUIClipboard)
     override val clipboard: Clipboard = winUIClipboard
-    override val accessibilityManager: AccessibilityManager = NoOpAccessibilityManager
+    override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager
     override val graphicsContext: GraphicsContext = UnsupportedGraphicsContext
     override val textToolbar: TextToolbar = NoOpTextToolbar
     @Suppress("DEPRECATION")
@@ -414,16 +415,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-@Suppress("DEPRECATION")
-private object NoOpAccessibilityManager : AccessibilityManager {
-    override fun calculateRecommendedTimeoutMillis(
-        originalTimeoutMillis: Long,
-        containsIcons: Boolean,
-        containsText: Boolean,
-        containsControls: Boolean,
-    ): Long = originalTimeoutMillis
 }
 
 private object UnsupportedGraphicsContext : GraphicsContext {
