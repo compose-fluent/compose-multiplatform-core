@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.WinUIGraphicsContext
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.WinUIHapticFeedback
@@ -126,7 +127,7 @@ internal class WinUIOwner(
     override val clipboardManager: ClipboardManager = WinUIClipboardManager(winUIClipboard)
     override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager
-    override val graphicsContext: GraphicsContext = UnsupportedGraphicsContext
+    override val graphicsContext: GraphicsContext = WinUIGraphicsContext
     override val textToolbar: TextToolbar = NoOpTextToolbar
     @Suppress("DEPRECATION")
     override val autofillTree: AutofillTree = AutofillTree()
@@ -415,13 +416,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object UnsupportedGraphicsContext : GraphicsContext {
-    override fun createGraphicsLayer(): GraphicsLayer =
-        error("WinUI GraphicsLayer is not implemented yet.")
-
-    override fun releaseGraphicsLayer(layer: GraphicsLayer) = Unit
 }
 
 private object NoOpTextToolbar : TextToolbar {
