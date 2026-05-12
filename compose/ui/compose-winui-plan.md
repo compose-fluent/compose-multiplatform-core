@@ -32,6 +32,7 @@
 - [x] Keep the WinUI application domain in `Application.winui.kt` and the WinUI window domain in `Window.winui.kt`.
 - [x] Expose initial WinUI window capabilities from the generated `microsoft.ui.xaml.Window`: `extendsContentIntoTitleBar`, `WindowBackdrop`, and `WindowScope` access to `window`, `appWindow`, `compositor`, and `dispatcherQueue`.
 - [x] Add concrete backdrop projection types for Mica and Desktop Acrylic through explicit Windows App SDK `type(...)` entries and validate Mica-to-DesktopAcrylic updates in the sample.
+- [x] Add WinUI `WindowBackdrop.None` clearing through the `IWindow2.SystemBackdrop` ABI setter while `kotlin-winrt` generates a non-null setter.
 - [x] Add an initial `Window(onCloseRequest = ...)` close-request hook and close the native WinUI window when its Compose node is released.
 - [x] Move initial WinUI application/window disposal onto the WinUI UI thread via `DispatcherQueue` for `exitApplication` and window close/removal paths.
 - [ ] Broaden the initial close/removal work into full declarative multi-window lifetime semantics, including cancelable close policy if WinUI exposes a suitable pre-close event.

@@ -68,11 +68,13 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Symptom:** `Window.systemBackdrop` is generated as a non-null
   `SystemBackdrop` property, so compose-winui cannot call the projected setter
   with `null` to clear an existing backdrop.
-- **Impact on compose-winui:** `WindowBackdrop.None` can represent the initial
-  no-backdrop state, but changing from `Mica`, `DesktopAcrylic`, or `Custom`
-  back to `None` is currently a no-op.
-- **compose-winui workaround:** `Window.winui.kt` skips the native setter when
-  `WindowBackdrop.None` produces `null`. Search for `KWINRT-004`.
+- **Impact on compose-winui:** `WindowBackdrop.None` must be able to represent
+  both the initial no-backdrop state and a runtime transition from `Mica`,
+  `DesktopAcrylic`, or `Custom` back to no backdrop.
+- **compose-winui workaround:** `Window.winui.kt` uses the generated setter for
+  non-null backdrops and invokes `IWindow2.SystemBackdrop` directly with a null
+  ABI pointer when `WindowBackdrop.None` needs to clear an existing backdrop.
+  Search for `KWINRT-004`.
 - **Resolution target:** Generate nullable Kotlin setters for WinRT
   runtime-class properties whose metadata permits null, including
   `Microsoft.UI.Xaml.Window.SystemBackdrop`.

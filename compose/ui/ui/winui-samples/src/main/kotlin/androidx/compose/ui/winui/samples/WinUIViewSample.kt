@@ -421,18 +421,21 @@ private object ComposeWinUiSmokeApp {
                 var content by remember { mutableStateOf("Hello from Compose WinUI") }
                 var initialBackdropPointer by remember { mutableStateOf<Long?>(null) }
                 var backdropSmokePassed by remember { mutableStateOf(false) }
+                var backdropClearSmokePassed by remember { mutableStateOf(false) }
                 var lastButton by remember { mutableStateOf<Button?>(null) }
                 var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
                 LaunchedEffect(Unit) {
                     withFrameNanos { }
                     content = "Hello from Compose WinUI updated"
                 }
-                val backdropPointer = window.systemBackdrop.nativeObject.pointer.value
-                check(backdropPointer != 0L) {
-                    "WindowBackdrop.Mica did not install a readable WinUI SystemBackdrop."
-                }
-                if (initialBackdropPointer == null) {
-                    initialBackdropPointer = backdropPointer
+                if (backdrop != WindowBackdrop.None) {
+                    val backdropPointer = window.systemBackdrop.nativeObject.pointer.value
+                    check(backdropPointer != 0L) {
+                        "WindowBackdrop did not install a readable WinUI SystemBackdrop."
+                    }
+                    if (initialBackdropPointer == null) {
+                        initialBackdropPointer = backdropPointer
+                    }
                 }
                 LaunchedEffect(backdrop) {
                     if (backdrop == WindowBackdrop.DesktopAcrylic) {
@@ -442,6 +445,13 @@ private object ComposeWinUiSmokeApp {
                             currentPointer != 0L && currentPointer != initialPointer
                         }
                         backdropSmokePassed = true
+                        backdrop = WindowBackdrop.None
+                    } else if (backdrop == WindowBackdrop.None && backdropSmokePassed) {
+                        awaitCondition("WindowBackdrop.None clear") {
+                            runCatching { window.systemBackdrop }.isFailure
+                        }
+                        backdropClearSmokePassed = true
+                        println("compose-winui-sample: window backdrop cleared")
                     }
                 }
                 LaunchedEffect(
@@ -449,6 +459,7 @@ private object ComposeWinUiSmokeApp {
                     extendsContentIntoTitleBar,
                     backdrop,
                     backdropSmokePassed,
+                    backdropClearSmokePassed,
                     lastButton,
                     lastToggleSwitch,
                 ) {
@@ -460,8 +471,9 @@ private object ComposeWinUiSmokeApp {
                         toggleSwitch.isOn &&
                         title == "compose-winui sample updated" &&
                         extendsContentIntoTitleBar &&
-                        backdrop == WindowBackdrop.DesktopAcrylic &&
-                        backdropSmokePassed
+                        backdrop == WindowBackdrop.None &&
+                        backdropSmokePassed &&
+                        backdropClearSmokePassed
                     ) {
                         windowSmokePassed = true
                     }

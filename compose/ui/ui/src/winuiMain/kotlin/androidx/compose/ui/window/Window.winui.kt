@@ -38,6 +38,7 @@ import microsoft.ui.windowing.AppWindow
 import microsoft.ui.windowing.AppWindowChangedEventArgs
 import microsoft.ui.windowing.IAppWindow
 import microsoft.ui.xaml.IWindow
+import microsoft.ui.xaml.IWindow2
 import microsoft.ui.xaml.IWindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivationState
@@ -150,9 +151,11 @@ private class WinUIWindowNode(
         set(value) {
             field = value
             val systemBackdrop = value.createSystemBackdrop()
-            // KWINRT-004: generated Window.systemBackdrop cannot currently be set to null.
-            if (systemBackdrop == null) return
-            window.systemBackdrop = systemBackdrop
+            if (systemBackdrop != null) {
+                window.systemBackdrop = systemBackdrop
+            } else {
+                clearWindowSystemBackdrop(window)
+            }
         }
 
     var content: @Composable WindowScope.() -> Unit = {}
@@ -260,6 +263,19 @@ private class WinUIWindowNode(
         closedDelegate = null
         runCatching { removeWindowClosedHandler(window, token) }
         delegate?.close()
+    }
+}
+
+private fun clearWindowSystemBackdrop(window: XamlWindow) {
+    // KWINRT-004: generated Window.systemBackdrop cannot currently be set to null.
+    window.nativeObject.queryInterface(IWindow2.Metadata.IID).getOrThrow().use { windowInterface ->
+        HResult(
+            ComVtableInvoker.invokeArgs(
+                instance = windowInterface.pointer,
+                slot = IWindow2.Metadata.SYSTEMBACKDROP_SETTER_SLOT,
+                arg0 = PlatformAbi.nullPointer,
+            ),
+        ).requireSuccess("Window.SystemBackdrop clear")
     }
 }
 
