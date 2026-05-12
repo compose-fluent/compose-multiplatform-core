@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
+import androidx.compose.ui.platform.WinUIViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.awaitWinUiTextInputCancellation
@@ -99,7 +100,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.InteropView
 import kotlinx.coroutines.CoroutineScope
 import microsoft.ui.xaml.FocusState
@@ -418,14 +418,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object WinUIViewConfiguration : ViewConfiguration {
-    override val longPressTimeoutMillis: Long = 500L
-    override val doubleTapTimeoutMillis: Long = 300L
-    override val doubleTapMinTimeMillis: Long = 40L
-    override val touchSlop: Float = 8f
-    override val minimumTouchTargetSize: DpSize = DpSize(40.dp, 40.dp)
 }
 
 private object NoOpHapticFeedback : HapticFeedback {
