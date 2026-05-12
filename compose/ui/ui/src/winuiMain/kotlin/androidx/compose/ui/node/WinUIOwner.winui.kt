@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.hapticfeedback.WinUIHapticFeedback
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeChangeRequester
 import androidx.compose.ui.input.InputModeManager
@@ -117,7 +117,7 @@ internal class WinUIOwner(
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
     override val rootForTest: RootForTest = WinUIRootForTest()
-    override val hapticFeedBack: HapticFeedback = NoOpHapticFeedback
+    override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
     override val inputModeManager: InputModeManager =
         InputModeManagerImpl(InputMode.Keyboard, InputModeChangeRequester { true })
     private val winUIClipboard = WinUIClipboard()
@@ -414,10 +414,6 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object NoOpHapticFeedback : HapticFeedback {
-    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
 }
 
 @Suppress("DEPRECATION")
