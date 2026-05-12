@@ -101,6 +101,7 @@ internal class WinUIOwner(
     private val focusRoot: UIElement,
     override val retainedValuesStore: RetainedValuesStore,
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
+    private val onMeasureAndLayoutRequested: () -> Unit = {},
     private val onInteropTreeChanged: () -> Unit = {},
 ) : Owner {
     private val onEndApplyChangesListeners = mutableListOf<() -> Unit>()
@@ -180,6 +181,7 @@ internal class WinUIOwner(
             measureAndLayoutDelegate.updateRootConstraints(
                 Constraints(maxWidth = size.width, maxHeight = size.height)
             )
+            onMeasureAndLayoutRequested()
         }
     }
 
@@ -190,9 +192,17 @@ internal class WinUIOwner(
         scheduleMeasureAndLayout: Boolean,
     ) {
         if (affectsLookahead) {
-            measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest)
-        } else {
-            measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest)
+            if (
+                measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
+                    scheduleMeasureAndLayout
+            ) {
+                onMeasureAndLayoutRequested()
+            }
+        } else if (
+            measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest) &&
+                scheduleMeasureAndLayout
+        ) {
+            onMeasureAndLayoutRequested()
         }
     }
 
@@ -202,14 +212,19 @@ internal class WinUIOwner(
         forceRequest: Boolean,
     ) {
         if (affectsLookahead) {
-            measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)
+            if (measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)) {
+                onMeasureAndLayoutRequested()
+            }
         } else {
-            measureAndLayoutDelegate.requestRelayout(layoutNode, forceRequest)
+            if (measureAndLayoutDelegate.requestRelayout(layoutNode, forceRequest)) {
+                onMeasureAndLayoutRequested()
+            }
         }
     }
 
     override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
         measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
+        onMeasureAndLayoutRequested()
     }
 
     override fun onPreAttach(node: LayoutNode) {

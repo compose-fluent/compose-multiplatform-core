@@ -76,6 +76,7 @@ class WinUIComposeView(
         root = rootNode,
         focusRoot = root,
         retainedValuesStore = retainedValuesStore,
+        onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
     )
 
@@ -87,6 +88,7 @@ class WinUIComposeView(
     private var saveableStateRegistry: SaveableStateRegistry? = null
     private var content: (@Composable () -> Unit)? = null
     private var currentInteropRoots: List<UIElement> = emptyList()
+    private var isRootContentSyncScheduled = false
     private var isDisposed = false
 
     fun setContent(content: @Composable () -> Unit) {
@@ -183,6 +185,23 @@ class WinUIComposeView(
         updateRootContent(rootNode.collectWinUIInteropRoots())
         owner.measureAndLayout(sendPointerUpdate = false)
         updateRootContent(rootNode.collectWinUIInteropRoots())
+    }
+
+    private fun scheduleRootContentSync() {
+        if (isDisposed || isRootContentSyncScheduled) return
+        isRootContentSyncScheduled = true
+        if (!root.dispatcherQueue.tryEnqueue {
+                isRootContentSyncScheduled = false
+                if (!isDisposed) {
+                    syncRootContent()
+                }
+            }
+        ) {
+            isRootContentSyncScheduled = false
+            if (!isDisposed) {
+                syncRootContent()
+            }
+        }
     }
 
     private fun updateRootContent(content: List<UIElement>) {

@@ -25,6 +25,7 @@
 - [x] Replace the initial `WinUIComposeView` placeholder with a real WinUI `Owner`, recomposer, and frame scheduler.
 - [ ] Implement the `Owner` contract for WinUI: root `LayoutNode`, measure/layout scheduling, drawing invalidation, snapshot observation, semantics owner, focus owner, pointer processing, and test root support.
 - [x] Wire the initial WinUI `Owner` to Compose `MeasureAndLayoutDelegate`, root constraints, root measure policy, and positioned-callback dispatch so layout work is no longer a no-op.
+- [x] Schedule WinUI `Owner` measure/layout passes from measure, relayout, positioned-callback, and snapshot-observed layout invalidations.
 - [x] Attach the WinUI root `LayoutNode` to an initial `WinUIOwner` so reusable node lifecycle goes through common `LayoutNode.onReuse()` instead of a WinUI-only rootless path.
 - [x] Implement a WinUI `setContent` entry point that creates a `Composition` with `UiApplier` and provides WinUI composition locals.
 - [x] Add an initial `Window.setContent` entry point that creates a `WinUIComposeView`, installs its root into the WinUI `Window`, and returns the view for lifecycle management.
@@ -116,6 +117,7 @@
 - [ ] Add repository-local WinUIView smoke validation for toggling native accessibility participation through `AutomationProperties.AccessibilityView` after `KWINRT-014` and `KWINRT-015` are resolved.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
+- [x] Add repository-local WinUI owner smoke validation for snapshot-observed layout state invalidating measure/layout without recomposition.
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.

@@ -384,6 +384,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewDensitySmoke()
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
+            runWinUILayoutSnapshotInvalidationSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1276,6 +1277,51 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    private suspend fun runWinUILayoutSnapshotInvalidationSmoke() {
+        val lifecycleProbe = WinUIViewLifecycleProbe()
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val width: MutableState<Int> = mutableStateOf(70)
+        val height: MutableState<Int> = mutableStateOf(25)
+        currentComposeView.setContent {
+            WinUIViewSampleContent(
+                modifier = snapshotDrivenSizeModifier(width, height),
+                clipToBounds = true,
+                lifecycleProbe = lifecycleProbe,
+            )
+        }
+        awaitCondition("WinUI layout snapshot initial bounds") {
+            val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            wrapper?.clip?.rect?.width == 70f &&
+                wrapper.clip.rect.height == 25f &&
+                lifecycleProbe.lastButton?.width == 70.0 &&
+                lifecycleProbe.lastButton?.height == 25.0
+        }
+        val button = checkNotNull(lifecycleProbe.lastButton) {
+            "WinUI layout snapshot smoke did not install a Button."
+        }
+        check(lifecycleProbe.updateCount == 1) {
+            "WinUI layout snapshot smoke unexpectedly recomposed before state change."
+        }
+
+        width.value = 115
+        height.value = 45
+        awaitCondition("WinUI layout snapshot updated bounds") {
+            val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            wrapper?.clip?.rect?.width == 115f &&
+                wrapper.clip.rect.height == 45f &&
+                lifecycleProbe.lastButton === button &&
+                button.width == 115.0 &&
+                button.height == 45.0
+        }
+        check(lifecycleProbe.updateCount == 1) {
+            "WinUI layout snapshot invalidation should relayout without recomposition, " +
+                "update=${lifecycleProbe.updateCount}."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: layout snapshot invalidation")
+    }
+
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1678,6 +1724,19 @@ private fun fixedSizeAndPositionModifier(width: Int, height: Int, x: Int, y: Int
         val placeable = measurable.measure(Constraints.fixed(width, height))
         layout(x + width, y + height) {
             placeable.place(x, y)
+        }
+    }
+
+private fun snapshotDrivenSizeModifier(
+    width: MutableState<Int>,
+    height: MutableState<Int>,
+): Modifier =
+    Modifier.layout { measurable, _ ->
+        val currentWidth = width.value
+        val currentHeight = height.value
+        val placeable = measurable.measure(Constraints.fixed(currentWidth, currentHeight))
+        layout(currentWidth, currentHeight) {
+            placeable.place(0, 0)
         }
     }
 
