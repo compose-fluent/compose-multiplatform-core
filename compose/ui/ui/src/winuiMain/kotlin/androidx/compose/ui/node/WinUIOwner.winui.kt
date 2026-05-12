@@ -55,7 +55,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerIconService
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputEvent
@@ -63,6 +62,7 @@ import androidx.compose.ui.input.pointer.PointerInputEventData
 import androidx.compose.ui.input.pointer.PointerInputEventProcessor
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.WinUIPointerIconService
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.platform.AccessibilityManager
@@ -459,23 +459,6 @@ private object NoOpSoftwareKeyboardController : SoftwareKeyboardController {
     override fun show() = Unit
 
     override fun hide() = Unit
-}
-
-private class WinUIPointerIconService : PointerIconService {
-    private var icon: PointerIcon? = null
-    private var stylusHoverIcon: PointerIcon? = null
-
-    override fun getIcon(): PointerIcon = icon ?: PointerIcon.Default
-
-    override fun setIcon(value: PointerIcon?) {
-        icon = value
-    }
-
-    override fun getStylusHoverIcon(): PointerIcon? = stylusHoverIcon
-
-    override fun setStylusHoverIcon(value: PointerIcon?) {
-        stylusHoverIcon = value
-    }
 }
 
 private object NoOpPlatformTextInputService : PlatformTextInputService {
