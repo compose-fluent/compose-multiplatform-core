@@ -75,6 +75,7 @@ import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
 import androidx.compose.ui.platform.WinUIPlatformTextInputSession
+import androidx.compose.ui.platform.WinUIPlatformTextInputService
 import androidx.compose.ui.platform.WinUISoftwareKeyboardController
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.platform.WinUIViewConfiguration
@@ -87,14 +88,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.WinUIFontResourceLoader
 import androidx.compose.ui.text.font.createFontFamilyResolver
-import androidx.compose.ui.text.input.EditCommand
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.ImeOptions
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.PlatformTextInputService
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TextInputService
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -137,7 +131,7 @@ internal class WinUIOwner(
     override val autofillManager: AutofillManager? = null
     override val density: Density = Density(1f)
     @Suppress("DEPRECATION")
-    override val textInputService: TextInputService = TextInputService(NoOpPlatformTextInputService)
+    override val textInputService: TextInputService = TextInputService(WinUIPlatformTextInputService)
     override val softwareKeyboardController: SoftwareKeyboardController = WinUISoftwareKeyboardController
     override val pointerIconService: PointerIconService = WinUIPointerIconService()
     override val semanticsOwner: SemanticsOwner =
@@ -417,30 +411,4 @@ internal class WinUIOwner(
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.moveFocus(focusDirection)
     }
-}
-
-private object NoOpPlatformTextInputService : PlatformTextInputService {
-    override fun startInput(
-        value: TextFieldValue,
-        imeOptions: ImeOptions,
-        onEditCommand: (List<EditCommand>) -> Unit,
-        onImeActionPerformed: (ImeAction) -> Unit,
-    ) = Unit
-
-    override fun stopInput() = Unit
-
-    override fun showSoftwareKeyboard() = Unit
-
-    override fun hideSoftwareKeyboard() = Unit
-
-    override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) = Unit
-
-    override fun updateTextLayoutResult(
-        textFieldValue: TextFieldValue,
-        offsetMapping: OffsetMapping,
-        textLayoutResult: TextLayoutResult,
-        textFieldToRootTransform: (Matrix) -> Unit,
-        innerTextFieldBounds: Rect,
-        decorationBoxBounds: Rect,
-    ) = Unit
 }
