@@ -69,17 +69,16 @@ import androidx.compose.ui.platform.AccessibilityManager
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
-import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
+import androidx.compose.ui.platform.WinUIPlatformTextInputSession
 import androidx.compose.ui.platform.WinUIViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
-import androidx.compose.ui.platform.awaitWinUiTextInputCancellation
 import androidx.compose.ui.semantics.EmptySemanticsModifier
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.spatial.RectManager
@@ -101,7 +100,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.InteropView
-import kotlinx.coroutines.CoroutineScope
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
 import kotlin.coroutines.CoroutineContext
@@ -485,19 +483,6 @@ private object NoOpPlatformTextInputService : PlatformTextInputService {
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
     ) = Unit
-}
-
-private class WinUIPlatformTextInputSession(
-    coroutineScope: CoroutineScope,
-) : PlatformTextInputSessionScope, CoroutineScope by coroutineScope {
-    private val inputMethodSessionMutex = SessionMutex<Nothing?>()
-
-    override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing =
-        inputMethodSessionMutex.withSessionCancellingPrevious(
-            sessionInitializer = { null },
-        ) {
-            awaitWinUiTextInputCancellation()
-        }
 }
 
 private class WinUIPlatformFocusOwner(
