@@ -82,6 +82,7 @@ import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.spatial.RectManager
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.WinUIFontResourceLoader
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.ImeAction
@@ -480,9 +481,4 @@ private object NoOpPlatformTextInputService : PlatformTextInputService {
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
     ) = Unit
-}
-
-@Suppress("DEPRECATION")
-private object WinUIFontResourceLoader : Font.ResourceLoader {
-    override fun load(font: Font): Any = Any()
 }
