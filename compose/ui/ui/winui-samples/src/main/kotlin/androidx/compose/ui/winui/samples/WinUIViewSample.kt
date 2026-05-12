@@ -44,6 +44,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.OnPlacedModifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.ClipEntry
@@ -385,6 +387,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewReuseSmoke()
             runWinUIViewStateUpdateSmoke()
             runWinUILayoutSnapshotInvalidationSmoke()
+            runWinUILayoutCompletedListenerSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1322,6 +1325,34 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: layout snapshot invalidation")
     }
 
+    private suspend fun runWinUILayoutCompletedListenerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val includeOnPlaced: MutableState<Boolean> = mutableStateOf(false)
+        var onPlacedCount = 0
+        currentComposeView.setContent {
+            Layout(
+                modifier = if (includeOnPlaced.value) {
+                    legacyOnPlacedModifier { onPlacedCount += 1 }
+                } else {
+                    Modifier
+                },
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        withFrameNanos { }
+        check(onPlacedCount == 0) {
+            "WinUI layout completed listener smoke fired before onPlaced was installed."
+        }
+        includeOnPlaced.value = true
+        awaitCondition("WinUI layout completed listener") {
+            onPlacedCount >= 1
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: layout completed listener")
+    }
+
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1739,6 +1770,16 @@ private fun snapshotDrivenSizeModifier(
             placeable.place(0, 0)
         }
     }
+
+@Suppress("DEPRECATION")
+private fun legacyOnPlacedModifier(onPlaced: () -> Unit): Modifier =
+    Modifier.then(
+        object : OnPlacedModifier {
+            override fun onPlaced(coordinates: LayoutCoordinates) {
+                onPlaced()
+            }
+        }
+    )
 
 @Composable
 private fun ConditionalPlacement(

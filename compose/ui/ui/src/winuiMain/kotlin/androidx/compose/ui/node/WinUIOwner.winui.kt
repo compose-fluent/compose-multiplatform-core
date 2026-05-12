@@ -105,6 +105,7 @@ internal class WinUIOwner(
     private val onInteropTreeChanged: () -> Unit = {},
 ) : Owner {
     private val onEndApplyChangesListeners = mutableListOf<() -> Unit>()
+    private var hasPendingLayoutCompletedListener = false
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
@@ -248,8 +249,10 @@ internal class WinUIOwner(
     override fun measureAndLayout(sendPointerUpdate: Boolean) {
         if (
             measureAndLayoutDelegate.hasPendingMeasureOrLayout ||
-            measureAndLayoutDelegate.hasPendingOnPositionedCallbacks
+            measureAndLayoutDelegate.hasPendingOnPositionedCallbacks ||
+            hasPendingLayoutCompletedListener
         ) {
+            hasPendingLayoutCompletedListener = false
             measureAndLayoutDelegate.measureAndLayout()
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
             rectManager.dispatchCallbacks()
@@ -257,6 +260,7 @@ internal class WinUIOwner(
     }
 
     override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+        hasPendingLayoutCompletedListener = false
         measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
         if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
@@ -311,7 +315,9 @@ internal class WinUIOwner(
     }
 
     override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
+        hasPendingLayoutCompletedListener = true
         measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
+        onMeasureAndLayoutRequested()
     }
 
     override suspend fun textInputSession(
