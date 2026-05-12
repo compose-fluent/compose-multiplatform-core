@@ -87,6 +87,7 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Media.SystemBackdrop")
         type("Microsoft.UI.Dispatching.IDispatcherQueue2")
         type("Microsoft.UI.Windowing.AppWindow")
+        type("Microsoft.UI.Windowing.AppWindowClosingEventArgs")
         type("Microsoft.UI.Xaml.Controls.Canvas")
         type("Microsoft.UI.Xaml.Controls.Control")
         type("Microsoft.UI.Xaml.Controls.ContentControl")

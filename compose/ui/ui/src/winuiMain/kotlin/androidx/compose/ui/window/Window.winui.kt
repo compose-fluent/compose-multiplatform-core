@@ -21,6 +21,7 @@ import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.unit.IntSize
+import io.github.composefluent.winrt.runtime.BooleanMarshaller
 import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.Guid
@@ -36,7 +37,9 @@ import microsoft.ui.composition.Compositor
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.windowing.AppWindow
 import microsoft.ui.windowing.AppWindowChangedEventArgs
+import microsoft.ui.windowing.AppWindowClosingEventArgs
 import microsoft.ui.windowing.IAppWindow
+import microsoft.ui.windowing.IAppWindowClosingEventArgs
 import microsoft.ui.xaml.IWindow
 import microsoft.ui.xaml.IWindow2
 import microsoft.ui.xaml.IWindowActivatedEventArgs
@@ -127,6 +130,9 @@ private class WinUIWindowNode(
     private var appWindowChangedDelegate: WinRtDelegateHandle? =
         createAppWindowChangedDelegate(::updateWindowInfo)
     private var appWindowChangedToken: EventRegistrationToken? = null
+    private var appWindowClosingDelegate: WinRtDelegateHandle? =
+        createAppWindowClosingDelegate(::handleClosing)
+    private var appWindowClosingToken: EventRegistrationToken? = null
 
     var onCloseRequest: () -> Unit = {}
 
@@ -166,6 +172,7 @@ private class WinUIWindowNode(
                 composeView = it
                 window.content = it.root
                 registerAppWindowChangedHandler()
+                registerAppWindowClosingHandler()
             }
             if (!hasActivated) {
                 window.activate()
@@ -184,6 +191,7 @@ private class WinUIWindowNode(
             isReleased = true
             isClosingFromRelease = true
             disposeContent()
+            removeAppWindowClosingHandler()
             removeAppWindowChangedHandler()
             removeActivatedHandler()
             removeClosedHandler()
@@ -198,12 +206,19 @@ private class WinUIWindowNode(
         if (isReleased) return
         isReleased = true
         disposeContent()
+        removeAppWindowClosingHandler()
         removeAppWindowChangedHandler()
         removeActivatedHandler()
         removeClosedHandler()
         if (!isClosingFromRelease) {
             onCloseRequest()
         }
+    }
+
+    private fun handleClosing(args: IInspectableReference) {
+        if (isReleased || isClosingFromRelease) return
+        cancelAppWindowClosing(args)
+        onCloseRequest()
     }
 
     private fun disposeContent() {
@@ -237,6 +252,21 @@ private class WinUIWindowNode(
         if (appWindowChangedToken != null) return
         appWindowChangedToken =
             addAppWindowChangedHandler(window.appWindow, requireNotNull(appWindowChangedDelegate))
+    }
+
+    private fun registerAppWindowClosingHandler() {
+        if (appWindowClosingToken != null) return
+        appWindowClosingToken =
+            addAppWindowClosingHandler(window.appWindow, requireNotNull(appWindowClosingDelegate))
+    }
+
+    private fun removeAppWindowClosingHandler() {
+        val token = appWindowClosingToken ?: return
+        val delegate = appWindowClosingDelegate
+        appWindowClosingToken = null
+        appWindowClosingDelegate = null
+        runCatching { removeAppWindowClosingHandler(window.appWindow, token) }
+        delegate?.close()
     }
 
     private fun removeAppWindowChangedHandler() {
@@ -388,6 +418,43 @@ private fun createAppWindowChangedDelegate(
         onChanged()
     }
 
+private fun createAppWindowClosingDelegate(
+    onClosing: (IInspectableReference) -> Unit,
+): WinRtDelegateHandle =
+    WinRtDelegateBridge.createUnitDelegate(
+        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
+            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
+            WinRtTypeSignature.runtimeClass(
+                AppWindow.Metadata.TYPE_NAME,
+                WinRtTypeSignature.guid(AppWindow.Metadata.DEFAULT_INTERFACE_IID),
+            ),
+            WinRtTypeSignature.runtimeClass(
+                AppWindowClosingEventArgs.Metadata.TYPE_NAME,
+                WinRtTypeSignature.guid(AppWindowClosingEventArgs.Metadata.DEFAULT_INTERFACE_IID),
+            ),
+        ),
+        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
+    ) { arguments ->
+        val args = arguments.getOrNull(1) as? IInspectableReference ?: return@createUnitDelegate
+        try {
+            onClosing(args)
+        } finally {
+            args.close()
+        }
+    }
+
+private fun cancelAppWindowClosing(args: IInspectableReference) {
+    args.queryInterface(IAppWindowClosingEventArgs.Metadata.IID).getOrThrow().use { closingArgs ->
+        HResult(
+            ComVtableInvoker.invokeArgs(
+                instance = closingArgs.pointer,
+                slot = IAppWindowClosingEventArgs.Metadata.CANCEL_SETTER_SLOT,
+                arg0 = BooleanMarshaller.toAbi(true),
+            ),
+        ).requireSuccess("AppWindowClosingEventArgs.Cancel")
+    }
+}
+
 private fun addAppWindowChangedHandler(
     appWindow: AppWindow,
     delegate: WinRtDelegateHandle,
@@ -426,6 +493,48 @@ private fun removeAppWindowChangedHandler(
                     arg0 = tokenAbi,
                 ),
             ).requireSuccess("AppWindow.Changed remove handler")
+        }
+    }
+}
+
+private fun addAppWindowClosingHandler(
+    appWindow: AppWindow,
+    delegate: WinRtDelegateHandle,
+): EventRegistrationToken =
+    // KWINRT-001: use direct IAppWindow ABI registration until generated event sources are stable.
+    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
+        delegate.createReference().use { delegateReference ->
+            PlatformAbi.confinedScope().use { scope ->
+                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
+                HResult(
+                    ComVtableInvoker.invokeArgs(
+                        instance = appWindowInterface.pointer,
+                        slot = IAppWindow.Metadata.CLOSING_ADD_SLOT,
+                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
+                        arg1 = tokenOut,
+                    ),
+                ).requireSuccess("AppWindow.Closing add handler")
+                EventRegistrationToken.fromAbi(tokenOut)
+            }
+        }
+    }
+
+private fun removeAppWindowClosingHandler(
+    appWindow: AppWindow,
+    token: EventRegistrationToken,
+) {
+    // KWINRT-001: pair with the manual AppWindow.Closing registration above.
+    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
+        PlatformAbi.confinedScope().use { scope ->
+            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
+            EventRegistrationToken.copyTo(token, tokenAbi)
+            HResult(
+                ComVtableInvoker.invokeArgs(
+                    instance = appWindowInterface.pointer,
+                    slot = IAppWindow.Metadata.CLOSING_REMOVE_SLOT,
+                    arg0 = tokenAbi,
+                ),
+            ).requireSuccess("AppWindow.Closing remove handler")
         }
     }
 }

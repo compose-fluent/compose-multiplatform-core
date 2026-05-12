@@ -6,8 +6,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-001: Generated event source registry ABI mismatch
 
 - **Status:** Open
-- **Observed in:** `Window.closed`, `AppWindow.changed`, and generated WinRT
-  event accessors
+- **Observed in:** `Window.closed`, `AppWindow.changed`,
+  `AppWindow.closing`, and generated WinRT event accessors
 - **Symptom:** Accessing generated event properties can fail during
   `WinRTEventProjectionHelpers.installEventSources(...)` with:
   `IncompatibleClassChangeError: Expecting non-static method ... createEventSourceFactory(...)`.
@@ -15,9 +15,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   updates need WinUI close/changed events, but using generated event accessors
   currently crashes the sample.
 - **compose-winui workaround:** `Window.winui.kt` manually registers
-  `Window.Closed` through the `IWindow` vtable and `AppWindow.Changed` through
-  the `IAppWindow` vtable, keeping each delegate handle alive until removal.
-  Search for `KWINRT-001`.
+  `Window.Closed` through the `IWindow` vtable and `AppWindow.Changed` /
+  `AppWindow.Closing` through the `IAppWindow` vtable, keeping each delegate
+  handle alive until removal. Search for `KWINRT-001`.
 - **Resolution target:** Fix generated event source registry/runtime ABI
   compatibility so generated `WinRtEvent` properties can be used directly.
 

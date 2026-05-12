@@ -363,6 +363,8 @@ private object ComposeWinUiSmokeApp {
         var windowSmokePassed by remember { mutableStateOf(false) }
         var secondaryWindowVisible by remember { mutableStateOf(true) }
         var secondaryWindowClosePassed by remember { mutableStateOf(false) }
+        var secondaryWindowCloseRequested by remember { mutableStateOf(false) }
+        var secondaryWindowCloseReturnedWhileComposed by remember { mutableStateOf(false) }
         var secondaryWindowCloseRequestCount by remember { mutableStateOf(0) }
         var mainWindowFocusedOnce by remember { mutableStateOf(false) }
         var mainWindowDeactivatedPassed by remember { mutableStateOf(false) }
@@ -402,6 +404,15 @@ private object ComposeWinUiSmokeApp {
                         "$secondaryWindowCloseRequestCount."
                 }
                 applicationScope.exitApplication()
+            }
+        }
+        LaunchedEffect(secondaryWindowCloseRequested) {
+            if (secondaryWindowCloseRequested) {
+                awaitCondition("secondary WinUI pre-close cancellation") {
+                    secondaryWindowCloseReturnedWhileComposed
+                }
+                secondaryWindowClosePassed = true
+                secondaryWindowVisible = false
             }
         }
         val windowProbe = remember {
@@ -524,8 +535,7 @@ private object ComposeWinUiSmokeApp {
                         check(mainWindowDeactivatedPassed) {
                             "Primary WinUI window did not report deactivation for secondary activation."
                         }
-                        secondaryWindowClosePassed = true
-                        secondaryWindowVisible = false
+                        secondaryWindowCloseRequested = true
                         println("compose-winui-sample: secondary window close request")
                     },
                     title = "compose-winui secondary",
@@ -542,6 +552,8 @@ private object ComposeWinUiSmokeApp {
                             mainWindowDeactivatedPassed
                         }
                         window.close()
+                        secondaryWindowCloseReturnedWhileComposed = true
+                        println("compose-winui-sample: secondary window pre-close canceled")
                     }
                 }
             }
