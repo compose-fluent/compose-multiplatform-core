@@ -411,6 +411,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
             runWinUIPointerInputSmoke()
+            runWinUIPointerCancelOnDisposeSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1633,6 +1634,39 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: pointer input")
     }
 
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIPointerCancelOnDisposeSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(20, 20) {}
+            }
+        }
+        withFrameNanos { }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(5f, 5f),
+                uptimeMillis = 1L,
+                down = true,
+            )
+        ) {
+            "WinUI pointer input cancel smoke did not dispatch the press event."
+        }
+        awaitCondition("WinUI pointer input cancel smoke press received") {
+            probe.pressCount == 1
+        }
+        currentComposeView.dispose()
+        check(probe.cancelCount >= 1) {
+            "WinUI pointer input did not receive cancellation on owner disposal."
+        }
+        println("compose-winui-sample: pointer input cancel on dispose")
+    }
+
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1952,6 +1986,7 @@ private class WinUISavedStateViewModel(
 private class WinUIPointerInputSmokeProbe {
     var pressCount = 0
     var releaseCount = 0
+    var cancelCount = 0
 }
 
 private fun Modifier.winUIPointerInputSmoke(
@@ -1989,7 +2024,9 @@ private class WinUIPointerInputSmokeNode(
         pointerEvent.changes.firstOrNull()?.consume()
     }
 
-    override fun onCancelPointerInput() = Unit
+    override fun onCancelPointerInput() {
+        probe.cancelCount += 1
+    }
 }
 
 private fun Modifier.winUITextInputSessionSmoke(
