@@ -180,15 +180,16 @@ private class WinUIWindowNode(
         }
 
     override fun onRelease() {
-        if (isReleased) return
-        isReleased = true
-        isClosingFromRelease = true
-        disposeContent()
-        removeAppWindowChangedHandler()
-        removeActivatedHandler()
-        removeClosedHandler()
-        if (hasActivated) {
-            runCatching { window.close() }
+        if (!isReleased) {
+            isReleased = true
+            isClosingFromRelease = true
+            disposeContent()
+            removeAppWindowChangedHandler()
+            removeActivatedHandler()
+            removeClosedHandler()
+            if (hasActivated) {
+                runCatching { window.close() }
+            }
         }
         super.onRelease()
     }

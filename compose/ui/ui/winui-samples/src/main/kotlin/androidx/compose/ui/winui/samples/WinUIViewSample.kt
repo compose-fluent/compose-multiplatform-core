@@ -363,6 +363,7 @@ private object ComposeWinUiSmokeApp {
         var windowSmokePassed by remember { mutableStateOf(false) }
         var secondaryWindowVisible by remember { mutableStateOf(true) }
         var secondaryWindowClosePassed by remember { mutableStateOf(false) }
+        var secondaryWindowCloseRequestCount by remember { mutableStateOf(0) }
         var mainWindowFocusedOnce by remember { mutableStateOf(false) }
         var mainWindowDeactivatedPassed by remember { mutableStateOf(false) }
         remember {
@@ -396,6 +397,10 @@ private object ComposeWinUiSmokeApp {
                 secondaryWindowClosePassed &&
                 java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")
             ) {
+                check(secondaryWindowCloseRequestCount == 1) {
+                    "Secondary WinUI window close request count was " +
+                        "$secondaryWindowCloseRequestCount."
+                }
                 applicationScope.exitApplication()
             }
         }
@@ -512,6 +517,7 @@ private object ComposeWinUiSmokeApp {
             if (secondaryWindowVisible) {
                 Window(
                     onCloseRequest = {
+                        secondaryWindowCloseRequestCount += 1
                         check(mainWindowFocusedOnce) {
                             "Primary WinUI window did not report an activated state."
                         }

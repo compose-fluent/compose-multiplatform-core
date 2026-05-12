@@ -34,6 +34,7 @@
 - [x] Add concrete backdrop projection types for Mica and Desktop Acrylic through explicit Windows App SDK `type(...)` entries and validate Mica-to-DesktopAcrylic updates in the sample.
 - [x] Add WinUI `WindowBackdrop.None` clearing through the `IWindow2.SystemBackdrop` ABI setter while `kotlin-winrt` generates a non-null setter.
 - [x] Add an initial `Window(onCloseRequest = ...)` close-request hook and close the native WinUI window when its Compose node is released.
+- [x] Keep WinUI `Window` node release idempotent after a native close so Compose state removal still completes the node lifecycle without a second close request.
 - [x] Move initial WinUI application/window disposal onto the WinUI UI thread via `DispatcherQueue` for `exitApplication` and window close/removal paths.
 - [ ] Broaden the initial close/removal work into full declarative multi-window lifetime semantics, including cancelable close policy if WinUI exposes a suitable pre-close event.
 - [ ] Provide WinUI actuals for common platform hooks such as time, delayed posting, view configuration, window info, URI handling, haptics, semantics region, focusability, and platform velocity tracking.
