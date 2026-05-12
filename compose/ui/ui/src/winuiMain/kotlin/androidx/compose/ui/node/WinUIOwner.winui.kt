@@ -135,7 +135,7 @@ internal class WinUIOwner(
     override val focusOwner: FocusOwner = FocusOwnerImpl(WinUIPlatformFocusOwner(focusRoot), this)
     private val mutableWindowInfo = WindowInfoImpl()
     override val windowInfo: WindowInfo = mutableWindowInfo
-    override val rectManager: RectManager = RectManager()
+    override val rectManager: RectManager = RectManager(layoutNodes)
     private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
@@ -238,6 +238,7 @@ internal class WinUIOwner(
         layoutNodes.remove(node.semanticsId)
         measureAndLayoutDelegate.onNodeDetached(node)
         snapshotObserver.clear(node)
+        rectManager.remove(node)
     }
 
     override fun calculatePositionInWindow(localPosition: Offset): Offset = localPosition

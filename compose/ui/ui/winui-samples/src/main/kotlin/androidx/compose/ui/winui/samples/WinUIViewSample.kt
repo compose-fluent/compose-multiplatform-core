@@ -47,6 +47,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.InspectorInfo
@@ -62,6 +63,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.spatial.RelativeLayoutBounds
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -388,6 +390,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewStateUpdateSmoke()
             runWinUILayoutSnapshotInvalidationSmoke()
             runWinUILayoutCompletedListenerSmoke()
+            runWinUILayoutRectChangedSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1351,6 +1354,55 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: layout completed listener")
+    }
+
+    private suspend fun runWinUILayoutRectChangedSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val showTarget: MutableState<Boolean> = mutableStateOf(true)
+        var targetBounds: RelativeLayoutBounds? = null
+        currentComposeView.setContent {
+            Layout(
+                content = {
+                    if (showTarget.value) {
+                        Layout(
+                            modifier = Modifier.onLayoutRectChanged(
+                                throttleMillis = 0,
+                                debounceMillis = 0,
+                            ) {
+                                targetBounds = it
+                            },
+                            content = {},
+                        ) { _, _ ->
+                            layout(40, 40) {}
+                        }
+                    }
+                    Layout(content = {}) { _, _ ->
+                        layout(40, 40) {}
+                    }
+                },
+            ) { measurables, _ ->
+                val placeables = measurables.map {
+                    it.measure(Constraints.fixed(40, 40))
+                }
+                layout(40, 40) {
+                    placeables.forEach { it.place(0, 0) }
+                }
+            }
+        }
+        awaitCondition("WinUI layout rect changed occlusion") {
+            targetBounds?.calculateOcclusions()?.isNotEmpty() == true
+        }
+        val removedBounds = checkNotNull(targetBounds) {
+            "WinUI layout rect changed smoke did not receive bounds."
+        }
+        showTarget.value = false
+        awaitCondition("WinUI layout rect changed detach cleanup") {
+            runCatching {
+                removedBounds.calculateOcclusions().isEmpty()
+            }.getOrDefault(false)
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: layout rect changed")
     }
 
     private suspend fun runWinUIViewPlacementSmoke() {
