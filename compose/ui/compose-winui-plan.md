@@ -91,6 +91,7 @@
 - [x] Add repository-local composition-local smoke validation for WinUI density, layout direction, view configuration, font resolver, and URI handler.
 - [x] Add repository-local architecture-owner composition-local smoke validation for WinUI lifecycle, saved-state registry, and ViewModel store owners.
 - [x] Add repository-local architecture-owner smoke validation for WinUI `viewModel()` creation with `SavedStateHandle`, retention across `disposeComposition()`, and `ViewModelStore` clearing on `dispose()`.
+- [x] Add repository-local architecture-owner smoke validation for WinUI `LocalNavigationEventDispatcherOwner` host-default provisioning.
 - [x] Add repository-local composition-local smoke validation for WinUI `LocalClipboardManager` and `LocalClipboard` plain-text round-trips.
 - [x] Add repository-local FillableData smoke validation for WinUI text, boolean, list-index, and date-millis values.
 - [x] Add repository-local `WindowInfo` smoke validation for active window focus plus positive container px/dp size.

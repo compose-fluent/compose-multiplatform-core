@@ -77,6 +77,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.Canvas
@@ -368,6 +369,7 @@ private object ComposeWinUiSmokeApp {
             println("compose-winui-sample: application created")
             runWinUILifecycleOwnerSmoke()
             runWinUIViewModelOwnerSmoke()
+            runWinUINavigationEventOwnerSmoke()
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
             runWinUIViewUnclippedBoundsSmoke()
@@ -715,6 +717,25 @@ private object ComposeWinUiSmokeApp {
             "WinUI ViewModelStore was not cleared when the lifecycle reached DESTROYED."
         }
         println("compose-winui-sample: viewmodel owner saved state and cleared")
+    }
+
+    private fun runWinUINavigationEventOwnerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var dispatcherOwnerProvided = false
+        var dispatcherEnabled = false
+        currentComposeView.setContent {
+            val dispatcherOwner = LocalNavigationEventDispatcherOwner.current
+            dispatcherOwnerProvided = dispatcherOwner != null
+            dispatcherEnabled = dispatcherOwner?.navigationEventDispatcher?.isEnabled == true
+        }
+        currentComposeView.dispose()
+        check(dispatcherOwnerProvided) {
+            "WinUI LocalNavigationEventDispatcherOwner was not provided through host defaults."
+        }
+        check(dispatcherEnabled) {
+            "WinUI NavigationEventDispatcher was not enabled by default."
+        }
+        println("compose-winui-sample: navigation event dispatcher owner provided")
     }
 
     private suspend fun runWinUISaveableStateSmoke() {

@@ -24,9 +24,11 @@ plugins {
 
 dependencies {
     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
+    def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
     implementation(project(":compose:runtime:runtime"))
     implementation(project(":compose:ui:ui"))
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
+    implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
     implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
 }
 
