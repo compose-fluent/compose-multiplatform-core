@@ -124,6 +124,7 @@
 - [x] Add repository-local WinUI owner smoke validation for layout-completed listener dispatch after installing an `OnPlacedModifier`.
 - [x] Add repository-local WinUI owner smoke validation for `onLayoutRectChanged` occlusion and detach cleanup.
 - [x] Add repository-local WinUI owner smoke validation for graphics-layer translation propagating through `onLayoutRectChanged` bounds.
+- [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendKeyEvent` dispatching through preview and key handlers.
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.

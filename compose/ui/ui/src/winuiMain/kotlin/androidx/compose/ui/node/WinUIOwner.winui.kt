@@ -50,7 +50,12 @@ import androidx.compose.ui.input.InputModeChangeRequester
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.InputModeManagerImpl
 import androidx.compose.ui.input.indirect.IndirectPointerEvent
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerIconService
 import androidx.compose.ui.layout.Placeable
@@ -159,6 +164,7 @@ internal class WinUIOwner(
     init {
         root.layoutDirection = layoutDirection
         root.viewConfiguration = viewConfiguration
+        root.modifier = focusOwner.modifier
         snapshotObserver.startObserving()
         root.attach(this)
         measureAndLayoutDelegate.updateRootConstraints(Constraints())
@@ -342,7 +348,9 @@ internal class WinUIOwner(
         @Suppress("DEPRECATION")
         override val textInputService: TextInputService get() = this@WinUIOwner.textInputService
 
-        override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = false
+        override fun sendKeyEvent(keyEvent: KeyEvent): Boolean =
+            focusOwner.dispatchKeyEvent(keyEvent) ||
+                handleFocusKeys(keyEvent)
 
         override fun sendIndirectPointerEvent(indirectPointerEvent: IndirectPointerEvent): Boolean =
             false
@@ -350,6 +358,18 @@ internal class WinUIOwner(
         override fun measureAndLayoutForTest() {
             measureAndLayout()
         }
+    }
+
+    private fun handleFocusKeys(keyEvent: KeyEvent): Boolean {
+        if (keyEvent.type != KeyEventType.KeyDown) return false
+        val focusDirection = when (keyEvent.key) {
+            Key.Tab -> if (keyEvent.isShiftPressed) FocusDirection.Previous else FocusDirection.Next
+            Key.DirectionCenter -> FocusDirection.Enter
+            Key.Back -> FocusDirection.Exit
+            else -> return false
+        }
+        inputModeManager.requestInputMode(InputMode.Keyboard)
+        return focusOwner.moveFocus(focusDirection)
     }
 }
 

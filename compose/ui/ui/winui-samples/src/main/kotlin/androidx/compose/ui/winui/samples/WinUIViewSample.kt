@@ -33,6 +33,7 @@ import androidx.compose.runtime.retain.LocalRetainedValuesStore
 import androidx.compose.runtime.retain.retain
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.FillableData
 import androidx.compose.ui.autofill.createFromBoolean
@@ -44,12 +45,19 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalClipboard
@@ -393,6 +401,7 @@ private object ComposeWinUiSmokeApp {
             runWinUILayoutCompletedListenerSmoke()
             runWinUILayoutRectChangedSmoke()
             runWinUIOwnerLayerTransformSmoke()
+            runWinUIRootKeyEventSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1448,6 +1457,57 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: owner layer transform")
     }
 
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIRootKeyEventSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val focusRequester = FocusRequester()
+        var focused = false
+        val receivedEvents = mutableListOf<String>()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        focused = it.isFocused
+                    }
+                    .focusTarget()
+                    .onKeyEvent {
+                        receivedEvents += "key:${it.key.keyCode}"
+                        true
+                    }
+                    .onPreviewKeyEvent {
+                        receivedEvents += "preview:${it.key.keyCode}"
+                        false
+                    },
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        withFrameNanos { }
+        check(focusRequester.requestFocus()) {
+            "WinUI root key event smoke could not focus the target."
+        }
+        awaitCondition("WinUI root key event target focused") {
+            focused
+        }
+        val consumed = currentComposeView.rootForTest().sendKeyEvent(
+            KeyEvent(
+                key = Key.A,
+                type = KeyEventType.KeyDown,
+                codePoint = 'a'.code,
+            )
+        )
+        check(consumed) {
+            "WinUI RootForTest did not report the key event as consumed."
+        }
+        check(receivedEvents == listOf("preview:${Key.A.keyCode}", "key:${Key.A.keyCode}")) {
+            "WinUI RootForTest dispatched key events out of order: $receivedEvents."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: root key event")
+    }
+
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1844,6 +1904,13 @@ private fun hasInteropRootOrder(rootCanvas: Canvas, expected: List<UIElement>): 
 
 private fun UIElement.readClipRectOrNull() =
     runCatching { clip.rect }.getOrNull()
+
+private fun WinUIComposeView.rootForTest(): RootForTest {
+    val owner = javaClass.getDeclaredField("owner").also {
+        it.isAccessible = true
+    }.get(this)
+    return owner.javaClass.getMethod("getRootForTest").invoke(owner) as RootForTest
+}
 
 private fun fixedSizeAndPositionModifier(width: Int, height: Int, x: Int, y: Int): Modifier =
     Modifier.layout { measurable, _ ->
