@@ -44,6 +44,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -51,12 +52,16 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.InspectorInfo
@@ -72,10 +77,12 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.platform.sendPointerEventForTest
 import androidx.compose.ui.spatial.RelativeLayoutBounds
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.WinUIInteropProperties
 import androidx.compose.ui.viewinterop.WinUIView
@@ -403,6 +410,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIOwnerLayerTransformSmoke()
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
+            runWinUIPointerInputSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
@@ -1582,6 +1590,49 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: root focus traversal key event")
     }
 
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIPointerInputSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(20, 20) {}
+            }
+        }
+        withFrameNanos { }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(5f, 5f),
+                uptimeMillis = 1L,
+                down = true,
+            )
+        ) {
+            "WinUI pointer input smoke did not dispatch the press event."
+        }
+        awaitCondition("WinUI pointer input press received") {
+            probe.pressCount == 1 && probe.releaseCount == 0
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Release,
+                position = Offset(5f, 5f),
+                uptimeMillis = 2L,
+                down = false,
+            )
+        ) {
+            "WinUI pointer input smoke did not dispatch the release event."
+        }
+        awaitCondition("WinUI pointer input release received") {
+            probe.pressCount == 1 && probe.releaseCount == 1
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: pointer input")
+    }
+
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1896,6 +1947,49 @@ private class WinUISavedStateViewModel(
     override fun onCleared() {
         cleared = true
     }
+}
+
+private class WinUIPointerInputSmokeProbe {
+    var pressCount = 0
+    var releaseCount = 0
+}
+
+private fun Modifier.winUIPointerInputSmoke(
+    probe: WinUIPointerInputSmokeProbe
+): Modifier = this then WinUIPointerInputSmokeElement(probe)
+
+private data class WinUIPointerInputSmokeElement(
+    private val probe: WinUIPointerInputSmokeProbe,
+) : ModifierNodeElement<WinUIPointerInputSmokeNode>() {
+    override fun create(): WinUIPointerInputSmokeNode =
+        WinUIPointerInputSmokeNode(probe)
+
+    override fun update(node: WinUIPointerInputSmokeNode) {
+        node.probe = probe
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIPointerInputSmoke"
+    }
+}
+
+private class WinUIPointerInputSmokeNode(
+    var probe: WinUIPointerInputSmokeProbe,
+) : Modifier.Node(), PointerInputModifierNode {
+    override fun onPointerEvent(
+        pointerEvent: PointerEvent,
+        pass: PointerEventPass,
+        bounds: IntSize,
+    ) {
+        if (pass != PointerEventPass.Main) return
+        when (pointerEvent.type) {
+            PointerEventType.Press -> probe.pressCount += 1
+            PointerEventType.Release -> probe.releaseCount += 1
+        }
+        pointerEvent.changes.firstOrNull()?.consume()
+    }
+
+    override fun onCancelPointerInput() = Unit
 }
 
 private fun Modifier.winUITextInputSessionSmoke(

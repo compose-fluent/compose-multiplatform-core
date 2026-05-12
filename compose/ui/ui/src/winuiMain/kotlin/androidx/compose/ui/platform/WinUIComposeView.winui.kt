@@ -26,6 +26,13 @@ import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
@@ -271,6 +278,29 @@ fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
     this.content = composeView.root
     return composeView
 }
+
+@InternalComposeUiApi
+fun WinUIComposeView.sendPointerEventForTest(
+    eventType: PointerEventType,
+    position: Offset,
+    uptimeMillis: Long,
+    pointerId: Long = 0L,
+    down: Boolean = eventType != PointerEventType.Release && eventType != PointerEventType.Exit,
+    type: PointerType = PointerType.Touch,
+    buttons: PointerButtons = PointerButtons(),
+    keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
+    button: PointerButton? = null,
+): Boolean = owner.sendPointerEventForTest(
+    eventType = eventType,
+    position = position,
+    uptimeMillis = uptimeMillis,
+    pointerId = pointerId,
+    down = down,
+    type = type,
+    buttons = buttons,
+    keyboardModifiers = keyboardModifiers,
+    button = button,
+)
 
 private class WinUIRootContentHost {
     val root = ContentControl()

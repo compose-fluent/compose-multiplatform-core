@@ -56,8 +56,17 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerIconService
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputEvent
+import androidx.compose.ui.input.pointer.PointerInputEventData
+import androidx.compose.ui.input.pointer.PointerInputEventProcessor
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.platform.AccessibilityManager
@@ -145,6 +154,7 @@ internal class WinUIOwner(
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val rectManager: RectManager = RectManager(layoutNodes)
     private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
+    private val pointerInputEventProcessor = PointerInputEventProcessor(root)
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
     override val fontFamilyResolver: FontFamily.Resolver = createFontFamilyResolver()
@@ -174,6 +184,7 @@ internal class WinUIOwner(
         if (root.isAttached) {
             root.detach()
         }
+        pointerInputEventProcessor.processCancel()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
     }
@@ -341,6 +352,48 @@ internal class WinUIOwner(
     override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen
 
     override fun localToScreen(localPosition: Offset): Offset = localPosition
+
+    @OptIn(InternalCoreApi::class)
+    fun sendPointerEventForTest(
+        eventType: PointerEventType,
+        position: Offset,
+        uptimeMillis: Long,
+        pointerId: Long,
+        down: Boolean,
+        type: PointerType,
+        buttons: PointerButtons,
+        keyboardModifiers: PointerKeyboardModifiers,
+        button: PointerButton?,
+    ): Boolean {
+        val event = PointerInputEvent(
+            eventType = eventType,
+            uptime = uptimeMillis,
+            pointers = listOf(
+                PointerInputEventData(
+                    id = PointerId(pointerId),
+                    uptime = uptimeMillis,
+                    positionOnScreen = position,
+                    position = position,
+                    down = down,
+                    pressure = 1f,
+                    type = type,
+                    activeHover = type == PointerType.Mouse,
+                    scaleGestureFactor = 1f,
+                    panGestureOffset = Offset.Zero,
+                    originalEventPosition = position,
+                )
+            ),
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            button = button,
+        )
+        val result = pointerInputEventProcessor.process(
+            pointerEvent = event,
+            positionCalculator = this,
+            isInBounds = true,
+        )
+        return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
+    }
 
     private inner class WinUIRootForTest : RootForTest {
         override val density: Density get() = this@WinUIOwner.density
