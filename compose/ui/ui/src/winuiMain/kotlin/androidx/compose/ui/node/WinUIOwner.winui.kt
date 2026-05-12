@@ -44,7 +44,6 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeChangeRequester
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.InputModeManagerImpl
-import androidx.compose.ui.input.indirect.IndirectPointerEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -113,7 +112,13 @@ internal class WinUIOwner(
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
-    override val rootForTest: RootForTest = WinUIRootForTest()
+    override val rootForTest: RootForTest = WinUIRootForTest(
+        densityProvider = { density },
+        semanticsOwnerProvider = { semanticsOwner },
+        textInputServiceProvider = { textInputService },
+        sendKeyEvent = { focusOwner.dispatchKeyEvent(it) || handleFocusKeys(it) },
+        measureAndLayout = { measureAndLayout() },
+    )
     override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
     override val inputModeManager: InputModeManager =
         InputModeManagerImpl(InputMode.Keyboard, InputModeChangeRequester { true })
@@ -380,24 +385,6 @@ internal class WinUIOwner(
             isInBounds = true,
         )
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
-    }
-
-    private inner class WinUIRootForTest : RootForTest {
-        override val density: Density get() = this@WinUIOwner.density
-        override val semanticsOwner: SemanticsOwner get() = this@WinUIOwner.semanticsOwner
-        @Suppress("DEPRECATION")
-        override val textInputService: TextInputService get() = this@WinUIOwner.textInputService
-
-        override fun sendKeyEvent(keyEvent: KeyEvent): Boolean =
-            focusOwner.dispatchKeyEvent(keyEvent) ||
-                handleFocusKeys(keyEvent)
-
-        override fun sendIndirectPointerEvent(indirectPointerEvent: IndirectPointerEvent): Boolean =
-            false
-
-        override fun measureAndLayoutForTest() {
-            measureAndLayout()
-        }
     }
 
     private fun handleFocusKeys(keyEvent: KeyEvent): Boolean {
