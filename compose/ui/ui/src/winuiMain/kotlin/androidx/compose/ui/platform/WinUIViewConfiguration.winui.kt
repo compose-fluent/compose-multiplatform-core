@@ -18,11 +18,24 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import windows.ui.viewmanagement.UISettings
 
 internal object WinUIViewConfiguration : ViewConfiguration {
+    private val uiSettings by lazy(LazyThreadSafetyMode.PUBLICATION) { UISettings() }
+
+    // Windows press-and-hold gestures use a 500 ms hold threshold.
     override val longPressTimeoutMillis: Long = 500L
-    override val doubleTapTimeoutMillis: Long = 300L
+
+    // Windows.UI.ViewManagement.UISettings exposes the user's system double-click time in ms.
+    override val doubleTapTimeoutMillis: Long
+        get() = uiSettings.doubleClickTime.toLong()
+
+    // Compose requires a lower bound before accepting a second tap; WinUI does not expose one.
     override val doubleTapMinTimeMillis: Long = 40L
+
+    // Windows gesture recognition uses an 8 effective pixel movement tolerance for touch holds.
     override val touchSlop: Float = 8f
+
+    // WinUI Standard sizing aligns interactive items to 40x40 effective pixels.
     override val minimumTouchTargetSize: DpSize = DpSize(40.dp, 40.dp)
 }

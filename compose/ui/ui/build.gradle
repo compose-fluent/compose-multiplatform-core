@@ -95,6 +95,7 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Controls.UIElementCollection")
         type("Windows.Foundation.Rect")
         type("Windows.Foundation.Size")
+        type("Windows.UI.ViewManagement.UISettings")
         type("Windows.UI.Xaml.Interop.Type")
         type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
     }
