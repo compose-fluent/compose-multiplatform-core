@@ -411,6 +411,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
             runWinUIPointerInputSmoke()
+            runWinUIPointerMoveSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
@@ -1635,6 +1636,59 @@ private object ComposeWinUiSmokeApp {
     }
 
     @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIPointerMoveSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(30, 30) {}
+            }
+        }
+        withFrameNanos { }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(4f, 4f),
+                uptimeMillis = 1L,
+                down = true,
+            )
+        ) {
+            "WinUI pointer input move smoke did not dispatch the press event."
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(12f, 9f),
+                uptimeMillis = 2L,
+                down = true,
+            )
+        ) {
+            "WinUI pointer input move smoke did not dispatch the move event."
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Release,
+                position = Offset(12f, 9f),
+                uptimeMillis = 3L,
+                down = false,
+            )
+        ) {
+            "WinUI pointer input move smoke did not dispatch the release event."
+        }
+        awaitCondition("WinUI pointer input move sequence received") {
+            probe.pressCount == 1 &&
+                probe.moveCount >= 1 &&
+                probe.releaseCount == 1 &&
+                probe.lastPosition == Offset(12f, 9f)
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: pointer input move")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIPointerCancelOnDisposeSmoke() {
         val currentComposeView = WinUIComposeView()
         val probe = WinUIPointerInputSmokeProbe()
@@ -1985,8 +2039,10 @@ private class WinUISavedStateViewModel(
 
 private class WinUIPointerInputSmokeProbe {
     var pressCount = 0
+    var moveCount = 0
     var releaseCount = 0
     var cancelCount = 0
+    var lastPosition: Offset? = null
 }
 
 private fun Modifier.winUIPointerInputSmoke(
@@ -2017,11 +2073,16 @@ private class WinUIPointerInputSmokeNode(
         bounds: IntSize,
     ) {
         if (pass != PointerEventPass.Main) return
+        val change = pointerEvent.changes.firstOrNull()
+        change?.let {
+            probe.lastPosition = it.position
+        }
         when (pointerEvent.type) {
             PointerEventType.Press -> probe.pressCount += 1
+            PointerEventType.Move -> probe.moveCount += 1
             PointerEventType.Release -> probe.releaseCount += 1
         }
-        pointerEvent.changes.firstOrNull()?.consume()
+        change?.consume()
     }
 
     override fun onCancelPointerInput() {
