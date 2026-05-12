@@ -21,14 +21,12 @@ import androidx.collection.MutableIntObjectMap
 import androidx.collection.mutableIntObjectMapOf
 import androidx.compose.runtime.retain.RetainedValuesStore
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.SessionMutex
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.autofill.AutofillTree
 import androidx.compose.ui.draganddrop.DragAndDropManager
-import androidx.compose.ui.draganddrop.DragAndDropNode
-import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.WinUIDragAndDropManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.focus.FocusOwnerImpl
@@ -153,7 +151,7 @@ internal class WinUIOwner(
     override val localeList: LocaleList = LocaleList.current
     override val snapshotObserver = OwnerSnapshotObserver { it.invoke() }
     override val modifierLocalManager: ModifierLocalManager = ModifierLocalManager(this)
-    override val dragAndDropManager: DragAndDropManager = NoOpDragAndDropManager
+    override val dragAndDropManager: DragAndDropManager = WinUIDragAndDropManager
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
     override val measureIteration: Long
         get() = measureAndLayoutDelegate.measureIteration
@@ -482,17 +480,6 @@ private object NoOpPlatformTextInputService : PlatformTextInputService {
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
     ) = Unit
-}
-
-private object NoOpDragAndDropManager : DragAndDropManager {
-    override val modifier: Modifier = Modifier
-    override val isRequestDragAndDropTransferRequired: Boolean = false
-
-    override fun requestDragAndDropTransfer(node: DragAndDropNode, offset: Offset) = Unit
-
-    override fun registerTargetInterest(target: DragAndDropTarget) = Unit
-
-    override fun isInterestedTarget(target: DragAndDropTarget): Boolean = false
 }
 
 @Suppress("DEPRECATION")
