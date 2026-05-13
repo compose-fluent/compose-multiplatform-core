@@ -310,7 +310,9 @@ internal class WinUIOwner(
     }
 
     @InternalComposeUiApi
-    override fun onInteropViewLayoutChange(view: InteropView) = Unit
+    override fun onInteropViewLayoutChange(view: InteropView) {
+        onMeasureAndLayoutRequested()
+    }
 
     private fun notifyInteropTreeChanged() {
         onInteropTreeChanged()

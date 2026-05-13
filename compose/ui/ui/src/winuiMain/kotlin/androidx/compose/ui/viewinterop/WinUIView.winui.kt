@@ -38,6 +38,7 @@ import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.node.requireOwner
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Constraints
@@ -185,6 +186,10 @@ private class WinUIViewHolder<T : UIElement>(
     private var isViewAttachedToGroup = true
     private var width = 0
     private var height = 0
+    private var nativeWidth = 0
+    private var nativeHeight = 0
+    private var positionX = 0f
+    private var positionY = 0f
     private var clipGeometry: RectangleGeometry? = null
     private val initialGroupHitTestVisible = group.uiElement.isHitTestVisible
     private val initialViewHitTestVisible = view.isHitTestVisible
@@ -297,8 +302,14 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun applyLayout(width: Int, height: Int, nativeWidth: Int, nativeHeight: Int) {
+        val changed = this.width != width ||
+            this.height != height ||
+            this.nativeWidth != nativeWidth ||
+            this.nativeHeight != nativeHeight
         this.width = width
         this.height = height
+        this.nativeWidth = nativeWidth
+        this.nativeHeight = nativeHeight
         group.uiElement.width = width.toWinUISize()
         group.uiElement.height = height.toWinUISize()
         (view as? FrameworkElement)?.let {
@@ -308,9 +319,15 @@ private class WinUIViewHolder<T : UIElement>(
             it.verticalAlignment = VerticalAlignment.Top
         }
         updateClip()
+        if (changed) {
+            notifyInteropLayoutChanged()
+        }
     }
 
     private fun applyPosition(x: Float, y: Float) {
+        val changed = positionX != x || positionY != y
+        positionX = x
+        positionY = y
         // KWINRT-007: Canvas.Left/Top attached property setters crash in the offscreen smoke host.
         group.uiElement.margin = Thickness(
             left = x.toDouble(),
@@ -318,6 +335,15 @@ private class WinUIViewHolder<T : UIElement>(
             right = 0.0,
             bottom = 0.0,
         )
+        if (changed) {
+            notifyInteropLayoutChanged()
+        }
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private fun notifyInteropLayoutChanged() {
+        if (!layoutNode.isAttached) return
+        layoutNode.requireOwner().onInteropViewLayoutChange(view.asInteropView())
     }
 
     private fun applyInteraction(isUserInteractionEnabled: Boolean) {
