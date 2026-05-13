@@ -78,6 +78,12 @@ import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.platform.sendPointerEventForTest
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.spatial.RelativeLayoutBounds
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
@@ -137,6 +143,7 @@ fun WinUIViewSampleContent(
             lifecycleProbe?.let {
                 it.updateCount += 1
                 it.lastButton = button
+                it.lastContent = content
             }
             button.content = content
             onUpdated?.invoke(button)
@@ -275,6 +282,8 @@ class WinUIViewLifecycleProbe {
     var resetCount: Int = 0
     var releaseCount: Int = 0
     var lastButton: Button? = null
+    // KWINRT-018: ContentControl.Content string getter currently returns null.
+    var lastContent: String? = null
 }
 
 @Composable
@@ -313,6 +322,7 @@ private fun WinUIViewWindowIntegrationContent(
         update = { button ->
             lifecycleProbe.updateCount += 1
             lifecycleProbe.lastButton = button
+            lifecycleProbe.lastContent = buttonContent
             button.content = buttonContent
             onButtonUpdated(button)
         },
@@ -410,6 +420,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIOwnerLayerTransformSmoke()
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
+            runWinUIRootSemanticsSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
@@ -512,7 +523,7 @@ private object ComposeWinUiSmokeApp {
                     val toggleSwitch = lastToggleSwitch ?: return@LaunchedEffect
                     if (
                         windowProbe.updateCount >= 2 &&
-                        button.content == "Hello from Compose WinUI updated" &&
+                        windowProbe.lastContent == "Hello from Compose WinUI updated" &&
                         toggleSwitch.isOn &&
                         title == "compose-winui sample updated" &&
                         extendsContentIntoTitleBar &&
@@ -533,7 +544,7 @@ private object ComposeWinUiSmokeApp {
                         lastButton = button
                         println(
                             "compose-winui-sample: compose button content=" +
-                                (button.content ?: "not-found")
+                                (windowProbe.lastContent ?: "not-found")
                         )
                         println("compose-winui-sample: window title=${window.title}")
                         println("compose-winui-sample: window content set")
@@ -634,9 +645,12 @@ private object ComposeWinUiSmokeApp {
             "WinUIView did not apply Compose size to the native Button: " +
                 "${button.width}x${button.height}."
         }
-        check(wrapper.clip.rect.width == 123f && wrapper.clip.rect.height == 45f) {
+        val wrapperClip = checkNotNull(wrapper.readClipRectOrNull()) {
+            "WinUIView did not apply clipToBounds to the native wrapper."
+        }
+        check(wrapperClip.width == 123f && wrapperClip.height == 45f) {
             "WinUIView did not apply clipToBounds to the native wrapper: " +
-                "${wrapper.clip.rect.width}x${wrapper.clip.rect.height}."
+                "${wrapperClip.width}x${wrapperClip.height}."
         }
         check(lifecycleProbe.factoryCount == 1) {
             "Expected one WinUIView factory call, got ${lifecycleProbe.factoryCount}."
@@ -883,8 +897,9 @@ private object ComposeWinUiSmokeApp {
         val secondButton = checkNotNull(secondProbe.lastButton) {
             "WinUIView z-order smoke second factory did not create a Button."
         }
-        check(firstButton.content == "first" && secondButton.content == "second") {
-            "WinUIView z-order smoke did not update both Buttons."
+        check(firstProbe.lastContent == "first" && secondProbe.lastContent == "second") {
+            "WinUIView z-order smoke did not update both Buttons: " +
+                "first=${firstProbe.lastContent} second=${secondProbe.lastContent}."
         }
         currentComposeView.dispose()
         check(firstProbe.releaseCount == 1 && secondProbe.releaseCount == 1) {
@@ -930,9 +945,12 @@ private object ComposeWinUiSmokeApp {
             "WinUIView child did not keep an unclipped native width: " +
                 "${nativeCanvas.width}x${nativeCanvas.height}."
         }
-        check(wrapper.clip.rect.width == 80f && wrapper.clip.rect.height == 30f) {
+        val wrapperClip = checkNotNull(wrapper.readClipRectOrNull()) {
+            "WinUIView wrapper clip was not set."
+        }
+        check(wrapperClip.width == 80f && wrapperClip.height == 30f) {
             "WinUIView wrapper clip did not match clipped Compose bounds: " +
-                "${wrapper.clip.rect.width}x${wrapper.clip.rect.height}."
+                "${wrapperClip.width}x${wrapperClip.height}."
         }
         currentComposeView.dispose()
     }
@@ -1025,6 +1043,7 @@ private object ComposeWinUiSmokeApp {
         var toggleFactoryCount = 0
         var releaseCount = 0
         var lastButton: Button? = null
+        var lastButtonContent: String? = null
         var lastTextBox: TextBox? = null
         var lastToggleSwitch: ToggleSwitch? = null
         val currentComposeView = WinUIComposeView()
@@ -1045,7 +1064,10 @@ private object ComposeWinUiSmokeApp {
                     releaseCount += 1
                 },
                 update = {
-                    it.content = "button"
+                    // KWINRT-018: validate the update value without reading Button.content back.
+                    val content = "button"
+                    it.content = content
+                    lastButtonContent = content
                     lastButton = it
                 },
             )
@@ -1099,7 +1121,7 @@ private object ComposeWinUiSmokeApp {
             "WinUIView control variety smoke did not create each WinUI control exactly once: " +
                 "button=$buttonFactoryCount textBox=$textBoxFactoryCount toggle=$toggleFactoryCount."
         }
-        check(lastButton?.content == "button") {
+        check(lastButton != null && lastButtonContent == "button") {
             "WinUIView control variety smoke did not update Button content."
         }
         check(lastTextBox?.text == "text box") {
@@ -1207,7 +1229,7 @@ private object ComposeWinUiSmokeApp {
         }
         awaitCondition("WinUIView initial state update") {
             lifecycleProbe.updateCount == 1 &&
-                lifecycleProbe.lastButton?.content == "state update initial" &&
+                lifecycleProbe.lastContent == "state update initial" &&
                 (rootHost.content as? Canvas)?.children?.size == 1
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
@@ -1218,7 +1240,7 @@ private object ComposeWinUiSmokeApp {
         awaitCondition("WinUIView repeated state update") {
             lifecycleProbe.updateCount == 2 &&
                 lifecycleProbe.lastButton === button &&
-                button.content == "state update changed"
+                lifecycleProbe.lastContent == "state update changed"
         }
         check(lifecycleProbe.factoryCount == 1) {
             "WinUIView state update smoke recreated the Button, factory=" +
@@ -1261,8 +1283,9 @@ private object ComposeWinUiSmokeApp {
             // KWINRT-009: collection-returned UIElement wrappers cannot be publicly rewrapped
             // as FrameworkElement/Canvas, so this smoke validates clip plus the user view size.
             val wrapper = rootCanvas?.children?.singleOrNull()
-            wrapper?.clip?.rect?.width == 80f &&
-                wrapper.clip.rect.height == 30f &&
+            val clip = wrapper?.readClipRectOrNull()
+            clip?.width == 80f &&
+                clip.height == 30f &&
                 lifecycleProbe.lastButton?.width == 80.0 &&
                 lifecycleProbe.lastButton?.height == 30.0
         }
@@ -1282,10 +1305,11 @@ private object ComposeWinUiSmokeApp {
         y.value = 17
         awaitCondition("WinUIView updated relayout bounds") {
             val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            val clip = currentWrapper?.readClipRectOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
                 lifecycleProbe.lastButton === button &&
-                currentWrapper.clip.rect.width == 140f &&
-                currentWrapper.clip.rect.height == 55f &&
+                clip?.width == 140f &&
+                clip.height == 55f &&
                 button.width == 140.0 &&
                 button.height == 55.0
         }
@@ -1320,8 +1344,9 @@ private object ComposeWinUiSmokeApp {
         }
         awaitCondition("WinUI layout snapshot initial bounds") {
             val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
-            wrapper?.clip?.rect?.width == 70f &&
-                wrapper.clip.rect.height == 25f &&
+            val clip = wrapper?.readClipRectOrNull()
+            clip?.width == 70f &&
+                clip.height == 25f &&
                 lifecycleProbe.lastButton?.width == 70.0 &&
                 lifecycleProbe.lastButton?.height == 25.0
         }
@@ -1336,8 +1361,9 @@ private object ComposeWinUiSmokeApp {
         height.value = 45
         awaitCondition("WinUI layout snapshot updated bounds") {
             val wrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
-            wrapper?.clip?.rect?.width == 115f &&
-                wrapper.clip.rect.height == 45f &&
+            val clip = wrapper?.readClipRectOrNull()
+            clip?.width == 115f &&
+                clip.height == 45f &&
                 lifecycleProbe.lastButton === button &&
                 button.width == 115.0 &&
                 button.height == 45.0
@@ -1590,6 +1616,36 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: root focus traversal key event")
+    }
+
+    private fun runWinUIRootSemanticsSmoke() {
+        val currentComposeView = WinUIComposeView()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.semantics {
+                    testTag = "winui-semantics"
+                    contentDescription = "WinUI semantics node"
+                },
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        currentComposeView.rootForTest().measureAndLayoutForTest()
+        val semanticsNode = currentComposeView.rootForTest()
+            .semanticsOwner
+            .getAllSemanticsNodes(mergingEnabled = false)
+            .singleOrNull {
+                it.config.getOrNull(SemanticsProperties.TestTag) == "winui-semantics"
+            } ?: error("WinUI RootForTest did not expose the test semantics node.")
+        check(
+            semanticsNode.config.getOrNull(SemanticsProperties.ContentDescription) ==
+                listOf("WinUI semantics node")
+        ) {
+            "WinUI RootForTest exposed incorrect semantics content: ${semanticsNode.config}."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: root semantics")
     }
 
     @OptIn(InternalComposeUiApi::class)
@@ -2169,7 +2225,7 @@ private fun hasInteropRootOrder(rootCanvas: Canvas, expected: List<UIElement>): 
 }
 
 private fun UIElement.readClipRectOrNull() =
-    runCatching { clip.rect }.getOrNull()
+    runCatching { clip?.rect }.getOrNull()
 
 private fun WinUIComposeView.rootForTest(): RootForTest {
     val owner = javaClass.getDeclaredField("owner").also {

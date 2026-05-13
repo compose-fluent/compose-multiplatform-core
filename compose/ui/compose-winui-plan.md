@@ -126,6 +126,7 @@
 - [x] Add repository-local WinUI owner smoke validation for graphics-layer translation propagating through `onLayoutRectChanged` bounds.
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendKeyEvent` dispatching through preview and key handlers.
 - [x] Add repository-local WinUI owner smoke validation for Tab and Shift+Tab focus traversal through `RootForTest.sendKeyEvent`.
+- [x] Add repository-local WinUI owner smoke validation for `RootForTest.semanticsOwner` exposing semantics nodes and properties.
 - [x] Add repository-local WinUI owner smoke validation for basic pointer press/release dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for pointer move dispatch and coordinate propagation through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for canceling active pointer input when the owner is disposed.
@@ -133,7 +134,7 @@
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.
 - [x] Add repository-local WinUI owner focus smoke validation for Compose `FocusRequester` requests accepted while attempting native WinUI root focus.
-- [ ] Add repository-local WinUIView smoke validation for Compose `FocusRequester` focus transfer to a native WinUI control after native `UIElement.focus(FocusState.Programmatic)` succeeds for embedded controls (`KWINRT-017`).
+- [ ] Add repository-local WinUIView smoke validation for Compose `FocusRequester` focus transfer to a native WinUI control after native `UIElement.focus(FocusState.Programmatic)` succeeds for embedded controls (`KWINRT-019`).
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [ ] Resolve the current Windows JVM sample shutdown blocker where JDK 25 FFM upcalls can abort with `upcallLinker.cpp:66` after early WinUIView smoke validation (`KWINRT-013`).
@@ -143,5 +144,5 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-016`: Generated WinUI event sources currently fail on JVM when compose-winui accesses `Button.click`, throwing `IncompatibleClassChangeError: Expecting non-static method ... WinRtGeneratedEventSourceRuntime.createEventSourceFactory(...)`. Re-enable repository-local native event-token registration/release smoke coverage after the generated projection and runtime call shape match again.
-- `KWINRT-017`: Live embedded WinUI controls currently reject programmatic focus from compose-winui. The repository-local `WinUIView` focus-transfer smoke reached a native `Button` in the active WinUI window, but `Button.focus(FocusState.Programmatic)` returned `false`, so Compose correctly canceled the interop focus request. Re-enable Compose `FocusRequester` to native WinUI control smoke coverage after this succeeds.
+- `KWINRT-001`: Generated WinUI event sources currently fail on JVM when compose-winui accesses generated event properties, throwing `IncompatibleClassChangeError: Expecting non-static method ... WinRtGeneratedEventSourceRuntime.createEventSourceFactory(...)`. Re-enable repository-local native event-token registration/release smoke coverage after the generated projection and runtime call shape match again.
+- `KWINRT-019`: Live embedded WinUI controls currently reject programmatic focus from compose-winui. The repository-local `WinUIView` focus-transfer smoke reached a native `Button` in the active WinUI window, but `Button.focus(FocusState.Programmatic)` returned `false`, so Compose correctly canceled the interop focus request. Re-enable Compose `FocusRequester` to native WinUI control smoke coverage after this succeeds.

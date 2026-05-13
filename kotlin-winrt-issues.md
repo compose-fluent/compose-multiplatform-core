@@ -5,7 +5,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
-- **Status:** Open
+- **Status:** Open. Reproduced after updating `external/kotlin-winrt` from
+  upstream `ec8c5a52`; still tracked as the event-source blocker after the
+  later `09f97af8` retest.
 - **Observed in:** `Window.closed`, `AppWindow.changed`,
   `AppWindow.closing`, and generated WinRT event accessors
 - **Symptom:** Accessing generated event properties can fail during
@@ -23,19 +25,16 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-002: Interface projection registry is not reliably initialized
 
-- **Status:** Open
+- **Status:** Fixed upstream; compose workaround removed after updating
+  `external/kotlin-winrt` to `efc6cc8714ec59812ffb817cc29e424d1ff60d6f`.
 - **Observed in:** `DispatcherQueue.hasThreadAccess`
 - **Symptom:** Even after declaring `type("Microsoft.UI.Dispatching.IDispatcherQueue2")`,
   using `dispatcherQueue.hasThreadAccess` can fail at runtime with:
   `Generated interface projection factory for 'microsoft.ui.dispatching.IDispatcherQueue2' is not registered.`
 - **Impact on compose-winui:** WinUI coroutine dispatch should avoid redundant
   `DispatcherQueue.tryEnqueue(...)` calls when already on the UI thread.
-- **compose-winui workaround:** `WinUIComposeView.winui.kt` explicitly triggers
-  the generated `WinRTInterfaceProjectionRegistry.register()` method, then
-  treats `DispatcherQueue.hasThreadAccess` as best-effort. If the generated
-  interface projection is still unavailable, the WinUI coroutine dispatcher
-  returns `true` from `isDispatchNeeded` and uses `DispatcherQueue.tryEnqueue`.
-  Search for `KWINRT-002`.
+- **compose-winui workaround:** Removed. `WinUIComposeView.winui.kt` no longer
+  manually bootstraps the generated interface projection registry.
 - **Validation note:** Deleting the compose-winui module `build` directories and
   re-running with `--no-configuration-cache --rerun-tasks` did not resolve
   this; the failure is not just Gradle configuration-cache or local build
@@ -81,7 +80,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-005: Windows.System.Launcher projection pulls invalid Package wrappers
 
-- **Status:** Open
+- **Status:** Partially fixed upstream; compose workaround narrowed after
+  updating `external/kotlin-winrt` to
+  `efc6cc8714ec59812ffb817cc29e424d1ff60d6f`.
 - **Observed in:** `Windows.System.Launcher`
 - **Symptom:** Declaring `type("Windows.System.Launcher")` can generate
   invalid dependent projections under `Windows.ApplicationModel`, including
@@ -89,17 +90,19 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** WinUI `UriHandler` should use the Windows
   Runtime launcher API, but the generated `Launcher` projection currently
   prevents `compileKotlinWinuiJvm` from succeeding.
-- **compose-winui workaround:** `WinUIUriHandler.winui.kt` does not declare
-  or use the generated `Windows.System.Launcher` projection. It activates
-  `Windows.System.Launcher` for `ILauncherStatics` and invokes
-  `LaunchUriAsync` through the vtable directly. Search for `KWINRT-005`.
+- **compose-winui workaround:** The manual `ILauncherStatics` activation/vtable
+  path was removed. `WinUIUriHandler.winui.kt` now uses the generated
+  `Launcher.launchUriAsync(uri, options, inputData)` overload. The one-argument
+  overload is still not usable in generated code, so keep this issue open until
+  the natural `Launcher.launchUriAsync(uri)` path is bindable.
 - **Resolution target:** Generate valid dependent projections for
   `Windows.System.Launcher`, or avoid generating invalid
   `Windows.ApplicationModel.Package` wrappers for this API surface.
 
 ## KWINRT-006: Nullable UIElement.Clip setter is generated as non-null
 
-- **Status:** Open
+- **Status:** Fixed upstream; compose workaround removed after updating
+  `external/kotlin-winrt` to `efc6cc8714ec59812ffb817cc29e424d1ff60d6f`.
 - **Observed in:** `Microsoft.UI.Xaml.UIElement.clip`
 - **Symptom:** `UIElement.clip` is generated as a non-null `RectangleGeometry`
   property, so compose-winui cannot call the projected setter with `null` to
@@ -107,10 +110,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** `WinUIInteropProperties.clipToBounds` needs to
   support true-to-false updates without leaving a stale clipping rectangle on
   the native wrapper.
-- **compose-winui workaround:** `WinUIView.winui.kt` uses the generated setter
-  when installing a `RectangleGeometry`, then invokes the `IUIElement.Clip`
-  setter directly with a null ABI pointer when clearing clip. Search for
-  `KWINRT-006`.
+- **compose-winui workaround:** Removed. `WinUIView.winui.kt` now uses the
+  generated nullable `UIElement.clip` property for both setting and clearing.
 - **Resolution target:** Generate nullable Kotlin setters for WinRT runtime
   class properties whose metadata permits null, including
   `Microsoft.UI.Xaml.UIElement.Clip`.
@@ -140,7 +141,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
 
-- **Status:** Open
+- **Status:** Open. Reproduced after updating `external/kotlin-winrt` from
+  upstream `09f97af8`; KWINRT-016 no longer blocks this retest.
 - **Observed in:** `Microsoft.UI.Xaml.Application.resources` and
   `Microsoft.UI.Xaml.Controls.XamlControlsResources`
 - **Symptom:** Installing WinUI control resources from the compose-winui
@@ -194,7 +196,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-010: Static runtime class shells do not expose callable static members
 
-- **Status:** Open
+- **Status:** Fixed upstream; compose workaround removed after updating
+  `external/kotlin-winrt` to `efc6cc8714ec59812ffb817cc29e424d1ff60d6f`.
 - **Observed in:** `Windows.ApplicationModel.DataTransfer.Clipboard` and
   `Windows.ApplicationModel.DataTransfer.StandardDataFormats`
 - **Symptom:** Declaring the static WinRT runtime classes generates public class
@@ -206,9 +209,10 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** WinUI `LocalClipboardManager` and
   `LocalClipboard` need to read, write, and clear the Windows clipboard, and
   need the standard text format id.
-- **compose-winui workaround:** `PlatformClipboard.winui.kt` gets the generated
-  static interface references through `StaticInterfaces` and invokes the needed
-  vtable slots with runtime interop helpers. Search for `KWINRT-010`.
+- **compose-winui workaround:** Removed. `PlatformClipboard.winui.kt` now calls
+  generated static forwarders such as `Clipboard.getContent()`,
+  `Clipboard.setContent(...)`, `Clipboard.clear()`, and
+  `StandardDataFormats.text` directly.
 - **Resolution target:** Generate public static forwarding properties/functions
   on static runtime class shells so consumers can call
   `Clipboard.getContent()`, `Clipboard.setContent(...)`, `Clipboard.clear()`,
@@ -216,7 +220,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-011: Repeated projection generation creates incompatible internal wrappers
 
-- **Status:** Open
+- **Status:** Partially fixed upstream; still open for cross-module projection
+  inheritance after updating `external/kotlin-winrt` to
+  `efc6cc8714ec59812ffb817cc29e424d1ff60d6f`.
 - **Observed in:** `Windows.ApplicationModel.DataTransfer.DataPackageView`
   and `Microsoft.UI.Xaml.WindowActivationState` generated by both
   `:compose:ui:ui` and `:compose:ui:ui:winui-samples`
@@ -228,17 +234,22 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   can return `SingleInterfaceOptimizedObject` instead of a public generated
   `DataPackageView` wrapper. The same classpath shape can make
   `WindowActivationState.Metadata.fromAbi(...)` fail with a module-mangled
-  `NoSuchMethodError` from `Window.Activated` handling.
+  `NoSuchMethodError` from `Window.Activated` handling. Retesting after the
+  kotlin-winrt update also showed that a downstream JVM sample cannot project
+  `Button`, `TextBox`, or `ToggleSwitch` when their generated base classes come
+  from `:compose:ui:ui`: generated subclasses call internal wrapper
+  constructors such as `Control(..., __winrtWrapper)` and fail to compile.
 - **Impact on compose-winui:** `LocalClipboard` needs to consume
   `Clipboard.getContent()` results inside `compose-ui`, and WinUI `WindowInfo`
   needs to consume activation-state event args, while the sample also runs with
   WinUI projections on the classpath.
-- **compose-winui workaround:** `PlatformClipboard.winui.kt` wraps clipboard
-  `DataPackageView` results in a small compose-ui-local ABI adapter and invokes
-  `IDataPackageView.Contains`, `AvailableFormats`, and `GetTextAsync` directly.
-  `Window.winui.kt` maps the `WindowActivationState` ABI integer to public enum
-  constants directly instead of calling the generated internal enum helper.
-  Search for `KWINRT-011`.
+- **compose-winui workaround:** The clipboard ABI adapter was removed because
+  generated `DataPackageView` and static clipboard forwarders are now usable
+  inside `:compose:ui:ui`. `Window.winui.kt` still maps the
+  `WindowActivationState` ABI integer to public enum constants directly instead
+  of calling the generated internal enum helper. The sample also avoids
+  downstream projection of `Button` / `TextBox` / `ToggleSwitch` by declaring
+  those types in `:compose:ui:ui` for now. Search for `KWINRT-011`.
 - **Resolution target:** Avoid duplicate generated classes with the same FQN
   across dependent Gradle modules, or expose public, non-mangled runtime-class
   wrapping APIs that can reliably rewrap `IInspectable` values as the desired
@@ -269,7 +280,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
-- **Status:** Open
+- **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
+  from upstream `2bca1262` (`Remove active event callbacks during shutdown`);
+  KWINRT-016 no longer blocks this retest.
 - **Observed in:** repository-local `runWinUIViewSample` on Microsoft OpenJDK
   25.0.3 with Windows App SDK callbacks
 - **Symptom:** After several WinUI callback/upcall paths have run, the JVM can
@@ -277,9 +290,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `Could not attach thread for upcall. JNI error code: -1`. The generated
   `hs_err_pid*.log` reports the current thread as a native thread and the last
   pc as an FFM upcall stub.
-- **Impact on compose-winui:** The sample now compiles and runs through the
-  clipboard and early WinUIView smoke checks, but full process validation can be
-  interrupted by a VM fatal outside Kotlin exception handling.
+- **Impact on compose-winui:** The sample now compiles, enters
+  `Application.Start`, and runs through the WinUIView, window, focus, layout,
+  pointer, state, retain, and text-input cancellation smokes, but full process
+  validation can still be interrupted by a VM fatal outside Kotlin exception
+  handling during shutdown.
 - **compose-winui workaround:** `WinUIFrameClock` ignores frame callbacks after
   disposal, but this does not eliminate the fatal. Keep sample failures with
   this signature classified as a kotlin-winrt/JDK upcall lifecycle blocker, not
@@ -336,3 +351,93 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   detached-element restriction or a kotlin-winrt projection/lifetime issue, then
   provide a safe application point or runtime guard for attached automation
   properties.
+
+## KWINRT-016: Generated Application.Start intrinsic is not lowered for compose-winui
+
+- **Status:** Fixed upstream in local kotlin-winrt `ec8c5a52`, still verified
+  after syncing `external/kotlin-winrt` from upstream `09f97af8`.
+- **Observed in:** earlier repository-local `runWinUIViewSample` attempts after
+  clean `:compose:ui:ui:compileKotlinWinuiJvm` rebuilds with JDK 25.
+- **Symptom:** Generated WinRT projection bytecode for
+  `Application.Metadata.start(...)` could reach the runtime fallback:
+  `WinRtProjectionIntrinsic.callUnit(...) was not lowered`.
+- **Verification:** With `JAVA_HOME`/`ANDROIDX_JDK21` pointing at
+  `C:\Program Files\Microsoft\jdk-25.0.3.9-hotspot`, the repository-local
+  `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `:compose:ui:ui:winui-samples:compileKotlin` tasks pass. `javap` on
+  `Application$Metadata.class` shows `WinRtJvmFfmDowncallHandles` instead of
+  `WinRtProjectionIntrinsic.callUnit`, and `runWinUIViewSample` enters
+  `Application.Start`. The later `09f97af8` intrinsic-owner restriction also
+  allows the sample to use ordinary `java.lang.Boolean.getBoolean(...)` for
+  `compose.winui.sample.autoExit` without being mistaken for a WinRT
+  `getBoolean` projection intrinsic.
+- **compose-winui workaround:** None active. `Application.winui.kt` continues
+  to call the generated `XamlApplication.start { ... }` path.
+- **Resolution target:** Keep the JDK 22+ / JVM target 22 WinUI JVM compiler
+  setup in compose-winui so the upstream lowering remains active.
+
+## KWINRT-017: WinUI Application access native-failfasts inside Application.Start callback
+
+- **Status:** Superseded by KWINRT-013 after retesting with upstream
+  `ec8c5a52`.
+- **Observed in:** earlier local experiments that bypassed KWINRT-016 with a
+  direct `IApplicationStatics.Start` ABI call.
+- **Symptom:** After bypassing KWINRT-016, WinUI entered the initialization
+  callback, then the process terminated with `NTSTATUS 0xC000027B` before the
+  compose sample could create its window. Retesting the natural generated path
+  with upstream `ec8c5a52` now creates the application and runs through the
+  sample smokes until the shutdown-time upcall fatal tracked by KWINRT-013.
+- **Impact on compose-winui:** The earlier application-access fail-fast is no
+  longer the active blocker on the generated `Application.Start` path.
+- **compose-winui workaround:** None.
+- **Resolution target:** After KWINRT-016 is fixed, retest the generated/runtime
+  path for creating or retrieving the WinUI `Application` instance inside
+  `Application.Start`, including any required `IApplicationOverrides` and
+  `IXamlMetadataProvider` support for compose-winui's KMP JVM target.
+
+## KWINRT-018: ContentControl.Content string getter does not round-trip assigned strings
+
+- **Status:** Open
+- **Observed in:** `Microsoft.UI.Xaml.Controls.Button.content`, inherited from
+  `ContentControl.Content`, in repository-local `WinUIViewSample` smokes after
+  syncing `external/kotlin-winrt` from upstream `ec8c5a52`.
+- **Symptom:** Assigning Kotlin strings to `Button.content` succeeds well
+  enough for the WinUIView update path to continue, but reading
+  `button.content` back in the same smoke returns `null`. The z-order smoke
+  reproduced this with both sibling buttons after their update lambdas ran:
+  `first=null second=null`.
+- **Impact on compose-winui:** Repository-local smokes cannot use
+  `Button.content` getter as proof that `WinUIView` update lambdas ran or that
+  sibling ordering was preserved. This also makes `ContentControl.Content`
+  unsuitable for state assertions until string/object projection round-tripping
+  is fixed.
+- **compose-winui workaround:** `WinUIViewSample` records the intended content
+  value in the update lambda and asserts against that probe value instead of
+  reading `Button.content` back. Search for `KWINRT-018`.
+- **Resolution target:** Make generated `ContentControl.Content` object
+  projection preserve boxed string values, or expose a reliable projected
+  object/value wrapper so strings assigned through the setter can be read back
+  from the getter.
+
+## KWINRT-019: Live WinUI controls reject programmatic focus transfer from Compose
+
+- **Status:** Open. Reproduced after updating `external/kotlin-winrt` from
+  upstream `09f97af8`.
+- **Observed in:** A live `Button` hosted by `WinUIView` inside the
+  repository-local `Application { Window { ... } }` sample path.
+- **Symptom:** After the primary WinUI window is activated and the embedded
+  native `Button` has been created, a Compose `FocusRequester` attached to
+  `WinUIView` attempts to enter the interop focus group. `WinUIView` forwards
+  that request to `Button.focus(FocusState.Programmatic)`, but the native call
+  returns `false`, so Compose correctly cancels the focus transfer.
+- **Impact on compose-winui:** Focus traversal can move between Compose
+  focus targets, and WinUIView can expose focus properties, but the sample
+  cannot yet validate moving Compose focus into a real native WinUI control.
+- **compose-winui workaround:** Keep the live WinUIView focus-transfer smoke
+  disabled. Existing smokes still validate owner focus requests and
+  `RootForTest` Tab / Shift+Tab traversal between Compose focus targets.
+  Search for `KWINRT-019`.
+- **Resolution target:** Determine whether the native control needs additional
+  attachment, XAML focus manager, tab-stop, loaded-state, or dispatcher timing
+  setup before `UIElement.Focus(FocusState.Programmatic)` can succeed for
+  embedded controls.
