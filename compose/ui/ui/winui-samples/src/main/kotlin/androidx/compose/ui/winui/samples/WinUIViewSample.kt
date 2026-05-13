@@ -421,6 +421,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
             runWinUIRootSemanticsSmoke()
+            runWinUIOwnerEndApplyChangesSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
@@ -1648,6 +1649,24 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: root semantics")
     }
 
+    private suspend fun runWinUIOwnerEndApplyChangesSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIOwnerEndApplyChangesProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIOwnerEndApplyChangesSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        awaitCondition("WinUI owner end-apply listener drain") {
+            probe.events == listOf("repeat", "first", "second")
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: owner end apply changes")
+    }
+
     @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIPointerInputSmoke() {
         val currentComposeView = WinUIComposeView()
@@ -2099,6 +2118,48 @@ private class WinUIPointerInputSmokeProbe {
     var releaseCount = 0
     var cancelCount = 0
     var lastPosition: Offset? = null
+}
+
+private class WinUIOwnerEndApplyChangesProbe {
+    val events = mutableListOf<String>()
+}
+
+private fun Modifier.winUIOwnerEndApplyChangesSmoke(
+    probe: WinUIOwnerEndApplyChangesProbe
+): Modifier = this then WinUIOwnerEndApplyChangesElement(probe)
+
+private data class WinUIOwnerEndApplyChangesElement(
+    private val probe: WinUIOwnerEndApplyChangesProbe,
+) : ModifierNodeElement<WinUIOwnerEndApplyChangesNode>() {
+    override fun create(): WinUIOwnerEndApplyChangesNode =
+        WinUIOwnerEndApplyChangesNode(probe)
+
+    override fun update(node: WinUIOwnerEndApplyChangesNode) {
+        node.probe = probe
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIOwnerEndApplyChangesSmoke"
+    }
+}
+
+private class WinUIOwnerEndApplyChangesNode(
+    var probe: WinUIOwnerEndApplyChangesProbe,
+) : Modifier.Node() {
+    private val repeatedEffect: () -> Unit = {
+        probe.events += "repeat"
+    }
+
+    override fun onAttach() {
+        sideEffect(repeatedEffect)
+        sideEffect(repeatedEffect)
+        sideEffect {
+            probe.events += "first"
+            sideEffect {
+                probe.events += "second"
+            }
+        }
+    }
 }
 
 private fun Modifier.winUIPointerInputSmoke(

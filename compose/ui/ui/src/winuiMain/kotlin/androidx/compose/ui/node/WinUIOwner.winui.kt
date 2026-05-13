@@ -107,7 +107,7 @@ internal class WinUIOwner(
     private val onMeasureAndLayoutRequested: () -> Unit = {},
     private val onInteropTreeChanged: () -> Unit = {},
 ) : Owner {
-    private val onEndApplyChangesListeners = mutableListOf<() -> Unit>()
+    private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private var hasPendingLayoutCompletedListener = false
 
     override val sharedDrawScope = LayoutNodeDrawScope()
@@ -318,13 +318,21 @@ internal class WinUIOwner(
     }
 
     override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
-        onEndApplyChangesListeners += listener
+        if (listener !in onEndApplyChangesListeners) {
+            onEndApplyChangesListeners += listener
+        }
     }
 
     override fun onEndApplyChanges() {
-        val listeners = onEndApplyChangesListeners.toList()
-        onEndApplyChangesListeners.clear()
-        listeners.forEach { it.invoke() }
+        while (onEndApplyChangesListeners.isNotEmpty()) {
+            val size = onEndApplyChangesListeners.size
+            for (i in 0 until size) {
+                val listener = onEndApplyChangesListeners[i]
+                onEndApplyChangesListeners[i] = null
+                listener?.invoke()
+            }
+            onEndApplyChangesListeners.subList(0, size).clear()
+        }
     }
 
     override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
