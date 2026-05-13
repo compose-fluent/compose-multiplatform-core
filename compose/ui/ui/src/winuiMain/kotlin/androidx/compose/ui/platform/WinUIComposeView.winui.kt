@@ -223,15 +223,6 @@ class WinUIComposeView(
 internal class WinUIDispatcher(
     private val dispatcherQueue: DispatcherQueue,
 ) : CoroutineDispatcher() {
-    init {
-        // KWINRT-002: force generated interface projection registry loading before hasThreadAccess.
-        runCatching {
-            Class.forName(
-                "io.github.composefluent.winrt.projections.support.WinRTInterfaceProjectionRegistry"
-            ).getDeclaredMethod("register").invoke(null)
-        }
-    }
-
     override fun isDispatchNeeded(context: CoroutineContext): Boolean =
         runCatching { !dispatcherQueue.hasThreadAccess }.getOrDefault(true)
 

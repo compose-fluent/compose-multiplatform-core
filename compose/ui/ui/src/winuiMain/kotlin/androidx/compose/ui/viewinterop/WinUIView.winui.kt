@@ -45,10 +45,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.PlatformAbi
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
@@ -534,24 +530,9 @@ private fun Double.toComposeLayoutSize(): Int =
     }
 
 private fun setClip(element: UIElement, clip: RectangleGeometry?) {
-    if (clip != null) {
-        element.clip = clip
-        return
-    }
-    // KWINRT-006: generated UIElement.clip setter is non-null, but WinUI uses null to clear Clip.
-    element.nativeObject.queryInterface(uiElementIid).getOrThrow().use { uiElement ->
-        HResult(
-            ComVtableInvoker.invokeArgs(
-                instance = uiElement.pointer,
-                slot = uiElementClipSetterSlot,
-                arg0 = PlatformAbi.nullPointer,
-            )
-        ).requireSuccess("UIElement.Clip clear")
-    }
+    element.clip = clip
 }
 
-private val uiElementIid = Guid("C3C01020-320C-5CF6-9D24-D396BBFA4D8B")
-private const val uiElementClipSetterSlot = 12
 private const val MaxUnboundedWinUISize = 1_000_000f
 
 @OptIn(InternalComposeUiApi::class)

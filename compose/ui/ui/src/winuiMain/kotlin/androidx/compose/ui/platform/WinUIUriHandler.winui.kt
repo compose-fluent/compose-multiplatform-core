@@ -16,14 +16,10 @@
 
 package androidx.compose.ui.platform
 
-import io.github.composefluent.winrt.runtime.ActivationFactory
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.IUnknownReference
-import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.WinRtSystemProjectionMarshalers
 import io.github.composefluent.winrt.runtime.WinRtUri
+import windows.foundation.collections.ValueSet
+import windows.system.Launcher
+import windows.system.LauncherOptions
 
 internal fun createWinUIUriHandler(): UriHandler = WinUIUriHandler
 
@@ -40,29 +36,12 @@ private object WinUIUriHandler : UriHandler {
     }
 
     private fun launchUri(uri: String) {
-        ActivationFactory.get(
-            runtimeClassName = "Windows.System.Launcher",
-            interfaceId = launcherStaticsIid,
-        ).use { launcherStatics ->
-            WinRtSystemProjectionMarshalers.createObjectReference(
-                WinRtUri(uri),
-                WinRtUri.Metadata.DEFAULT_INTERFACE_IID,
-            ).use { uriReference ->
-                PlatformAbi.confinedScope().use { scope ->
-                    val operationOut = PlatformAbi.allocatePointerSlot(scope)
-                    val hr = ComVtableInvoker.invokeArgs(
-                        instance = launcherStatics.pointer,
-                        slot = launchUriAsyncSlot,
-                        arg0 = PlatformAbi.fromRawComPtr(uriReference.pointer),
-                        arg1 = operationOut,
-                    )
-                    HResult(hr).requireSuccess("Windows.System.Launcher.LaunchUriAsync")
-                    val operationPointer = PlatformAbi.readPointer(operationOut)
-                    if (!PlatformAbi.isNull(operationPointer)) {
-                        IUnknownReference(PlatformAbi.toRawComPtr(operationPointer)).close()
-                    }
-                }
-            }
+        Launcher.launchUriAsync(
+            uri = WinRtUri(uri),
+            options = LauncherOptions(),
+            inputData = ValueSet(),
+        ).use {
+            // Fire-and-forget, matching UriHandler's synchronous contract.
         }
     }
 }
@@ -86,9 +65,3 @@ private fun Char.isAsciiLetter(): Boolean =
 
 private fun Char.isAsciiLetterOrDigit(): Boolean =
     isAsciiLetter() || this in '0'..'9'
-
-// KWINRT-005: Declaring type("Windows.System.Launcher") currently pulls invalid
-// Windows.ApplicationModel projections. Keep this minimal ABI call until the
-// generated Launcher projection is usable.
-private val launcherStaticsIid = Guid("277151C3-9E3E-42F6-91A4-5DFDEB232451")
-private const val launchUriAsyncSlot = 8

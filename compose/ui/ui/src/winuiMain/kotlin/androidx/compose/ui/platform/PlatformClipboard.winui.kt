@@ -18,22 +18,10 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.AnnotatedString
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HString
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.IInspectableReference
 import io.github.composefluent.winrt.runtime.IUnknownReference
-import io.github.composefluent.winrt.runtime.IWinRTObject
-import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.WinRtAsyncProjectionInterop
-import io.github.composefluent.winrt.runtime.WinRtInstanceProjectionInterop
-import io.github.composefluent.winrt.runtime.WinRtReadOnlyListProjection
-import io.github.composefluent.winrt.runtime.WinRtReferenceValueAdapters
-import io.github.composefluent.winrt.runtime.WinRtStaticProjectionInterop
-import io.github.composefluent.winrt.runtime.WinRtTypeSignature
 import io.github.composefluent.winrt.runtime.await
 import windows.applicationmodel.datatransfer.DataPackage
+import windows.applicationmodel.datatransfer.DataPackageView
 import windows.applicationmodel.datatransfer.Clipboard as WinRTClipboardClass
 import windows.applicationmodel.datatransfer.StandardDataFormats as WinRTStandardDataFormats
 
@@ -113,7 +101,7 @@ internal class WinUIClipboard : Clipboard {
         val content = getWinUIContent()
         if (content.availableFormats.isEmpty()) return null
         if (content.contains(winUITextFormat)) {
-            return ClipEntry(content.getText())
+            return ClipEntry(content.getTextAsync().await())
         }
         return ClipEntry(content)
     }
@@ -126,7 +114,7 @@ internal class WinUIClipboard : Clipboard {
                 return
             }
             is DataPackage -> nativeClipEntry
-            is WinUIDataPackageView -> DataPackage().also { dataPackage ->
+            is DataPackageView -> DataPackage().also { dataPackage ->
                 if (nativeClipEntry.contains(winUITextFormat)) {
                     lastPlainText?.let(dataPackage::setText)
                 }
@@ -144,20 +132,11 @@ internal class WinUIClipboard : Clipboard {
     }
 
     private fun clearWinUIContent() {
-        runCatching {
-            // KWINRT-010: generated static class shells do not expose callable static members yet.
-            WinRtStaticProjectionInterop.callUnit(winUIClipboardStatics, clipboardClearSlot)
-        }
+        runCatching { WinRTClipboardClass.clear() }
     }
 
     private fun setWinUIContent(dataPackage: DataPackage) {
-        // KWINRT-010: generated static class shells do not expose callable static members yet.
-        val hr = ComVtableInvoker.invokeArgs(
-            instance = winUIClipboardStatics.pointer,
-            slot = clipboardSetContentSlot,
-            arg0 = PlatformAbi.fromRawComPtr((dataPackage as IWinRTObject).nativeObject.pointer),
-        )
-        HResult(hr).requireSuccess()
+        WinRTClipboardClass.setContent(dataPackage)
     }
 }
 
@@ -182,98 +161,12 @@ actual class ClipMetadata
 
 private var lastPlainText: String? = null
 
-// KWINRT-010: generated Clipboard and StandardDataFormats static shells expose
-// StaticInterfaces, but not the public static members from those interfaces.
-// Keep the ABI calls here until kotlin-winrt generates the forwarding members.
 private val winUIClipboardStatics: IUnknownReference
     get() = WinRTClipboardClass.StaticInterfaces.iClipboardStatics()
 
-private val winUIStandardDataFormatsStatics: IUnknownReference
-    get() = WinRTStandardDataFormats.StaticInterfaces.iStandardDataFormatsStatics()
-
 private val winUITextFormat: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
-    WinRtInstanceProjectionInterop.getString(
-        reference = winUIStandardDataFormatsStatics,
-        slot = standardDataFormatsTextSlot,
-    )
+    WinRTStandardDataFormats.text
 }
 
-private fun getWinUIContent(): WinUIDataPackageView =
-    WinRtStaticProjectionInterop.getProjectedRuntimeClass(
-        reference = winUIClipboardStatics,
-        slot = clipboardGetContentSlot,
-        wrap = ::WinUIDataPackageView,
-    )
-
-// KWINRT-011: avoid generated DataPackageView.Metadata.wrap(...) here because
-// samples can generate the same projection FQNs with different internal method
-// names. Public RCW rewrap currently returns a SingleInterfaceOptimizedObject,
-// so use the IDataPackageView ABI surface directly.
-private class WinUIDataPackageView(
-    private val inspectable: IInspectableReference,
-) {
-    private val defaultInterface: IUnknownReference by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        inspectable.queryInterface(dataPackageViewDefaultInterfaceIid).getOrThrow().use {
-            IUnknownReference(it.getRefPointer(), dataPackageViewDefaultInterfaceIid)
-        }
-    }
-
-    val availableFormats: List<String>
-        get() = PlatformAbi.confinedScope().use { scope ->
-            val resultOut = PlatformAbi.allocatePointerSlot(scope)
-            val hr = ComVtableInvoker.invokeArgs(
-                instance = defaultInterface.pointer,
-                slot = dataPackageViewAvailableFormatsGetterSlot,
-                arg0 = resultOut,
-            )
-            HResult(hr).requireSuccess()
-            WinRtReadOnlyListProjection.fromAbi(
-                pointer = PlatformAbi.readPointer(resultOut),
-                elementAdapter = WinRtReferenceValueAdapters.string,
-            ) ?: emptyList()
-        }
-
-    fun contains(formatId: String): Boolean =
-        HString.createReference(formatId).use { formatIdAbi ->
-            PlatformAbi.confinedScope().use { scope ->
-                val resultOut = PlatformAbi.allocateInt8Slot(scope)
-                val hr = ComVtableInvoker.invokeArgs(
-                    instance = defaultInterface.pointer,
-                    slot = dataPackageViewContainsSlot,
-                    arg0 = formatIdAbi.handle,
-                    arg1 = resultOut,
-                )
-                HResult(hr).requireSuccess()
-                PlatformAbi.readInt8(resultOut).toInt() != 0
-            }
-    }
-
-    suspend fun getText(): String =
-        PlatformAbi.confinedScope().use { scope ->
-            val resultOut = PlatformAbi.allocatePointerSlot(scope)
-            val hr = ComVtableInvoker.invokeArgs(
-                instance = defaultInterface.pointer,
-                slot = dataPackageViewGetTextAsyncSlot,
-                arg0 = resultOut,
-            )
-            HResult(hr).requireSuccess()
-            WinRtAsyncProjectionInterop.operation(
-                pointer = PlatformAbi.readPointer(resultOut),
-                resultSignature = WinRtTypeSignature.string(),
-                resultOut = { operationScope -> PlatformAbi.allocatePointerSlot(operationScope) },
-                resultReader = { operationResultOut ->
-                    HString.fromHandle(PlatformAbi.readPointer(operationResultOut), owner = true)
-                        .use { it.toKString() }
-                },
-            ).await()
-        }
-}
-
-private const val clipboardGetContentSlot = 6
-private const val clipboardSetContentSlot = 7
-private const val clipboardClearSlot = 9
-private const val standardDataFormatsTextSlot = 6
-private val dataPackageViewDefaultInterfaceIid = Guid("7B840471-5900-4D85-A90B-10CB85FE3552")
-private const val dataPackageViewAvailableFormatsGetterSlot = 9
-private const val dataPackageViewContainsSlot = 10
-private const val dataPackageViewGetTextAsyncSlot = 12
+private fun getWinUIContent(): DataPackageView =
+    WinRTClipboardClass.getContent()

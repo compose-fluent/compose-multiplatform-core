@@ -449,7 +449,7 @@ private fun cancelAppWindowClosing(args: IInspectableReference) {
             ComVtableInvoker.invokeArgs(
                 instance = closingArgs.pointer,
                 slot = IAppWindowClosingEventArgs.Metadata.CANCEL_SETTER_SLOT,
-                arg0 = BooleanMarshaller.toAbi(true),
+                arg0 = BooleanMarshaller.toAbi(true).toInt(),
             ),
         ).requireSuccess("AppWindowClosingEventArgs.Cancel")
     }

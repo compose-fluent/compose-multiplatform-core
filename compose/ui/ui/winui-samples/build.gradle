@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
@@ -56,35 +58,21 @@ winRt {
     }
     windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
     nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
-    type("Windows.Foundation.IStringable")
-    type("Microsoft.UI.Xaml.Application")
-    type("Microsoft.UI.Xaml.DependencyProperty")
-    type("Microsoft.UI.Xaml.FrameworkElement")
-    type("Microsoft.UI.Xaml.HorizontalAlignment")
-    type("Microsoft.UI.Xaml.LaunchActivatedEventArgs")
-    type("Microsoft.UI.Xaml.RoutedEventArgs")
-    type("Microsoft.UI.Xaml.RoutedEventHandler")
-    type("Microsoft.UI.Xaml.ResourceDictionary")
-    type("Microsoft.UI.Xaml.Thickness")
-    type("Microsoft.UI.Xaml.UIElement")
-    type("Microsoft.UI.Xaml.VerticalAlignment")
-    type("Microsoft.UI.Xaml.Window")
-    type("Microsoft.UI.Xaml.WindowActivatedEventArgs")
-    type("Microsoft.UI.Xaml.WindowActivationState")
-    type("Microsoft.UI.Xaml.Media.RectangleGeometry")
-    type("Microsoft.UI.Dispatching.IDispatcherQueue2")
-    type("Microsoft.UI.Xaml.Controls.Button")
-    type("Microsoft.UI.Xaml.Controls.Canvas")
-    type("Microsoft.UI.Xaml.Controls.ContentControl")
-    type("Microsoft.UI.Xaml.Controls.Panel")
-    type("Microsoft.UI.Xaml.Controls.Primitives.ButtonBase")
-    type("Microsoft.UI.Xaml.Controls.TextBox")
-    type("Microsoft.UI.Xaml.Controls.ToggleSwitch")
-    type("Microsoft.UI.Xaml.Controls.UIElementCollection")
-    type("Windows.Foundation.Rect")
-    type("Windows.Foundation.Size")
-    type("Windows.UI.Xaml.Interop.Type")
-    type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
+    type("Windows.Foundation.Uri")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+    sourceCompatibility = JavaVersion.VERSION_22
+    targetCompatibility = JavaVersion.VERSION_22
+}
+
+tasks.withType(JavaCompile).configureEach {
+    sourceCompatibility = JavaVersion.VERSION_22.toString()
+    targetCompatibility = JavaVersion.VERSION_22.toString()
+    options.release.set(22)
 }
 
 tasks.named("generateWinRtProjections").configure {
@@ -94,6 +82,8 @@ tasks.named("generateWinRtProjections").configure {
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_22)
+        freeCompilerArgs.add("-Xjdk-release=22")
         freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
     }
 }
