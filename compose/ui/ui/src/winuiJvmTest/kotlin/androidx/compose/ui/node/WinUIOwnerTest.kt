@@ -205,6 +205,7 @@ class WinUIOwnerTest {
 
             assertEquals(TextToolbarStatus.Shown, toolbar.status)
             assertEquals(Rect(1f, 2f, 3f, 4f), toolbar.menuForTest()?.rect)
+            assertEquals(listOf("Copy", "Paste"), toolbar.menuForTest()?.itemLabels)
 
             toolbar.menuForTest()?.onCopyRequested?.invoke()
             toolbar.menuForTest()?.onPasteRequested?.invoke()

@@ -114,6 +114,7 @@ internal class WinUIOwner(
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
     private val scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
     private val coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
+    override val textToolbar: TextToolbar = WinUITextToolbar(),
 ) : Owner, OutOfFrameExecutor, MatrixPositionCalculator {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
@@ -143,7 +144,6 @@ internal class WinUIOwner(
     override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager
     override val graphicsContext: GraphicsContext = WinUIGraphicsContext
-    override val textToolbar: TextToolbar = WinUITextToolbar()
     @Suppress("DEPRECATION")
     override val autofillTree: AutofillTree = AutofillTree()
     @Suppress("DEPRECATION")

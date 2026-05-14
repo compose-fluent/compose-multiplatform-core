@@ -100,6 +100,7 @@ class WinUIComposeView(
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
         coordinateMapper = WinUICoordinateMapper.forRoot(root),
+        textToolbar = WinUITextToolbar { root },
     )
 
     private var recomposer: Recomposer? = null
