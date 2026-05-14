@@ -30,7 +30,7 @@ import androidx.compose.ui.draganddrop.WinUIDragAndDropManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.focus.FocusOwnerImpl
-import androidx.compose.ui.focus.WinUIPlatformFocusOwner
+import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
@@ -95,13 +95,12 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.InteropView
-import microsoft.ui.xaml.UIElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
 internal class WinUIOwner(
     override val root: LayoutNode,
-    private val focusRoot: UIElement,
+    platformFocusOwner: PlatformFocusOwner,
     override val retainedValuesStore: RetainedValuesStore,
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
     private val onMeasureAndLayoutRequested: () -> Unit = {},
@@ -120,6 +119,8 @@ internal class WinUIOwner(
         sendIndirectPointerEvent = { focusOwner.dispatchIndirectPointerEvent(it) },
         measureAndLayout = { measureAndLayout() },
         setUncaughtExceptionHandler = { measureAndLayoutDelegate.uncaughtExceptionHandler = it },
+        forceAccessibilityForTesting = { isAccessibilityForcedForTesting = it },
+        setAccessibilityEventBatchIntervalMillis = { accessibilityEventBatchIntervalMillis = it },
     )
     override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
     override val inputModeManager: InputModeManager =
@@ -143,7 +144,7 @@ internal class WinUIOwner(
     override val pointerIconService: PointerIconService = WinUIPointerIconService()
     override val semanticsOwner: SemanticsOwner =
         SemanticsOwner(root, EmptySemanticsModifier(), layoutNodes)
-    override val focusOwner: FocusOwner = FocusOwnerImpl(WinUIPlatformFocusOwner(focusRoot), this)
+    override val focusOwner: FocusOwner = FocusOwnerImpl(platformFocusOwner, this)
     private val mutableWindowInfo = WindowInfoImpl()
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val rectManager: RectManager = RectManager(layoutNodes)
@@ -158,6 +159,13 @@ internal class WinUIOwner(
     override val modifierLocalManager: ModifierLocalManager = ModifierLocalManager(this)
     override val dragAndDropManager: DragAndDropManager = WinUIDragAndDropManager
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
+    private var keepScreenOnCount = 0
+    private var rootInvalidationCount = 0
+    private var lastFrameRateVote = Float.NaN
+    private var scrollChangeCount = 0
+    private var lastScrollDelta = Offset.Zero
+    private var isAccessibilityForcedForTesting = false
+    private var accessibilityEventBatchIntervalMillis: Long = 100L
     override val measureIteration: Long
         get() = measureAndLayoutDelegate.measureIteration
     override val viewConfiguration: ViewConfiguration = WinUIViewConfiguration
@@ -353,6 +361,38 @@ internal class WinUIOwner(
             session = session,
         )
 
+    override fun incrementKeepScreenOnCount() {
+        keepScreenOnCount += 1
+    }
+
+    override fun decrementKeepScreenOnCount() {
+        keepScreenOnCount -= 1
+    }
+
+    override fun voteFrameRate(frameRate: Float) {
+        lastFrameRateVote = frameRate
+    }
+
+    override fun dispatchOnScrollChanged(delta: Offset) {
+        scrollChangeCount += 1
+        lastScrollDelta = delta
+    }
+
+    override fun invalidateRootLayer() {
+        rootInvalidationCount += 1
+    }
+
+    fun ownerStateForTest(): WinUIOwnerStateForTest =
+        WinUIOwnerStateForTest(
+            keepScreenOnCount = keepScreenOnCount,
+            rootInvalidationCount = rootInvalidationCount,
+            lastFrameRateVote = lastFrameRateVote,
+            scrollChangeCount = scrollChangeCount,
+            lastScrollDelta = lastScrollDelta,
+            isAccessibilityForcedForTesting = isAccessibilityForcedForTesting,
+            accessibilityEventBatchIntervalMillis = accessibilityEventBatchIntervalMillis,
+        )
+
     override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen
 
     override fun localToScreen(localPosition: Offset): Offset = localPosition
@@ -411,3 +451,13 @@ internal class WinUIOwner(
         return focusOwner.moveFocus(focusDirection)
     }
 }
+
+internal data class WinUIOwnerStateForTest(
+    val keepScreenOnCount: Int,
+    val rootInvalidationCount: Int,
+    val lastFrameRateVote: Float,
+    val scrollChangeCount: Int,
+    val lastScrollDelta: Offset,
+    val isAccessibilityForcedForTesting: Boolean,
+    val accessibilityEventBatchIntervalMillis: Long,
+)

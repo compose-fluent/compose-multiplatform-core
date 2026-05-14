@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.WinUIPlatformFocusOwner
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -81,7 +82,7 @@ class WinUIComposeView(
     private val retainedValuesStore = WinUIRetainedValuesStore()
     internal val owner = WinUIOwner(
         root = rootNode,
-        focusRoot = root,
+        platformFocusOwner = WinUIPlatformFocusOwner(root),
         retainedValuesStore = retainedValuesStore,
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,

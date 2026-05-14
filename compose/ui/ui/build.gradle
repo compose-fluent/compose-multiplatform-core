@@ -177,7 +177,9 @@ androidXMultiplatform {
             implementation(libs.kotlinCoroutinesTest)
             implementation(libs.kotlinReflect)
             implementation(project(":compose:ui:ui-util"))
-            implementation(project(":compose:ui:ui-test"))
+            if (!composeWinUiJvmTargetEnabled) {
+                implementation(project(":compose:ui:ui-test"))
+            }
         }
 
         jvmAndAndroidMain.dependencies {
@@ -403,7 +405,9 @@ kotlin {
             }
 
             winuiTest {
-                dependsOn(commonTest)
+                dependencies {
+                    implementation(libs.kotlinTest)
+                }
             }
 
             if (composeWinUiJvmTargetEnabled) {

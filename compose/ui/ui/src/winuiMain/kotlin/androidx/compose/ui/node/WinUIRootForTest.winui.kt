@@ -30,6 +30,8 @@ internal class WinUIRootForTest(
     private val sendIndirectPointerEvent: (IndirectPointerEvent) -> Boolean,
     private val measureAndLayout: () -> Unit,
     private val setUncaughtExceptionHandler: (RootForTest.UncaughtExceptionHandler?) -> Unit,
+    private val forceAccessibilityForTesting: (Boolean) -> Unit,
+    private val setAccessibilityEventBatchIntervalMillis: (Long) -> Unit,
 ) : RootForTest {
     override val density: Density get() = densityProvider()
     override val semanticsOwner: SemanticsOwner get() = semanticsOwnerProvider()
@@ -47,5 +49,13 @@ internal class WinUIRootForTest(
 
     override fun setUncaughtExceptionHandler(handler: RootForTest.UncaughtExceptionHandler?) {
         setUncaughtExceptionHandler.invoke(handler)
+    }
+
+    override fun forceAccessibilityForTesting(enable: Boolean) {
+        forceAccessibilityForTesting.invoke(enable)
+    }
+
+    override fun setAccessibilityEventBatchIntervalMillis(intervalMillis: Long) {
+        setAccessibilityEventBatchIntervalMillis.invoke(intervalMillis)
     }
 }
