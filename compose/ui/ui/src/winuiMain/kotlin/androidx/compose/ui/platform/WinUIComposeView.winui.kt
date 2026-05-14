@@ -86,6 +86,7 @@ class WinUIComposeView(
         retainedValuesStore = retainedValuesStore,
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
+        onRootInvalidated = ::scheduleRootContentSync,
     )
 
     private var recomposer: Recomposer? = null

@@ -130,6 +130,7 @@
 - [x] Add repository-local WinUI owner smoke validation for end-apply listener de-duplication and same-cycle draining.
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.setUncaughtExceptionHandler` routing layout exceptions.
 - [x] Add repository-local WinUI owner test validation for keep-screen-on, accessibility testing controls, frame-rate vote, scroll-change dispatch, and root invalidation state hooks.
+- [x] Add repository-local WinUI owner test validation for semantics/layout event routing, root invalidation callbacks, scroll callbacks, and sensitive-content state hooks.
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendIndirectPointerEvent` dispatching through the focused indirect pointer input node.
 - [x] Add repository-local WinUI owner smoke validation for basic pointer press/release dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for pointer move dispatch and coordinate propagation through `PointerInputModifierNode`.

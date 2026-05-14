@@ -105,6 +105,12 @@ internal class WinUIOwner(
     override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
     private val onMeasureAndLayoutRequested: () -> Unit = {},
     private val onInteropTreeChanged: () -> Unit = {},
+    private val onRootInvalidated: () -> Unit = {},
+    private val onSemanticsChanged: (SemanticsOwner) -> Unit = {},
+    private val onLayoutChanged: (SemanticsOwner, Int) -> Unit = { _, _ -> },
+    private val onScrollChanged: (Offset) -> Unit = {},
+    private val onKeepScreenOnChanged: (Boolean) -> Unit = {},
+    private val onSensitiveContentChanged: (Boolean) -> Unit = {},
 ) : Owner {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private var hasPendingLayoutCompletedListener = false
@@ -160,6 +166,10 @@ internal class WinUIOwner(
     override val dragAndDropManager: DragAndDropManager = WinUIDragAndDropManager
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
     private var keepScreenOnCount = 0
+    private var sensitiveContentCount = 0
+    private var semanticsChangeCount = 0
+    private var layoutChangeCount = 0
+    private var lastLayoutChangedSemanticsId = -1
     private var rootInvalidationCount = 0
     private var lastFrameRateVote = Float.NaN
     private var scrollChangeCount = 0
@@ -301,9 +311,16 @@ internal class WinUIOwner(
         explicitLayer: GraphicsLayer?,
     ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer)
 
-    override fun onSemanticsChange() = Unit
+    override fun onSemanticsChange() {
+        semanticsChangeCount += 1
+        onSemanticsChanged(semanticsOwner)
+    }
 
-    override fun onLayoutChange(layoutNode: LayoutNode) = Unit
+    override fun onLayoutChange(layoutNode: LayoutNode) {
+        layoutChangeCount += 1
+        lastLayoutChangedSemanticsId = layoutNode.semanticsId
+        onLayoutChanged(semanticsOwner, layoutNode.semanticsId)
+    }
 
     override fun onLayoutNodeDeactivated(layoutNode: LayoutNode) {
         rectManager.remove(layoutNode)
@@ -361,12 +378,32 @@ internal class WinUIOwner(
             session = session,
         )
 
+    override fun incrementSensitiveComponentCount() {
+        sensitiveContentCount += 1
+        if (sensitiveContentCount == 1) {
+            onSensitiveContentChanged(true)
+        }
+    }
+
+    override fun decrementSensitiveComponentCount() {
+        sensitiveContentCount -= 1
+        if (sensitiveContentCount == 0) {
+            onSensitiveContentChanged(false)
+        }
+    }
+
     override fun incrementKeepScreenOnCount() {
         keepScreenOnCount += 1
+        if (keepScreenOnCount == 1) {
+            onKeepScreenOnChanged(true)
+        }
     }
 
     override fun decrementKeepScreenOnCount() {
         keepScreenOnCount -= 1
+        if (keepScreenOnCount == 0) {
+            onKeepScreenOnChanged(false)
+        }
     }
 
     override fun voteFrameRate(frameRate: Float) {
@@ -376,15 +413,21 @@ internal class WinUIOwner(
     override fun dispatchOnScrollChanged(delta: Offset) {
         scrollChangeCount += 1
         lastScrollDelta = delta
+        onScrollChanged(delta)
     }
 
     override fun invalidateRootLayer() {
         rootInvalidationCount += 1
+        onRootInvalidated()
     }
 
     fun ownerStateForTest(): WinUIOwnerStateForTest =
         WinUIOwnerStateForTest(
             keepScreenOnCount = keepScreenOnCount,
+            sensitiveContentCount = sensitiveContentCount,
+            semanticsChangeCount = semanticsChangeCount,
+            layoutChangeCount = layoutChangeCount,
+            lastLayoutChangedSemanticsId = lastLayoutChangedSemanticsId,
             rootInvalidationCount = rootInvalidationCount,
             lastFrameRateVote = lastFrameRateVote,
             scrollChangeCount = scrollChangeCount,
@@ -454,6 +497,10 @@ internal class WinUIOwner(
 
 internal data class WinUIOwnerStateForTest(
     val keepScreenOnCount: Int,
+    val sensitiveContentCount: Int,
+    val semanticsChangeCount: Int,
+    val layoutChangeCount: Int,
+    val lastLayoutChangedSemanticsId: Int,
     val rootInvalidationCount: Int,
     val lastFrameRateVote: Float,
     val scrollChangeCount: Int,
