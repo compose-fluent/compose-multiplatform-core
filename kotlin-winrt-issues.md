@@ -447,7 +447,10 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
-- **Status:** Open
+- **Status:** Open. Still reproduced after syncing `external/kotlin-winrt`
+  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`)
+  and temporarily replacing the compose-winui workaround with generated
+  `DisplayRequest.requestActive()` / `requestRelease()` calls.
 - **Observed in:** `Windows.System.Display.DisplayRequest`
 - **Symptom:** `DisplayRequest()` activates, but calling generated
   `requestActive()` or `requestRelease()` fails with:
