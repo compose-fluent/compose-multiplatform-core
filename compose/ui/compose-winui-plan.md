@@ -128,6 +128,7 @@
 - [x] Add repository-local WinUI owner smoke validation for Tab and Shift+Tab focus traversal through `RootForTest.sendKeyEvent`.
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.semanticsOwner` exposing semantics nodes and properties.
 - [x] Add repository-local WinUI owner smoke validation for end-apply listener de-duplication and same-cycle draining.
+- [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendIndirectPointerEvent` dispatching through the focused indirect pointer input node.
 - [x] Add repository-local WinUI owner smoke validation for basic pointer press/release dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for pointer move dispatch and coordinate propagation through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for canceling active pointer input when the owner is disposed.

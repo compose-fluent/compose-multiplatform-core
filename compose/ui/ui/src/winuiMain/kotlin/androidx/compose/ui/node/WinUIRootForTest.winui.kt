@@ -27,6 +27,7 @@ internal class WinUIRootForTest(
     private val semanticsOwnerProvider: () -> SemanticsOwner,
     private val textInputServiceProvider: () -> TextInputService,
     private val sendKeyEvent: (KeyEvent) -> Boolean,
+    private val sendIndirectPointerEvent: (IndirectPointerEvent) -> Boolean,
     private val measureAndLayout: () -> Unit,
 ) : RootForTest {
     override val density: Density get() = densityProvider()
@@ -37,7 +38,7 @@ internal class WinUIRootForTest(
     override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = sendKeyEvent.invoke(keyEvent)
 
     override fun sendIndirectPointerEvent(indirectPointerEvent: IndirectPointerEvent): Boolean =
-        false
+        sendIndirectPointerEvent.invoke(indirectPointerEvent)
 
     override fun measureAndLayoutForTest() {
         measureAndLayout()

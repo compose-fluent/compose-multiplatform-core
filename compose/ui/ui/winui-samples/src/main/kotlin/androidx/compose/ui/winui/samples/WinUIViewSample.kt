@@ -46,6 +46,11 @@ import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.indirect.IndirectPointerEvent
+import androidx.compose.ui.input.indirect.IndirectPointerEventPrimaryDirectionalMotionAxis
+import androidx.compose.ui.input.indirect.IndirectPointerEventType
+import androidx.compose.ui.input.indirect.IndirectPointerInputChange
+import androidx.compose.ui.input.indirect.IndirectPointerInputModifierNode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -55,6 +60,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
@@ -422,6 +428,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootFocusTraversalKeySmoke()
             runWinUIRootSemanticsSmoke()
             runWinUIOwnerEndApplyChangesSmoke()
+            runWinUIRootIndirectPointerSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
@@ -1668,6 +1675,59 @@ private object ComposeWinUiSmokeApp {
     }
 
     @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIRootIndirectPointerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val focusRequester = FocusRequester()
+        val probe = WinUIIndirectPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        probe.focused = it.isFocused
+                    }
+                    .winUIIndirectPointerInputSmoke(probe)
+                    .focusTarget(),
+                content = {},
+            ) { _, _ ->
+                layout(1, 1) {}
+            }
+        }
+        withFrameNanos { }
+        check(focusRequester.requestFocus()) {
+            "WinUI root indirect pointer smoke could not focus the target."
+        }
+        awaitCondition("WinUI root indirect pointer target focused") {
+            probe.focused
+        }
+        val event = IndirectPointerEvent(
+            changes = listOf(
+                IndirectPointerInputChange(
+                    id = PointerId(0),
+                    uptimeMillis = 2L,
+                    position = Offset(4f, 6f),
+                    pressed = true,
+                    pressure = 1f,
+                    previousUptimeMillis = 1L,
+                    previousPosition = Offset(3f, 5f),
+                    previousPressed = true,
+                )
+            ),
+            type = IndirectPointerEventType.Move,
+            primaryDirectionalMotionAxis = IndirectPointerEventPrimaryDirectionalMotionAxis.X,
+        )
+        check(currentComposeView.rootForTest().sendIndirectPointerEvent(event)) {
+            "WinUI RootForTest did not report the indirect pointer event as consumed."
+        }
+        check(probe.events == listOf("Initial:Move", "Main:Move", "Final:Move")) {
+            "WinUI RootForTest dispatched indirect pointer events out of order: " +
+                "${probe.events}."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: root indirect pointer event")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIPointerInputSmoke() {
         val currentComposeView = WinUIComposeView()
         val probe = WinUIPointerInputSmokeProbe()
@@ -2160,6 +2220,46 @@ private class WinUIOwnerEndApplyChangesNode(
             }
         }
     }
+}
+
+private class WinUIIndirectPointerInputSmokeProbe {
+    val events = mutableListOf<String>()
+    var focused = false
+}
+
+private fun Modifier.winUIIndirectPointerInputSmoke(
+    probe: WinUIIndirectPointerInputSmokeProbe
+): Modifier = this then WinUIIndirectPointerInputSmokeElement(probe)
+
+private data class WinUIIndirectPointerInputSmokeElement(
+    private val probe: WinUIIndirectPointerInputSmokeProbe,
+) : ModifierNodeElement<WinUIIndirectPointerInputSmokeNode>() {
+    override fun create(): WinUIIndirectPointerInputSmokeNode =
+        WinUIIndirectPointerInputSmokeNode(probe)
+
+    override fun update(node: WinUIIndirectPointerInputSmokeNode) {
+        node.probe = probe
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "winUIIndirectPointerInputSmoke"
+    }
+}
+
+private class WinUIIndirectPointerInputSmokeNode(
+    var probe: WinUIIndirectPointerInputSmokeProbe,
+) : Modifier.Node(), IndirectPointerInputModifierNode {
+    override fun onIndirectPointerEvent(
+        event: IndirectPointerEvent,
+        pass: PointerEventPass,
+    ) {
+        probe.events += "$pass:${event.type}"
+        if (pass == PointerEventPass.Main) {
+            event.changes.forEach { it.consume() }
+        }
+    }
+
+    override fun onCancelIndirectPointerInput() = Unit
 }
 
 private fun Modifier.winUIPointerInputSmoke(

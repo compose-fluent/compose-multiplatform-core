@@ -117,6 +117,7 @@ internal class WinUIOwner(
         semanticsOwnerProvider = { semanticsOwner },
         textInputServiceProvider = { textInputService },
         sendKeyEvent = { focusOwner.dispatchKeyEvent(it) || handleFocusKeys(it) },
+        sendIndirectPointerEvent = { focusOwner.dispatchIndirectPointerEvent(it) },
         measureAndLayout = { measureAndLayout() },
     )
     override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
