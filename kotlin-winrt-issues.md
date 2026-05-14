@@ -281,7 +281,7 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
 - **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
-  from upstream `2bca1262` (`Remove active event callbacks during shutdown`);
+  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`);
   KWINRT-016 no longer blocks this retest.
 - **Observed in:** repository-local `runWinUIViewSample` on Microsoft OpenJDK
   25.0.3 with Windows App SDK callbacks
