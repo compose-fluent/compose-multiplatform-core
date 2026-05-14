@@ -143,7 +143,7 @@ internal class WinUIOwner(
     override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager
     override val graphicsContext: GraphicsContext = WinUIGraphicsContext
-    override val textToolbar: TextToolbar = WinUITextToolbar
+    override val textToolbar: TextToolbar = WinUITextToolbar()
     @Suppress("DEPRECATION")
     override val autofillTree: AutofillTree = AutofillTree()
     @Suppress("DEPRECATION")

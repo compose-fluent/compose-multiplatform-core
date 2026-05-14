@@ -18,16 +18,63 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.geometry.Rect
 
-internal object WinUITextToolbar : TextToolbar {
+internal class WinUITextToolbar : TextToolbar {
+    private var currentMenu: WinUITextToolbarMenu? = null
+
+    override val status: TextToolbarStatus
+        get() = if (currentMenu == null) {
+            TextToolbarStatus.Hidden
+        } else {
+            TextToolbarStatus.Shown
+        }
+
     override fun showMenu(
         rect: Rect,
         onCopyRequested: (() -> Unit)?,
         onPasteRequested: (() -> Unit)?,
         onCutRequested: (() -> Unit)?,
         onSelectAllRequested: (() -> Unit)?,
-    ) = Unit
+        onAutofillRequested: (() -> Unit)?,
+    ) {
+        currentMenu = WinUITextToolbarMenu(
+            rect = rect,
+            onCopyRequested = onCopyRequested,
+            onPasteRequested = onPasteRequested,
+            onCutRequested = onCutRequested,
+            onSelectAllRequested = onSelectAllRequested,
+            onAutofillRequested = onAutofillRequested,
+        )
+    }
 
-    override fun hide() = Unit
+    override fun showMenu(
+        rect: Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?,
+    ) {
+        showMenu(
+            rect = rect,
+            onCopyRequested = onCopyRequested,
+            onPasteRequested = onPasteRequested,
+            onCutRequested = onCutRequested,
+            onSelectAllRequested = onSelectAllRequested,
+            onAutofillRequested = null,
+        )
+    }
 
-    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+    override fun hide() {
+        currentMenu = null
+    }
+
+    internal fun menuForTest(): WinUITextToolbarMenu? = currentMenu
 }
+
+internal data class WinUITextToolbarMenu(
+    val rect: Rect,
+    val onCopyRequested: (() -> Unit)?,
+    val onPasteRequested: (() -> Unit)?,
+    val onCutRequested: (() -> Unit)?,
+    val onSelectAllRequested: (() -> Unit)?,
+    val onAutofillRequested: (() -> Unit)?,
+)

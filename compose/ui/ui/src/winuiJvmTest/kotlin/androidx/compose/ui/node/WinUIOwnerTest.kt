@@ -25,6 +25,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.RootMeasurePolicy
+import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -177,6 +179,42 @@ class WinUIOwnerTest {
             owner.localToScreen(matrix)
 
             assertEquals(Offset(30f, 40f), matrix.map(Offset.Zero))
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun textToolbarTracksMenuState() {
+        val owner = createOwner()
+        try {
+            val toolbar = owner.textToolbar as WinUITextToolbar
+            var copyRequests = 0
+            var pasteRequests = 0
+
+            assertEquals(TextToolbarStatus.Hidden, toolbar.status)
+
+            toolbar.showMenu(
+                rect = Rect(1f, 2f, 3f, 4f),
+                onCopyRequested = { copyRequests += 1 },
+                onPasteRequested = { pasteRequests += 1 },
+                onCutRequested = null,
+                onSelectAllRequested = null,
+                onAutofillRequested = null,
+            )
+
+            assertEquals(TextToolbarStatus.Shown, toolbar.status)
+            assertEquals(Rect(1f, 2f, 3f, 4f), toolbar.menuForTest()?.rect)
+
+            toolbar.menuForTest()?.onCopyRequested?.invoke()
+            toolbar.menuForTest()?.onPasteRequested?.invoke()
+            assertEquals(1, copyRequests)
+            assertEquals(1, pasteRequests)
+
+            toolbar.hide()
+
+            assertEquals(TextToolbarStatus.Hidden, toolbar.status)
+            assertNull(toolbar.menuForTest())
         } finally {
             owner.dispose()
         }
