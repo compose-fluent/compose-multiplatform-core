@@ -127,7 +127,7 @@ internal class WinUIOwner(
         densityProvider = { density },
         semanticsOwnerProvider = { semanticsOwner },
         textInputServiceProvider = { textInputService },
-        sendKeyEvent = { focusOwner.dispatchKeyEvent(it) || handleFocusKeys(it) },
+        sendKeyEvent = ::sendKeyEvent,
         sendIndirectPointerEvent = { focusOwner.dispatchIndirectPointerEvent(it) },
         measureAndLayout = { measureAndLayout() },
         drainOutOfFrameQueue = ::drainOutOfFrameQueue,
@@ -546,6 +546,12 @@ internal class WinUIOwner(
 
     internal fun cancelPointerInput() {
         pointerInputEventProcessor.processCancel()
+    }
+
+    internal fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
+        if (isDisposed) return false
+        inputModeManager.requestInputMode(InputMode.Keyboard)
+        return focusOwner.dispatchKeyEvent(keyEvent) || handleFocusKeys(keyEvent)
     }
 
     private fun handleFocusKeys(keyEvent: KeyEvent): Boolean {
