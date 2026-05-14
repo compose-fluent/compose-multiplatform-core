@@ -97,6 +97,7 @@ class WinUIComposeView(
         onRootInvalidated = ::scheduleRootContentSync,
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
+        scheduleOutOfFrame = ::scheduleOutOfFrame,
     )
 
     private var recomposer: Recomposer? = null
@@ -221,6 +222,12 @@ class WinUIComposeView(
             if (!isDisposed) {
                 syncRootContent()
             }
+        }
+    }
+
+    private fun scheduleOutOfFrame(block: () -> Unit) {
+        if (!root.dispatcherQueue.tryEnqueue { block() }) {
+            block()
         }
     }
 

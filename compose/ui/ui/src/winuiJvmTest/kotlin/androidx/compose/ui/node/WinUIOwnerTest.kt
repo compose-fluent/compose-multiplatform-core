@@ -28,6 +28,8 @@ import androidx.compose.ui.sensitiveContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WinUIOwnerTest {
@@ -113,7 +115,39 @@ class WinUIOwnerTest {
         }
     }
 
-    private fun createOwner(events: OwnerEvents = OwnerEvents()): WinUIOwner {
+    @Test
+    fun outOfFrameExecutorSchedulesAndDrainsForTests() {
+        val scheduled = mutableListOf<() -> Unit>()
+        val owner = createOwner(
+            scheduleOutOfFrame = { scheduled += it }
+        )
+        try {
+            val executor = assertNotNull(owner.outOfFrameExecutor)
+            val events = mutableListOf<String>()
+
+            executor.schedule { events += "first" }
+            executor.schedule { events += "second" }
+
+            assertEquals(1, scheduled.size)
+            assertEquals(emptyList(), events)
+
+            owner.rootForTest.measureAndLayoutForTest()
+
+            assertEquals(listOf("second", "first"), events)
+
+            scheduled.single().invoke()
+            assertEquals(listOf("second", "first"), events)
+        } finally {
+            owner.dispose()
+        }
+
+        assertNull(owner.outOfFrameExecutor)
+    }
+
+    private fun createOwner(
+        events: OwnerEvents = OwnerEvents(),
+        scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
+    ): WinUIOwner {
         val root = LayoutNode().also {
             it.measurePolicy = RootMeasurePolicy
         }
@@ -129,6 +163,7 @@ class WinUIOwnerTest {
             onScrollChanged = { events.lastScrollDelta = it },
             onKeepScreenOnChanged = { events.keepScreenOnValues += it },
             onSensitiveContentChanged = { events.sensitiveContentValues += it },
+            scheduleOutOfFrame = scheduleOutOfFrame,
         )
     }
 }

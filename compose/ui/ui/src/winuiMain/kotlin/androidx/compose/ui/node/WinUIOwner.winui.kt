@@ -111,9 +111,12 @@ internal class WinUIOwner(
     private val onScrollChanged: (Offset) -> Unit = {},
     private val onKeepScreenOnChanged: (Boolean) -> Unit = {},
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
-) : Owner {
+    private val scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
+) : Owner, OutOfFrameExecutor {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
+    private val outOfFrameQueue = ArrayDeque<() -> Unit>()
     private var hasPendingLayoutCompletedListener = false
+    private var isDisposed = false
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
@@ -124,6 +127,7 @@ internal class WinUIOwner(
         sendKeyEvent = { focusOwner.dispatchKeyEvent(it) || handleFocusKeys(it) },
         sendIndirectPointerEvent = { focusOwner.dispatchIndirectPointerEvent(it) },
         measureAndLayout = { measureAndLayout() },
+        drainOutOfFrameQueue = ::drainOutOfFrameQueue,
         setUncaughtExceptionHandler = { measureAndLayoutDelegate.uncaughtExceptionHandler = it },
         forceAccessibilityForTesting = { isAccessibilityForcedForTesting = it },
         setAccessibilityEventBatchIntervalMillis = { accessibilityEventBatchIntervalMillis = it },
@@ -193,6 +197,8 @@ internal class WinUIOwner(
     }
 
     fun dispose() {
+        isDisposed = true
+        outOfFrameQueue.clear()
         if (root.isAttached) {
             root.detach()
         }
@@ -419,6 +425,24 @@ internal class WinUIOwner(
     override fun invalidateRootLayer() {
         rootInvalidationCount += 1
         onRootInvalidated()
+    }
+
+    override val outOfFrameExecutor: OutOfFrameExecutor?
+        get() = if (isDisposed) null else this
+
+    override fun schedule(block: () -> Unit) {
+        if (isDisposed) return
+        val shouldSchedule = outOfFrameQueue.isEmpty()
+        outOfFrameQueue.addLast(block)
+        if (shouldSchedule) {
+            scheduleOutOfFrame(::drainOutOfFrameQueue)
+        }
+    }
+
+    private fun drainOutOfFrameQueue() {
+        while (!isDisposed && outOfFrameQueue.isNotEmpty()) {
+            outOfFrameQueue.removeLast().invoke()
+        }
     }
 
     fun ownerStateForTest(): WinUIOwnerStateForTest =

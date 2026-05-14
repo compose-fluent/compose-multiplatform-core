@@ -29,6 +29,7 @@ internal class WinUIRootForTest(
     private val sendKeyEvent: (KeyEvent) -> Boolean,
     private val sendIndirectPointerEvent: (IndirectPointerEvent) -> Boolean,
     private val measureAndLayout: () -> Unit,
+    private val drainOutOfFrameQueue: () -> Unit,
     private val setUncaughtExceptionHandler: (RootForTest.UncaughtExceptionHandler?) -> Unit,
     private val forceAccessibilityForTesting: (Boolean) -> Unit,
     private val setAccessibilityEventBatchIntervalMillis: (Long) -> Unit,
@@ -45,6 +46,7 @@ internal class WinUIRootForTest(
 
     override fun measureAndLayoutForTest() {
         measureAndLayout()
+        drainOutOfFrameQueue()
     }
 
     override fun setUncaughtExceptionHandler(handler: RootForTest.UncaughtExceptionHandler?) {
