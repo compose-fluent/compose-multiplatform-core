@@ -428,6 +428,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootFocusTraversalKeySmoke()
             runWinUIRootSemanticsSmoke()
             runWinUIOwnerEndApplyChangesSmoke()
+            runWinUIRootUncaughtExceptionHandlerSmoke()
             runWinUIRootIndirectPointerSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
@@ -1672,6 +1673,34 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: owner end apply changes")
+    }
+
+    private suspend fun runWinUIRootUncaughtExceptionHandlerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val shouldThrow = mutableStateOf(false)
+        val expected = IllegalStateException("WinUI layout exception handler smoke")
+        var captured: Throwable? = null
+        currentComposeView.setContent {
+            Layout(content = {}) { _, _ ->
+                if (shouldThrow.value) throw expected
+                layout(1, 1) {}
+            }
+        }
+        currentComposeView.rootForTest().setUncaughtExceptionHandler(
+            object : RootForTest.UncaughtExceptionHandler {
+                override fun onUncaughtException(t: Throwable) {
+                    captured = t
+                }
+            }
+        )
+        shouldThrow.value = true
+        currentComposeView.rootForTest().measureAndLayoutForTest()
+        awaitCondition("WinUI root uncaught exception handler") {
+            captured === expected
+        }
+        currentComposeView.rootForTest().setUncaughtExceptionHandler(null)
+        currentComposeView.dispose()
+        println("compose-winui-sample: root uncaught exception handler")
     }
 
     @OptIn(InternalComposeUiApi::class)

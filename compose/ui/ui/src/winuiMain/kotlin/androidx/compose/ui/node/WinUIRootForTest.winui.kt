@@ -29,6 +29,7 @@ internal class WinUIRootForTest(
     private val sendKeyEvent: (KeyEvent) -> Boolean,
     private val sendIndirectPointerEvent: (IndirectPointerEvent) -> Boolean,
     private val measureAndLayout: () -> Unit,
+    private val setUncaughtExceptionHandler: (RootForTest.UncaughtExceptionHandler?) -> Unit,
 ) : RootForTest {
     override val density: Density get() = densityProvider()
     override val semanticsOwner: SemanticsOwner get() = semanticsOwnerProvider()
@@ -42,5 +43,9 @@ internal class WinUIRootForTest(
 
     override fun measureAndLayoutForTest() {
         measureAndLayout()
+    }
+
+    override fun setUncaughtExceptionHandler(handler: RootForTest.UncaughtExceptionHandler?) {
+        setUncaughtExceptionHandler.invoke(handler)
     }
 }

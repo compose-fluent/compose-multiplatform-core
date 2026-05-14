@@ -119,6 +119,7 @@ internal class WinUIOwner(
         sendKeyEvent = { focusOwner.dispatchKeyEvent(it) || handleFocusKeys(it) },
         sendIndirectPointerEvent = { focusOwner.dispatchIndirectPointerEvent(it) },
         measureAndLayout = { measureAndLayout() },
+        setUncaughtExceptionHandler = { measureAndLayoutDelegate.uncaughtExceptionHandler = it },
     )
     override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
     override val inputModeManager: InputModeManager =
