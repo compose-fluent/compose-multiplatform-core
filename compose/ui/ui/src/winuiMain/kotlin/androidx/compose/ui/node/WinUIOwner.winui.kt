@@ -204,7 +204,7 @@ internal class WinUIOwner(
         if (root.isAttached) {
             root.detach()
         }
-        pointerInputEventProcessor.processCancel()
+        cancelPointerInput()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
     }
@@ -486,6 +486,33 @@ internal class WinUIOwner(
         keyboardModifiers: PointerKeyboardModifiers,
         button: PointerButton?,
     ): Boolean {
+        return sendPointerEvent(
+            eventType = eventType,
+            position = position,
+            uptimeMillis = uptimeMillis,
+            pointerId = pointerId,
+            down = down,
+            type = type,
+            buttons = buttons,
+            keyboardModifiers = keyboardModifiers,
+            button = button,
+            nativeEvent = null,
+        )
+    }
+
+    internal fun sendPointerEvent(
+        eventType: PointerEventType,
+        position: Offset,
+        uptimeMillis: Long,
+        pointerId: Long,
+        down: Boolean,
+        type: PointerType,
+        buttons: PointerButtons,
+        keyboardModifiers: PointerKeyboardModifiers,
+        button: PointerButton?,
+        nativeEvent: Any?,
+    ): Boolean {
+        if (isDisposed) return false
         val event = PointerInputEvent(
             eventType = eventType,
             uptime = uptimeMillis,
@@ -507,6 +534,7 @@ internal class WinUIOwner(
             buttons = buttons,
             keyboardModifiers = keyboardModifiers,
             button = button,
+            nativeEvent = nativeEvent,
         )
         val result = pointerInputEventProcessor.process(
             pointerEvent = event,
@@ -514,6 +542,10 @@ internal class WinUIOwner(
             isInBounds = true,
         )
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
+    }
+
+    internal fun cancelPointerInput() {
+        pointerInputEventProcessor.processCancel()
     }
 
     private fun handleFocusKeys(keyEvent: KeyEvent): Boolean {

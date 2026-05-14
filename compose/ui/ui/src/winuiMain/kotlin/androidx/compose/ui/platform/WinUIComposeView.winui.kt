@@ -113,6 +113,7 @@ class WinUIComposeView(
     private var currentInteropRoots: List<UIElement> = emptyList()
     private var isRootContentSyncScheduled = false
     private var isDisposed = false
+    private val pointerInputAdapter = WinUIPointerInputAdapter(root, owner)
 
     fun setContent(content: @Composable () -> Unit) {
         check(!isDisposed) {
@@ -172,6 +173,7 @@ class WinUIComposeView(
         if (isDisposed) return
         isDisposed = true
         disposeComposition()
+        pointerInputAdapter.dispose()
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
