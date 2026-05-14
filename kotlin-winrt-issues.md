@@ -465,3 +465,20 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   default interfaces such as `Windows.System.Display.IDisplayRequest`, or emit
   runtime-class methods that can invoke the default-interface ABI without the
   generated wrapper.
+
+## KWINRT-021: Protected WinUI cursor API is not usable from compose-winui
+
+- **Status:** Open
+- **Observed in:** `Microsoft.UI.Xaml.UIElement.ProtectedCursor`
+- **Symptom:** WinUI exposes cursor selection through the protected
+  `UIElement.ProtectedCursor` property. The generated `IUIElementProtected`
+  projection is internal and compose-winui cannot author a projected XAML
+  subclass that sets the property through the natural protected API surface.
+- **Impact on compose-winui:** `Modifier.pointerHoverIcon(...)` needs to update
+  the cursor on the WinUI root element when Compose hover state changes.
+- **compose-winui workaround:** `WinUIPointerCursorAdapter.winui.kt` creates a
+  `CoreCursor` / `InputCursor`, then invokes the `IUIElementProtected`
+  `ProtectedCursor` setter slot directly. Search for `KWINRT-021`.
+- **Resolution target:** Provide a supported public projection path for
+  projected XAML subclasses or otherwise expose a safe cursor-setting helper
+  that does not require consumer code to call protected-interface ABI slots.

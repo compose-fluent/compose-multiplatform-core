@@ -34,6 +34,7 @@ import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.WinUIPointerIconService
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
@@ -89,6 +90,8 @@ class WinUIComposeView(
     private val hostDefaultProvider = WinUIHostDefaultProvider(architectureComponentsOwner)
     private val retainedValuesStore = WinUIRetainedValuesStore()
     private val displayRequestController = WinUIDisplayRequestController()
+    private val pointerCursorAdapter = WinUIPointerCursorAdapter(root)
+    private val pointerIconService = WinUIPointerIconService(pointerCursorAdapter::setIcon)
     internal val owner = WinUIOwner(
         root = rootNode,
         platformFocusOwner = WinUIPlatformFocusOwner(root),
@@ -101,6 +104,7 @@ class WinUIComposeView(
         scheduleOutOfFrame = ::scheduleOutOfFrame,
         coordinateMapper = WinUICoordinateMapper.forRoot(root),
         textToolbar = WinUITextToolbar { root },
+        pointerIconService = pointerIconService,
     )
 
     private var recomposer: Recomposer? = null
@@ -176,6 +180,7 @@ class WinUIComposeView(
         disposeComposition()
         keyInputAdapter.dispose()
         pointerInputAdapter.dispose()
+        pointerCursorAdapter.dispose()
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()

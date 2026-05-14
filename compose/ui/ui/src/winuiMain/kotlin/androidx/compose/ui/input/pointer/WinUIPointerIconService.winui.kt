@@ -16,7 +16,9 @@
 
 package androidx.compose.ui.input.pointer
 
-internal class WinUIPointerIconService : PointerIconService {
+internal class WinUIPointerIconService(
+    private val applyIcon: (PointerIcon) -> Unit = {},
+) : PointerIconService {
     private var icon: PointerIcon? = null
     private var stylusHoverIcon: PointerIcon? = null
 
@@ -24,6 +26,7 @@ internal class WinUIPointerIconService : PointerIconService {
 
     override fun setIcon(value: PointerIcon?) {
         icon = value
+        applyIcon(getIcon())
     }
 
     override fun getStylusHoverIcon(): PointerIcon? = stylusHoverIcon

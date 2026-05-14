@@ -115,6 +115,7 @@ internal class WinUIOwner(
     private val scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
     private val coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
     override val textToolbar: TextToolbar = WinUITextToolbar(),
+    override val pointerIconService: PointerIconService = WinUIPointerIconService(),
 ) : Owner, OutOfFrameExecutor, MatrixPositionCalculator {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
@@ -153,7 +154,6 @@ internal class WinUIOwner(
     @Suppress("DEPRECATION")
     override val textInputService: TextInputService = TextInputService(WinUIPlatformTextInputService)
     override val softwareKeyboardController: SoftwareKeyboardController = WinUISoftwareKeyboardController
-    override val pointerIconService: PointerIconService = WinUIPointerIconService()
     override val semanticsOwner: SemanticsOwner =
         SemanticsOwner(root, EmptySemanticsModifier(), layoutNodes)
     override val focusOwner: FocusOwner = FocusOwnerImpl(platformFocusOwner, this)

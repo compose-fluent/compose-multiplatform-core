@@ -16,11 +16,20 @@
 
 package androidx.compose.ui.input.pointer
 
-private class WinUiPointerIcon(private val name: String) : PointerIcon {
+import windows.ui.core.CoreCursorType
+
+internal class WinUIPointerIcon(
+    private val name: String,
+    internal val cursorType: CoreCursorType,
+) : PointerIcon {
     override fun toString(): String = "WinUiPointerIcon($name)"
 }
 
-internal actual val pointerIconDefault: PointerIcon = WinUiPointerIcon("Default")
-internal actual val pointerIconCrosshair: PointerIcon = WinUiPointerIcon("Crosshair")
-internal actual val pointerIconText: PointerIcon = WinUiPointerIcon("Text")
-internal actual val pointerIconHand: PointerIcon = WinUiPointerIcon("Hand")
+internal actual val pointerIconDefault: PointerIcon =
+    WinUIPointerIcon("Default", CoreCursorType.Arrow)
+internal actual val pointerIconCrosshair: PointerIcon =
+    WinUIPointerIcon("Crosshair", CoreCursorType.Cross)
+internal actual val pointerIconText: PointerIcon =
+    WinUIPointerIcon("Text", CoreCursorType.IBeam)
+internal actual val pointerIconHand: PointerIcon =
+    WinUIPointerIcon("Hand", CoreCursorType.Hand)
