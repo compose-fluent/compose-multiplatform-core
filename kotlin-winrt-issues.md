@@ -395,12 +395,13 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `Application.Start`, including any required `IApplicationOverrides` and
   `IXamlMetadataProvider` support for compose-winui's KMP JVM target.
 
-## KWINRT-018: ContentControl.Content string getter does not round-trip assigned strings
+## KWINRT-018: ContentControl.Content string getter did not round-trip assigned strings
 
-- **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
-  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`)
-  and changing repository-local `WinUIViewSample` smokes to read
-  `Button.content` back directly.
+- **Status:** Fixed upstream. Verified after updating `external/kotlin-winrt`
+  to `05273dea` (`Validate nullable content and launcher projection`) and
+  changing repository-local `WinUIViewSample` smokes to read `Button.content`
+  back directly. Full sample process validation still ends at KWINRT-013
+  during shutdown.
 - **Observed in:** `Microsoft.UI.Xaml.Controls.Button.content`, inherited from
   `ContentControl.Content`, in repository-local `WinUIViewSample` smokes after
   syncing `external/kotlin-winrt` from upstream `ec8c5a52`.
@@ -409,18 +410,16 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `button.content` back in the same smoke returns `null`. The z-order smoke
   reproduced this with both sibling buttons after their update lambdas ran:
   `first=null second=null`.
-- **Impact on compose-winui:** Repository-local smokes cannot use
+- **Impact on compose-winui:** Before the upstream fix, repository-local
+  smokes could not use
   `Button.content` getter as proof that `WinUIView` update lambdas ran or that
   sibling ordering was preserved. This also makes `ContentControl.Content`
   unsuitable for state assertions until string/object projection round-tripping
   is fixed.
-- **compose-winui workaround:** `WinUIViewSample` records the intended content
-  value in the update lambda and asserts against that probe value instead of
-  reading `Button.content` back. Search for `KWINRT-018`.
-- **Resolution target:** Make generated `ContentControl.Content` object
-  projection preserve boxed string values, or expose a reliable projected
-  object/value wrapper so strings assigned through the setter can be read back
-  from the getter.
+- **compose-winui workaround:** Removed. `WinUIViewSample` now records the value
+  read from `Button.content` after assignment. Search for `KWINRT-018`.
+- **Resolution:** Upstream object value readback now preserves strings assigned
+  through `ContentControl.Content` setter when read back from the getter.
 
 ## KWINRT-019: Live WinUI controls reject programmatic focus transfer from Compose
 
@@ -448,7 +447,7 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
 - **Status:** Open. Still reproduced after syncing `external/kotlin-winrt`
-  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`)
+  from upstream `05273dea` (`Validate nullable content and launcher projection`)
   and temporarily replacing the compose-winui workaround with generated
   `DisplayRequest.requestActive()` / `requestRelease()` calls.
 - **Observed in:** `Windows.System.Display.DisplayRequest`

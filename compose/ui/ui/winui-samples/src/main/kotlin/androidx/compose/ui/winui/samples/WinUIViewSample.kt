@@ -151,9 +151,9 @@ fun WinUIViewSampleContent(
             lifecycleProbe?.let {
                 it.updateCount += 1
                 it.lastButton = button
-                it.lastContent = content
             }
             button.content = content
+            lifecycleProbe?.lastContent = button.content as? String
             onUpdated?.invoke(button)
         },
         onReset = { button ->
@@ -290,7 +290,6 @@ class WinUIViewLifecycleProbe {
     var resetCount: Int = 0
     var releaseCount: Int = 0
     var lastButton: Button? = null
-    // KWINRT-018: ContentControl.Content string getter currently returns null.
     var lastContent: String? = null
 }
 
@@ -338,8 +337,8 @@ private fun WinUIViewWindowIntegrationContent(
         update = { button ->
             lifecycleProbe.updateCount += 1
             lifecycleProbe.lastButton = button
-            lifecycleProbe.lastContent = buttonContent
             button.content = buttonContent
+            lifecycleProbe.lastContent = button.content as? String
             onButtonUpdated(button)
         },
         onReset = { button ->
@@ -1083,10 +1082,9 @@ private object ComposeWinUiSmokeApp {
                     releaseCount += 1
                 },
                 update = {
-                    // KWINRT-018: validate the update value without reading Button.content back.
                     val content = "button"
                     it.content = content
-                    lastButtonContent = content
+                    lastButtonContent = it.content as? String
                     lastButton = it
                 },
             )
