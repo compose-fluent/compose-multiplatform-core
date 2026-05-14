@@ -397,7 +397,10 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-018: ContentControl.Content string getter does not round-trip assigned strings
 
-- **Status:** Open
+- **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
+  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`)
+  and changing repository-local `WinUIViewSample` smokes to read
+  `Button.content` back directly.
 - **Observed in:** `Microsoft.UI.Xaml.Controls.Button.content`, inherited from
   `ContentControl.Content`, in repository-local `WinUIViewSample` smokes after
   syncing `external/kotlin-winrt` from upstream `ec8c5a52`.
