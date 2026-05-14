@@ -266,9 +266,8 @@ private fun ValidateWinUIClipboard() {
     if (!WinUIClipboardSmokeState.clipboardPassed) {
         LaunchedEffect(clipboard) {
             if (WinUIClipboardSmokeState.clipboardPassed) return@LaunchedEffect
-            // KWINRT-012: keep the WinRT clipboard smoke to one write per sample
-            // run; repeated offscreen compositions can hit transient
-            // OpenClipboard failures while still validating the Compose locals.
+            // Keep the WinRT clipboard smoke to one write per sample run; clipboard ownership can
+            // be transiently locked by another process while still validating the Compose locals.
             WinUIClipboardSmokeState.clipboardPassed = true
             clipboard.setClipEntry(ClipEntry.withPlainText("compose-winui clipboard"))
             val clipboardText = clipboard.getClipEntry()?.getPlainText()
@@ -350,7 +349,7 @@ private fun WinUIViewWindowIntegrationContent(
             lifecycleProbe.lastButton = button
         },
     )
-    // KWINRT-008: live TextBox resource setup is not stable yet; keep it in offscreen smoke.
+    // KWINRT-008: live TextBox still fails in the compose-winui sample after App.xaml resource load.
     WinUIView(
         modifier = fixedSizeAndPositionModifier(
             width = 220,

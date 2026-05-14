@@ -111,11 +111,13 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Controls.TextBox")
         type("Microsoft.UI.Xaml.Controls.ToggleSwitch")
         type("Microsoft.UI.Xaml.Controls.UIElementCollection")
+        type("Microsoft.UI.Xaml.Controls.XamlControlsResources")
         type("Windows.Foundation.Rect")
         type("Windows.Foundation.Size")
         type("Windows.UI.ViewManagement.UISettings")
         type("Windows.UI.Xaml.Interop.Type")
         type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
+        runtimeAsset(layout.projectDirectory.file("src/winuiMain/xaml/App.xaml").asFile.absolutePath)
     }
 
     configurations {

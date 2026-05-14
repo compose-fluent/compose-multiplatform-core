@@ -141,8 +141,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
 
-- **Status:** Open. Reproduced after updating `external/kotlin-winrt` from
-  upstream `09f97af8`; KWINRT-016 no longer blocks this retest.
+- **Status:** Partially fixed upstream; retested after updating
+  `external/kotlin-winrt` to `d76904c6` (`Load WinUI resources through App XAML`).
 - **Observed in:** `Microsoft.UI.Xaml.Application.resources` and
   `Microsoft.UI.Xaml.Controls.XamlControlsResources`
 - **Symptom:** Installing WinUI control resources from the compose-winui
@@ -155,14 +155,16 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** A live-window integration smoke can currently
   host simple controls such as `Button` and `ToggleSwitch`, but enabling a live
   `TextBox` pulls in WinUI text resources and can crash on startup or shutdown.
-- **compose-winui workaround:** `WinUIViewSample.kt` keeps `TextBox` covered by
-  the offscreen control-variety smoke, but the live `Application { Window { ... } }`
-  sample only embeds `Button` and `ToggleSwitch` until this resource setup path
-  is fixed. Search for `KWINRT-008`.
-- **Resolution target:** Make the unpackaged JVM resource setup path support
-  `XamlControlsResources` without requiring a C/C++ authoring host toolchain in
-  compose-ui, or expose a stable runtime helper that can install WinUI control
-  resources for base `Application` instances.
+- **compose-winui workaround:** `Application.winui.kt` now loads the
+  repository-local `App.xaml` through `Application.loadComponent(...)`, but
+  `WinUIViewSample.kt` still keeps `TextBox` covered by the offscreen
+  control-variety smoke. Re-enabling the live `TextBox` after `d76904c6` made
+  the sample native-failfast with `NTSTATUS 0xC000027B` after the
+  `layout rect changed` smoke, before reaching the previous `KWINRT-013`
+  shutdown point. Search for `KWINRT-008`.
+- **Resolution target:** Make the unpackaged JVM resource setup path support a
+  live `TextBox` in the compose-winui `Application { Window { ... } }` sample
+  without native failfast.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
@@ -255,33 +257,27 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   wrapping APIs that can reliably rewrap `IInspectable` values as the desired
   generated runtime class.
 
-## KWINRT-012: Clipboard async and locking need a dispatcher-safe helper
+## KWINRT-012: Clipboard async needs a dispatcher-safe helper
 
 - **Status:** Open
 - **Observed in:** `Windows.ApplicationModel.DataTransfer.Clipboard` and
   `DataPackageView.GetTextAsync`
 - **Symptom:** `DataPackageView.GetTextAsync().join()` can block the WinUI UI
   thread while waiting for an async completion that needs dispatcher progress.
-  Repeated `Clipboard.SetContent(...)` calls during offscreen composition smokes
-  can also fail with `CLIPBRD_E_CANT_OPEN` / `OpenClipboard failed`
-  (`0x800401D0`) when the system clipboard is transiently locked.
 - **Impact on compose-winui:** The deprecated synchronous `ClipboardManager`
-  API cannot safely read arbitrary WinRT clipboard text on the UI thread, and a
-  native clipboard write failure should not crash Compose-only local
-  composition validation.
+  API cannot safely read arbitrary WinRT clipboard text on the UI thread.
 - **compose-winui workaround:** `PlatformClipboard.winui.kt` keeps a small
   in-process plain-text cache for synchronous `ClipboardManager` round-trips,
-  uses suspend/`await()` for `LocalClipboard` text reads, and treats native
-  `SetContent` as best-effort when Compose already has the plain-text payload.
-  Search for `KWINRT-012`.
+  and uses suspend/`await()` for `LocalClipboard` text reads. Search for
+  `KWINRT-012`.
 - **Resolution target:** Provide a dispatcher-safe WinRT async bridge and a
-  retrying clipboard helper for transient `OpenClipboard` failures so
-  compose-winui can remove the best-effort write/cache workaround.
+  non-blocking synchronous clipboard read strategy so compose-winui can remove
+  the plain-text cache workaround.
 
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
 - **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
-  from upstream `cb2b6e85` (`Fix generated WinUI event source registration`);
+  through upstream `d76904c6` (`Load WinUI resources through App XAML`);
   KWINRT-016 no longer blocks this retest.
 - **Observed in:** repository-local `runWinUIViewSample` on Microsoft OpenJDK
   25.0.3 with Windows App SDK callbacks

@@ -27,7 +27,7 @@ import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
 import io.github.composefluent.winrt.runtime.RuntimeScope
-import io.github.composefluent.winrt.runtime.WinRtWinUiResourceManagerBootstrap
+import io.github.composefluent.winrt.runtime.WinRtUri
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.Application as XamlApplication
@@ -45,6 +45,7 @@ fun Application(
             XamlApplication.start {
                 val dispatcherQueue = DispatcherQueue.getForCurrentThread()
                 val application = XamlApplication()
+                XamlApplication.loadComponent(application, WinRtUri("ms-appx:///App.xaml"))
                 val launch = {
                     WinUIApplicationRuntime(
                         application = application,
@@ -72,8 +73,6 @@ private class WinUIApplicationRuntime(
     private val application: XamlApplication,
     private val dispatcherQueue: DispatcherQueue,
 ) : WinUIApplicationContext {
-    private val resourceRegistration =
-        WinRtWinUiResourceManagerBootstrap.registerForApplication(application)
     private val frameClock = WinUIFrameClock(dispatcherQueue)
     private val recomposerParentJob = SupervisorJob()
     private val recomposerContext =
@@ -130,7 +129,6 @@ private class WinUIApplicationRuntime(
         recomposerParentJob.cancel()
         frameClock.cancel()
         root.removeAll()
-        resourceRegistration?.close()
     }
 }
 

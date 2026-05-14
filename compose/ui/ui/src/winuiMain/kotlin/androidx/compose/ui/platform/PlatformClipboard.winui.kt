@@ -81,11 +81,8 @@ internal class WinUIClipboard : Clipboard {
 
     internal fun setText(text: String) {
         lastPlainText = text
-        // KWINRT-012: Windows clipboard can be transiently locked
-        // (CLIPBRD_E_CANT_OPEN / OpenClipboard failed) during repeated
-        // offscreen composition smokes. Keep Compose API state coherent and
-        // treat the native clipboard write as best effort until the runtime has
-        // a retry/dispatcher-safe helper.
+        // Windows clipboard ownership can be transiently locked by another process. Keep Compose
+        // API state coherent and treat the native clipboard write as best effort.
         runCatching { setWinUIContent(DataPackage().apply { setText(text) }) }
     }
 
