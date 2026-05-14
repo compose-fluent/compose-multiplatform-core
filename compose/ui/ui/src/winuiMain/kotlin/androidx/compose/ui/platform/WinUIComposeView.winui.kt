@@ -43,6 +43,8 @@ import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
+import io.github.composefluent.winrt.runtime.ComVtableInvoker
+import io.github.composefluent.winrt.runtime.HResult
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
@@ -66,8 +68,13 @@ import kotlin.coroutines.CoroutineContext
 class WinUIComposeView(
     val root: UIElement,
     private val setRootContent: (List<UIElement>) -> Unit,
+    private val onSensitiveContentChanged: (Boolean) -> Unit = {},
 ) {
     constructor() : this(WinUIRootContentHost())
+
+    internal constructor(
+        onSensitiveContentChanged: (Boolean) -> Unit,
+    ) : this(WinUIRootContentHost(), onSensitiveContentChanged)
 
     internal val rootNode = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
@@ -80,6 +87,7 @@ class WinUIComposeView(
     }
     private val hostDefaultProvider = WinUIHostDefaultProvider(architectureComponentsOwner)
     private val retainedValuesStore = WinUIRetainedValuesStore()
+    private val displayRequestController = WinUIDisplayRequestController()
     internal val owner = WinUIOwner(
         root = rootNode,
         platformFocusOwner = WinUIPlatformFocusOwner(root),
@@ -87,6 +95,8 @@ class WinUIComposeView(
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
         onRootInvalidated = ::scheduleRootContentSync,
+        onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
+        onSensitiveContentChanged = onSensitiveContentChanged,
     )
 
     private var recomposer: Recomposer? = null
@@ -151,6 +161,7 @@ class WinUIComposeView(
         content = null
         updateRootContent(emptyList())
         rootNode.removeAll()
+        displayRequestController.setKeepScreenOn(false)
     }
 
     fun dispose() {
@@ -220,6 +231,45 @@ class WinUIComposeView(
     }
 
     private constructor(host: WinUIRootContentHost) : this(host.root, host::setRootContent)
+
+    private constructor(
+        host: WinUIRootContentHost,
+        onSensitiveContentChanged: (Boolean) -> Unit,
+    ) : this(host.root, host::setRootContent, onSensitiveContentChanged)
+}
+
+private class WinUIDisplayRequestController {
+    private var displayRequest: windows.system.display.DisplayRequest? = null
+    private var isActive = false
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        if (enabled == isActive) return
+        if (enabled) {
+            val request = displayRequest ?: windows.system.display.DisplayRequest().also {
+                displayRequest = it
+            }
+            request.invokeDisplayRequestSlot(windows.system.display.IDisplayRequest.Metadata.REQUESTACTIVE_SLOT)
+            isActive = true
+        } else {
+            val request = displayRequest ?: return
+            request.invokeDisplayRequestSlot(windows.system.display.IDisplayRequest.Metadata.REQUESTRELEASE_SLOT)
+            isActive = false
+        }
+    }
+
+    private fun windows.system.display.DisplayRequest.invokeDisplayRequestSlot(slot: Int) {
+        // KWINRT-020: the generated IDisplayRequest projection factory is not registered.
+        nativeObject.queryInterface(windows.system.display.IDisplayRequest.Metadata.IID)
+            .getOrThrow()
+            .use { displayRequest ->
+                HResult(
+                    ComVtableInvoker.invoke(
+                        instance = displayRequest.pointer,
+                        slot = slot,
+                    ),
+                ).requireSuccess("DisplayRequest")
+            }
+    }
 }
 
 internal class WinUIDispatcher(

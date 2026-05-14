@@ -61,6 +61,7 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
@@ -90,6 +91,7 @@ import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.spatial.RelativeLayoutBounds
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
@@ -314,6 +316,14 @@ private fun WinUIViewWindowIntegrationContent(
         }
     }
     ValidateWinUIOwnerFocus()
+    Layout(
+        modifier = Modifier
+            .keepScreenOn()
+            .sensitiveContent(),
+        content = {},
+    ) { _, _ ->
+        layout(1, 1) {}
+    }
     WinUIView(
         modifier = fixedSizeAndPositionModifier(
             width = 160,

@@ -441,3 +441,22 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   attachment, XAML focus manager, tab-stop, loaded-state, or dispatcher timing
   setup before `UIElement.Focus(FocusState.Programmatic)` can succeed for
   embedded controls.
+
+## KWINRT-020: DisplayRequest default interface projection is not registered
+
+- **Status:** Open
+- **Observed in:** `Windows.System.Display.DisplayRequest`
+- **Symptom:** `DisplayRequest()` activates, but calling generated
+  `requestActive()` or `requestRelease()` fails with:
+  `Generated interface projection factory for 'windows.system.display.IDisplayRequest' is not registered.`
+- **Impact on compose-winui:** `Modifier.keepScreenOn()` should use the
+  Windows Runtime `DisplayRequest` API, but the generated default-interface
+  wrapper is not callable.
+- **compose-winui workaround:** `WinUIComposeView.winui.kt` still activates the
+  generated `DisplayRequest`, then invokes `IDisplayRequest.RequestActive` and
+  `RequestRelease` through the default interface ABI slots. Search for
+  `KWINRT-020`.
+- **Resolution target:** Register generated interface projection factories for
+  default interfaces such as `Windows.System.Display.IDisplayRequest`, or emit
+  runtime-class methods that can invoke the default-interface ABI without the
+  generated wrapper.

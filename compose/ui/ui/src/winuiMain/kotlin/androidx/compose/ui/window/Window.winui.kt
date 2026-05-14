@@ -133,6 +133,7 @@ private class WinUIWindowNode(
     private var appWindowClosingDelegate: WinRtDelegateHandle? =
         createAppWindowClosingDelegate(::handleClosing)
     private var appWindowClosingToken: EventRegistrationToken? = null
+    private var isCaptureProtected = false
 
     var onCloseRequest: () -> Unit = {}
 
@@ -168,7 +169,7 @@ private class WinUIWindowNode(
         set(value) {
             field = value
             if (isReleased) return
-            val view = composeView ?: WinUIComposeView().also {
+            val view = composeView ?: WinUIComposeView(::updateCaptureProtection).also {
                 composeView = it
                 window.content = it.root
                 registerAppWindowChangedHandler()
@@ -222,6 +223,7 @@ private class WinUIWindowNode(
     }
 
     private fun disposeContent() {
+        updateCaptureProtection(false)
         composeView?.dispose()
         composeView = null
     }
@@ -246,6 +248,13 @@ private class WinUIWindowNode(
                 height = appWindowSize.height,
             )
         )
+    }
+
+    private fun updateCaptureProtection(isProtected: Boolean) {
+        if (isCaptureProtected == isProtected) return
+        if (setWindowCaptureProtection(window, isProtected)) {
+            isCaptureProtected = isProtected
+        }
     }
 
     private fun registerAppWindowChangedHandler() {
@@ -296,6 +305,8 @@ private class WinUIWindowNode(
         delegate?.close()
     }
 }
+
+internal expect fun setWindowCaptureProtection(window: XamlWindow, isProtected: Boolean): Boolean
 
 private fun clearWindowSystemBackdrop(window: XamlWindow) {
     // KWINRT-004: generated Window.systemBackdrop cannot currently be set to null.
