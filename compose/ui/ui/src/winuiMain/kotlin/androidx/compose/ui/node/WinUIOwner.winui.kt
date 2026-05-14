@@ -53,6 +53,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.MatrixPositionCalculator
 import androidx.compose.ui.input.pointer.PointerIconService
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputEvent
@@ -112,7 +113,8 @@ internal class WinUIOwner(
     private val onKeepScreenOnChanged: (Boolean) -> Unit = {},
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
     private val scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
-) : Owner, OutOfFrameExecutor {
+    private val coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
+) : Owner, OutOfFrameExecutor, MatrixPositionCalculator {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
     private var hasPendingLayoutCompletedListener = false
@@ -279,9 +281,11 @@ internal class WinUIOwner(
         rectManager.remove(node)
     }
 
-    override fun calculatePositionInWindow(localPosition: Offset): Offset = localPosition
+    override fun calculatePositionInWindow(localPosition: Offset): Offset =
+        coordinateMapper.calculatePositionInWindow(localPosition)
 
-    override fun calculateLocalPosition(positionInWindow: Offset): Offset = positionInWindow
+    override fun calculateLocalPosition(positionInWindow: Offset): Offset =
+        coordinateMapper.calculateLocalPosition(positionInWindow)
 
     override fun requestAutofill(node: LayoutNode) = Unit
 
@@ -460,9 +464,15 @@ internal class WinUIOwner(
             accessibilityEventBatchIntervalMillis = accessibilityEventBatchIntervalMillis,
         )
 
-    override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen
+    override fun screenToLocal(positionOnScreen: Offset): Offset =
+        coordinateMapper.screenToLocal(positionOnScreen)
 
-    override fun localToScreen(localPosition: Offset): Offset = localPosition
+    override fun localToScreen(localPosition: Offset): Offset =
+        coordinateMapper.localToScreen(localPosition)
+
+    override fun localToScreen(localTransform: Matrix) {
+        coordinateMapper.localToScreen(localTransform)
+    }
 
     @OptIn(InternalCoreApi::class)
     fun sendPointerEventForTest(

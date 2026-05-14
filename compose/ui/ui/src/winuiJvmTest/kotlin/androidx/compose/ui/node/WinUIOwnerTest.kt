@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.sensitiveContent
@@ -144,9 +145,47 @@ class WinUIOwnerTest {
         assertNull(owner.outOfFrameExecutor)
     }
 
+    @Test
+    fun coordinateMappingDelegatesToMapper() {
+        val owner = createOwner(
+            coordinateMapper = WinUICoordinateMapper(
+                calculatePositionInWindow = { it + Offset(10f, 20f) },
+                calculateLocalPosition = { it - Offset(10f, 20f) },
+                localToScreen = { it + Offset(30f, 40f) },
+                screenToLocal = { it - Offset(30f, 40f) },
+            )
+        )
+        try {
+            assertEquals(
+                Offset(11f, 22f),
+                owner.calculatePositionInWindow(Offset(1f, 2f))
+            )
+            assertEquals(
+                Offset(1f, 2f),
+                owner.calculateLocalPosition(Offset(11f, 22f))
+            )
+            assertEquals(
+                Offset(31f, 42f),
+                owner.localToScreen(Offset(1f, 2f))
+            )
+            assertEquals(
+                Offset(1f, 2f),
+                owner.screenToLocal(Offset(31f, 42f))
+            )
+
+            val matrix = Matrix()
+            owner.localToScreen(matrix)
+
+            assertEquals(Offset(30f, 40f), matrix.map(Offset.Zero))
+        } finally {
+            owner.dispose()
+        }
+    }
+
     private fun createOwner(
         events: OwnerEvents = OwnerEvents(),
         scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
+        coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
     ): WinUIOwner {
         val root = LayoutNode().also {
             it.measurePolicy = RootMeasurePolicy
@@ -164,6 +203,7 @@ class WinUIOwnerTest {
             onKeepScreenOnChanged = { events.keepScreenOnValues += it },
             onSensitiveContentChanged = { events.sensitiveContentValues += it },
             scheduleOutOfFrame = scheduleOutOfFrame,
+            coordinateMapper = coordinateMapper,
         )
     }
 }

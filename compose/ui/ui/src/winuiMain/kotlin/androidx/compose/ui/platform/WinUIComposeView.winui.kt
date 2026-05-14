@@ -37,6 +37,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.node.WinUICoordinateMapper
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
@@ -98,6 +99,7 @@ class WinUIComposeView(
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
+        coordinateMapper = WinUICoordinateMapper.forRoot(root),
     )
 
     private var recomposer: Recomposer? = null
