@@ -23,6 +23,15 @@ import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.platform.TextToolbarStatus
@@ -216,6 +225,35 @@ class WinUIOwnerTest {
 
             assertEquals(TextToolbarStatus.Hidden, toolbar.status)
             assertNull(toolbar.menuForTest())
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun inputModeManagerUpdatesFromRequestsAndOwnerInputEvents() {
+        val owner = createOwner()
+        try {
+            assertEquals(InputMode.Keyboard, owner.inputModeManager.inputMode)
+
+            assertTrue(owner.inputModeManager.requestInputMode(InputMode.Touch))
+            assertEquals(InputMode.Touch, owner.inputModeManager.inputMode)
+
+            owner.sendKeyEvent(KeyEvent(key = Key.A, type = KeyEventType.KeyDown))
+            assertEquals(InputMode.Keyboard, owner.inputModeManager.inputMode)
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(1f, 2f),
+                uptimeMillis = 3L,
+                pointerId = 4L,
+                down = true,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(isPrimaryPressed = true),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = PointerButton.Primary,
+            )
+            assertEquals(InputMode.Touch, owner.inputModeManager.inputMode)
         } finally {
             owner.dispose()
         }
