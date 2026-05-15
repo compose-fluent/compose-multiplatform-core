@@ -55,7 +55,7 @@ class WinUIOwnerTest {
         val events = OwnerEvents()
         val owner = createOwner(events)
         try {
-            assertFalse(owner.ownerStateForTest().isAccessibilityForcedForTesting)
+            assertFalse(owner.ownerStateForTest().accessibility.isAccessibilityForcedForTesting)
 
             owner.rootForTest.forceAccessibilityForTesting(true)
             owner.rootForTest.setAccessibilityEventBatchIntervalMillis(37L)
@@ -66,8 +66,13 @@ class WinUIOwnerTest {
             owner.invalidateRootLayer()
 
             val state = owner.ownerStateForTest()
-            assertTrue(state.isAccessibilityForcedForTesting)
-            assertEquals(37L, state.accessibilityEventBatchIntervalMillis)
+            assertTrue(state.accessibility.isAccessibilityForcedForTesting)
+            assertEquals(37L, state.accessibility.accessibilityEventBatchIntervalMillis)
+            assertTrue(state.accessibility.currentSemanticsNodesInvalidated)
+            assertTrue(state.accessibility.pendingSemanticsChange)
+            assertEquals(listOf(owner.root.semanticsId), state.accessibility.pendingLayoutNodeIds)
+            assertTrue(state.accessibility.hasPendingScrollChange)
+            assertEquals(Offset(3f, 4f), state.accessibility.pendingScrollDelta)
             assertEquals(1, state.semanticsChangeCount)
             assertEquals(1, state.layoutChangeCount)
             assertEquals(owner.root.semanticsId, state.lastLayoutChangedSemanticsId)
@@ -79,6 +84,36 @@ class WinUIOwnerTest {
             assertEquals(owner.root.semanticsId, events.lastLayoutChangedSemanticsId)
             assertEquals(Offset(3f, 4f), events.lastScrollDelta)
             assertEquals(1, events.rootInvalidated)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityBridgeDefersEventsUntilAccessibilityIsForcedForTesting() {
+        val owner = createOwner()
+        try {
+            owner.rootForTest.setAccessibilityEventBatchIntervalMillis(10_000L)
+            owner.onSemanticsChange()
+
+            var state = owner.ownerStateForTest().accessibility
+            assertFalse(state.isAccessibilityForcedForTesting)
+            assertTrue(state.currentSemanticsNodesInvalidated)
+            assertTrue(state.pendingSemanticsChange)
+            assertFalse(state.hasPendingFlush)
+
+            owner.rootForTest.forceAccessibilityForTesting(true)
+
+            state = owner.ownerStateForTest().accessibility
+            assertTrue(state.isAccessibilityForcedForTesting)
+            assertTrue(state.hasPendingFlush)
+
+            owner.rootForTest.forceAccessibilityForTesting(false)
+
+            state = owner.ownerStateForTest().accessibility
+            assertFalse(state.isAccessibilityForcedForTesting)
+            assertFalse(state.hasPendingFlush)
+            assertTrue(state.currentSemanticsNodesInvalidated)
         } finally {
             owner.dispose()
         }

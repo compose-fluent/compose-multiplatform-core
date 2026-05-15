@@ -72,6 +72,8 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.WinUIAccessibilityBridge
+import androidx.compose.ui.platform.WinUIAccessibilityBridgeState
 import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
@@ -122,6 +124,7 @@ internal class WinUIOwner(
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
     private var hasPendingLayoutCompletedListener = false
     private var isDisposed = false
+    private val accessibilityBridge = WinUIAccessibilityBridge()
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
@@ -134,8 +137,9 @@ internal class WinUIOwner(
         measureAndLayout = { measureAndLayout() },
         drainOutOfFrameQueue = ::drainOutOfFrameQueue,
         setUncaughtExceptionHandler = { measureAndLayoutDelegate.uncaughtExceptionHandler = it },
-        forceAccessibilityForTesting = { isAccessibilityForcedForTesting = it },
-        setAccessibilityEventBatchIntervalMillis = { accessibilityEventBatchIntervalMillis = it },
+        forceAccessibilityForTesting = accessibilityBridge::forceAccessibilityForTesting,
+        setAccessibilityEventBatchIntervalMillis =
+            accessibilityBridge::setAccessibilityEventBatchIntervalMillis,
     )
     override val hapticFeedBack: HapticFeedback = WinUIHapticFeedback
     override val inputModeManager: InputModeManager =
@@ -189,8 +193,6 @@ internal class WinUIOwner(
     private var lastFrameRateVote = Float.NaN
     private var scrollChangeCount = 0
     private var lastScrollDelta = Offset.Zero
-    private var isAccessibilityForcedForTesting = false
-    private var accessibilityEventBatchIntervalMillis: Long = 100L
     override val measureIteration: Long
         get() = measureAndLayoutDelegate.measureIteration
     override val viewConfiguration: ViewConfiguration = WinUIViewConfiguration
@@ -214,6 +216,7 @@ internal class WinUIOwner(
             root.detach()
         }
         cancelPointerInput()
+        accessibilityBridge.dispose()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
     }
@@ -332,12 +335,14 @@ internal class WinUIOwner(
 
     override fun onSemanticsChange() {
         semanticsChangeCount += 1
+        accessibilityBridge.onSemanticsChange(semanticsOwner)
         onSemanticsChanged(semanticsOwner)
     }
 
     override fun onLayoutChange(layoutNode: LayoutNode) {
         layoutChangeCount += 1
         lastLayoutChangedSemanticsId = layoutNode.semanticsId
+        accessibilityBridge.onLayoutChange(semanticsOwner, layoutNode.semanticsId)
         onLayoutChanged(semanticsOwner, layoutNode.semanticsId)
     }
 
@@ -444,6 +449,7 @@ internal class WinUIOwner(
     override fun dispatchOnScrollChanged(delta: Offset) {
         scrollChangeCount += 1
         lastScrollDelta = delta
+        accessibilityBridge.onScrollChanged(delta)
         onScrollChanged(delta)
     }
 
@@ -481,8 +487,7 @@ internal class WinUIOwner(
             lastFrameRateVote = lastFrameRateVote,
             scrollChangeCount = scrollChangeCount,
             lastScrollDelta = lastScrollDelta,
-            isAccessibilityForcedForTesting = isAccessibilityForcedForTesting,
-            accessibilityEventBatchIntervalMillis = accessibilityEventBatchIntervalMillis,
+            accessibility = accessibilityBridge.stateForTest(),
             interopViewFocusRect = interopViewFocusRect,
             interopViewBounds = interopViewBounds.values.toList(),
         )
@@ -619,8 +624,7 @@ internal data class WinUIOwnerStateForTest(
     val lastFrameRateVote: Float,
     val scrollChangeCount: Int,
     val lastScrollDelta: Offset,
-    val isAccessibilityForcedForTesting: Boolean,
-    val accessibilityEventBatchIntervalMillis: Long,
+    val accessibility: WinUIAccessibilityBridgeState,
     val interopViewFocusRect: Rect?,
     val interopViewBounds: List<Rect>,
 )
