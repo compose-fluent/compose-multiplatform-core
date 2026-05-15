@@ -244,6 +244,7 @@ internal class WinUIOwner(
         forceRequest: Boolean,
         scheduleMeasureAndLayout: Boolean,
     ) {
+        if (isDisposed) return
         if (affectsLookahead) {
             if (
                 measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
@@ -264,6 +265,7 @@ internal class WinUIOwner(
         affectsLookahead: Boolean,
         forceRequest: Boolean,
     ) {
+        if (isDisposed) return
         if (affectsLookahead) {
             if (measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)) {
                 onMeasureAndLayoutRequested()
@@ -276,6 +278,7 @@ internal class WinUIOwner(
     }
 
     override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
+        if (isDisposed) return
         measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
         onMeasureAndLayoutRequested()
     }
@@ -302,6 +305,7 @@ internal class WinUIOwner(
     override fun requestAutofill(node: LayoutNode) = Unit
 
     override fun measureAndLayout(sendPointerUpdate: Boolean) {
+        if (isDisposed) return
         if (
             measureAndLayoutDelegate.hasPendingMeasureOrLayout ||
             measureAndLayoutDelegate.hasPendingOnPositionedCallbacks ||
@@ -315,6 +319,7 @@ internal class WinUIOwner(
     }
 
     override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+        if (isDisposed) return
         hasPendingLayoutCompletedListener = false
         measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
         if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
@@ -334,12 +339,14 @@ internal class WinUIOwner(
     ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer)
 
     override fun onSemanticsChange() {
+        if (isDisposed) return
         semanticsChangeCount += 1
         accessibilityBridge.onSemanticsChange(semanticsOwner)
         onSemanticsChanged(semanticsOwner)
     }
 
     override fun onLayoutChange(layoutNode: LayoutNode) {
+        if (isDisposed) return
         layoutChangeCount += 1
         lastLayoutChangedSemanticsId = layoutNode.semanticsId
         accessibilityBridge.onLayoutChange(semanticsOwner, layoutNode.semanticsId)
@@ -362,6 +369,7 @@ internal class WinUIOwner(
 
     @InternalComposeUiApi
     override fun onInteropViewLayoutChange(view: InteropView) {
+        if (isDisposed) return
         onMeasureAndLayoutRequested()
     }
 
@@ -401,6 +409,7 @@ internal class WinUIOwner(
     }
 
     override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
+        if (isDisposed) return
         hasPendingLayoutCompletedListener = true
         measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
         onMeasureAndLayoutRequested()
@@ -447,6 +456,7 @@ internal class WinUIOwner(
     }
 
     override fun dispatchOnScrollChanged(delta: Offset) {
+        if (isDisposed) return
         scrollChangeCount += 1
         lastScrollDelta = delta
         accessibilityBridge.onScrollChanged(delta)
@@ -454,6 +464,7 @@ internal class WinUIOwner(
     }
 
     override fun invalidateRootLayer() {
+        if (isDisposed) return
         rootInvalidationCount += 1
         onRootInvalidated()
     }

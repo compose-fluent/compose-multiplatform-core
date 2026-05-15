@@ -204,6 +204,58 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun disposeSuppressesPendingAndFutureOwnerCallbacks() {
+        val events = OwnerEvents()
+        var measureRequests = 0
+        val scheduledOutOfFrame = mutableListOf<() -> Unit>()
+        val owner = createOwner(
+            events = events,
+            onMeasureAndLayoutRequested = { measureRequests += 1 },
+            scheduleOutOfFrame = { scheduledOutOfFrame += it },
+        )
+        val executor = assertNotNull(owner.outOfFrameExecutor)
+        val outOfFrameEvents = mutableListOf<String>()
+
+        executor.schedule { outOfFrameEvents += "late" }
+        assertEquals(1, scheduledOutOfFrame.size)
+
+        owner.dispose()
+        val measureRequestsAfterDispose = measureRequests
+
+        scheduledOutOfFrame.single().invoke()
+        owner.onRequestMeasure(
+            layoutNode = owner.root,
+            affectsLookahead = false,
+            forceRequest = true,
+            scheduleMeasureAndLayout = true,
+        )
+        owner.onRequestRelayout(
+            layoutNode = owner.root,
+            affectsLookahead = false,
+            forceRequest = true,
+        )
+        owner.requestOnPositionedCallback(owner.root)
+        owner.registerOnLayoutCompletedListener(
+            object : Owner.OnLayoutCompletedListener {
+                override fun onLayoutComplete() {
+                    measureRequests += 100
+                }
+            }
+        )
+        owner.onSemanticsChange()
+        owner.onLayoutChange(owner.root)
+        owner.dispatchOnScrollChanged(Offset(1f, 2f))
+        owner.invalidateRootLayer()
+
+        assertEquals(emptyList(), outOfFrameEvents)
+        assertEquals(measureRequestsAfterDispose, measureRequests)
+        assertEquals(0, events.semanticsChanged)
+        assertEquals(0, events.rootInvalidated)
+        assertEquals(Offset.Unspecified, events.lastScrollDelta)
+        assertNull(owner.outOfFrameExecutor)
+    }
+
+    @Test
     fun coordinateMappingDelegatesToMapper() {
         val owner = createOwner(
             coordinateMapper = WinUICoordinateMapper(
@@ -447,6 +499,7 @@ class WinUIOwnerTest {
 
     private fun createOwner(
         events: OwnerEvents = OwnerEvents(),
+        onMeasureAndLayoutRequested: () -> Unit = {},
         scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
         coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
     ): WinUIOwner {
@@ -457,6 +510,7 @@ class WinUIOwnerTest {
             root = root,
             platformFocusOwner = TestPlatformFocusOwner,
             retainedValuesStore = ForgetfulRetainedValuesStore,
+            onMeasureAndLayoutRequested = onMeasureAndLayoutRequested,
             onRootInvalidated = { events.rootInvalidated += 1 },
             onSemanticsChanged = { events.semanticsChanged += 1 },
             onLayoutChanged = { _, semanticsId ->

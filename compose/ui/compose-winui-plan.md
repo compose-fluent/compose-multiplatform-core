@@ -148,6 +148,7 @@
 - [x] Add repository-local WinUI owner test validation for out-of-frame executor scheduling and `RootForTest.measureAndLayoutForTest()` draining.
 - [x] Add repository-local WinUI owner test validation for window/screen coordinate mapping delegation.
 - [x] Add repository-local WinUI owner test validation for text-toolbar shown/hidden state and request callbacks.
+- [x] Add repository-local WinUI owner test validation that disposal suppresses pending out-of-frame work and future owner scheduling callbacks.
 - [x] Add repository-local WinUI platform hook unit validation for URI scheme handling and WinUI view-configuration defaults.
 - [x] Wire WinUI keep-screen-on to `Windows.System.Display.DisplayRequest` and sensitive content to top-level window capture protection.
 - [x] Add repository-local WinUI accessibility bridge test validation for semantics/layout/scroll invalidation batching and test-forced accessibility enablement.
