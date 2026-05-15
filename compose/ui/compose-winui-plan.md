@@ -139,6 +139,7 @@
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendIndirectPointerEvent` dispatching through the focused indirect pointer input node.
 - [x] Add repository-local WinUI owner smoke validation for basic pointer press/release dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for pointer move dispatch and coordinate propagation through `PointerInputModifierNode`.
+- [x] Add repository-local WinUI owner smoke validation for root pointer enter/exit dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for root pointer-wheel scroll dispatch and `scrollDelta` propagation through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for canceling active pointer input when the owner is disposed.
 - [x] Route WinUI interop view layout changes through `Owner.onInteropViewLayoutChange` so native root synchronization is scheduled when hosted views move or resize.

@@ -486,6 +486,7 @@ internal class WinUIOwner(
         keyboardModifiers: PointerKeyboardModifiers,
         button: PointerButton?,
         scrollDelta: Offset = Offset.Zero,
+        isInBounds: Boolean = eventType != PointerEventType.Exit,
     ): Boolean {
         return sendPointerEvent(
             eventType = eventType,
@@ -498,6 +499,7 @@ internal class WinUIOwner(
             keyboardModifiers = keyboardModifiers,
             button = button,
             scrollDelta = scrollDelta,
+            isInBounds = isInBounds,
             nativeEvent = null,
         )
     }
@@ -513,6 +515,7 @@ internal class WinUIOwner(
         keyboardModifiers: PointerKeyboardModifiers,
         button: PointerButton?,
         scrollDelta: Offset = Offset.Zero,
+        isInBounds: Boolean = eventType != PointerEventType.Exit,
         nativeEvent: Any?,
     ): Boolean {
         if (isDisposed) return false
@@ -543,7 +546,7 @@ internal class WinUIOwner(
         val result = pointerInputEventProcessor.process(
             pointerEvent = event,
             positionCalculator = this,
-            isInBounds = true,
+            isInBounds = isInBounds,
         )
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
     }

@@ -52,6 +52,12 @@ internal class WinUIPointerInputAdapter(
         register(PointerEventType.Release, IUIElement.Metadata.POINTERRELEASED_ADD_SLOT) {
             IUIElement.Metadata.POINTERRELEASED_REMOVE_SLOT
         },
+        register(PointerEventType.Enter, IUIElement.Metadata.POINTERENTERED_ADD_SLOT) {
+            IUIElement.Metadata.POINTERENTERED_REMOVE_SLOT
+        },
+        register(PointerEventType.Exit, IUIElement.Metadata.POINTEREXITED_ADD_SLOT) {
+            IUIElement.Metadata.POINTEREXITED_REMOVE_SLOT
+        },
         register(PointerEventType.Scroll, IUIElement.Metadata.POINTERWHEELCHANGED_ADD_SLOT) {
             IUIElement.Metadata.POINTERWHEELCHANGED_REMOVE_SLOT
         },
@@ -125,7 +131,9 @@ internal class WinUIPointerInputAdapter(
             position = Offset(position.x, position.y),
             uptimeMillis = point.timestamp.toLong() / MicrosecondsPerMillisecond,
             pointerId = point.pointerId.toLong(),
-            down = eventType != PointerEventType.Release && point.isInContact,
+            down = eventType != PointerEventType.Exit &&
+                eventType != PointerEventType.Scroll &&
+                point.isInContact,
             type = point.toComposePointerType(),
             buttons = point.toComposeButtons(),
             keyboardModifiers = args.toComposeKeyboardModifiers(),
@@ -135,6 +143,7 @@ internal class WinUIPointerInputAdapter(
             } else {
                 Offset.Zero
             },
+            isInBounds = eventType != PointerEventType.Exit,
             nativeEvent = args,
         )
     }

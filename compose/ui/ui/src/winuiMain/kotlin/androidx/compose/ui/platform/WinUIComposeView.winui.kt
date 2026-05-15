@@ -353,6 +353,7 @@ fun WinUIComposeView.sendPointerEventForTest(
     keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
     button: PointerButton? = null,
     scrollDelta: Offset = Offset.Zero,
+    isInBounds: Boolean = eventType != PointerEventType.Exit,
 ): Boolean = owner.sendPointerEventForTest(
     eventType = eventType,
     position = position,
@@ -364,6 +365,7 @@ fun WinUIComposeView.sendPointerEventForTest(
     keyboardModifiers = keyboardModifiers,
     button = button,
     scrollDelta = scrollDelta,
+    isInBounds = isInBounds,
 )
 
 private class WinUIRootContentHost {

@@ -441,6 +441,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootIndirectPointerSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
+            runWinUIPointerEnterExitSmoke()
             runWinUIPointerScrollSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
             runWinUIViewRelayoutSmoke()
@@ -1862,6 +1863,50 @@ private object ComposeWinUiSmokeApp {
     }
 
     @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIPointerEnterExitSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(30, 30) {}
+            }
+        }
+        withFrameNanos { }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Enter,
+                position = Offset(6f, 8f),
+                uptimeMillis = 1L,
+                down = false,
+                type = PointerType.Mouse,
+            )
+        ) {
+            "WinUI pointer input enter smoke did not dispatch the enter event."
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Exit,
+                position = Offset(6f, 8f),
+                uptimeMillis = 2L,
+                down = false,
+                type = PointerType.Mouse,
+            )
+        ) {
+            "WinUI pointer input exit smoke did not dispatch the exit event."
+        }
+        awaitCondition("WinUI pointer input enter/exit received") {
+            probe.enterCount == 1 &&
+                probe.exitCount == 1 &&
+                probe.lastPosition == Offset(6f, 8f)
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: pointer input enter exit")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIPointerScrollSmoke() {
         val currentComposeView = WinUIComposeView()
         val probe = WinUIPointerInputSmokeProbe()
@@ -2246,7 +2291,9 @@ private class WinUISavedStateViewModel(
 
 private class WinUIPointerInputSmokeProbe {
     var pressCount = 0
+    var enterCount = 0
     var moveCount = 0
+    var exitCount = 0
     var releaseCount = 0
     var scrollCount = 0
     var cancelCount = 0
@@ -2371,7 +2418,9 @@ private class WinUIPointerInputSmokeNode(
         }
         when (pointerEvent.type) {
             PointerEventType.Press -> probe.pressCount += 1
+            PointerEventType.Enter -> probe.enterCount += 1
             PointerEventType.Move -> probe.moveCount += 1
+            PointerEventType.Exit -> probe.exitCount += 1
             PointerEventType.Release -> probe.releaseCount += 1
             PointerEventType.Scroll -> probe.scrollCount += 1
         }
