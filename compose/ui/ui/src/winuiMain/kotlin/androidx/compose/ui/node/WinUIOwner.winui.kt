@@ -222,10 +222,12 @@ internal class WinUIOwner(
     }
 
     fun setWindowFocused(isWindowFocused: Boolean) {
+        if (isDisposed) return
         mutableWindowInfo.isWindowFocused = isWindowFocused
     }
 
     fun setWindowContainerSize(size: IntSize) {
+        if (isDisposed) return
         mutableWindowInfo.containerSize = size
         mutableWindowInfo.containerDpSize = with(density) {
             DpSize(size.width.toDp(), size.height.toDp())
@@ -355,7 +357,9 @@ internal class WinUIOwner(
 
     override fun onLayoutNodeDeactivated(layoutNode: LayoutNode) {
         rectManager.remove(layoutNode)
-        notifyInteropTreeChanged()
+        if (!isDisposed) {
+            notifyInteropTreeChanged()
+        }
     }
 
     override fun onPreLayoutNodeReused(layoutNode: LayoutNode, oldSemanticsId: Int) {
@@ -364,6 +368,7 @@ internal class WinUIOwner(
     }
 
     override fun onPostLayoutNodeReused(layoutNode: LayoutNode, oldSemanticsId: Int) {
+        if (isDisposed) return
         notifyInteropTreeChanged()
     }
 
@@ -374,10 +379,12 @@ internal class WinUIOwner(
     }
 
     internal fun setInteropViewFocusRect(rect: Rect?) {
+        if (isDisposed) return
         interopViewFocusRect = rect
     }
 
     internal fun setInteropViewBounds(key: Any, bounds: Rect?) {
+        if (isDisposed) return
         if (bounds == null) {
             interopViewBounds.remove(key)
         } else {
@@ -391,12 +398,17 @@ internal class WinUIOwner(
     }
 
     override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
+        if (isDisposed) return
         if (listener !in onEndApplyChangesListeners) {
             onEndApplyChangesListeners += listener
         }
     }
 
     override fun onEndApplyChanges() {
+        if (isDisposed) {
+            onEndApplyChangesListeners.clear()
+            return
+        }
         while (onEndApplyChangesListeners.isNotEmpty()) {
             val size = onEndApplyChangesListeners.size
             for (i in 0 until size) {

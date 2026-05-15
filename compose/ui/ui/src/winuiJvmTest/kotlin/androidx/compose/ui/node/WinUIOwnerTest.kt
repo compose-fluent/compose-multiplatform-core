@@ -218,11 +218,25 @@ class WinUIOwnerTest {
 
         executor.schedule { outOfFrameEvents += "late" }
         assertEquals(1, scheduledOutOfFrame.size)
+        owner.setWindowFocused(true)
+        owner.setWindowContainerSize(IntSize(10, 20))
+        owner.setInteropViewFocusRect(Rect(1f, 2f, 3f, 4f))
+        owner.setInteropViewBounds("interop", Rect(5f, 6f, 7f, 8f))
 
         owner.dispose()
         val measureRequestsAfterDispose = measureRequests
+        val windowInfoAfterDispose = owner.windowInfo
+        val ownerStateAfterDispose = owner.ownerStateForTest()
 
         scheduledOutOfFrame.single().invoke()
+        owner.setWindowFocused(false)
+        owner.setWindowContainerSize(IntSize(30, 40))
+        owner.setInteropViewFocusRect(Rect.Zero)
+        owner.setInteropViewBounds("interop", null)
+        owner.registerOnEndApplyChangesListener {
+            measureRequests += 100
+        }
+        owner.onEndApplyChanges()
         owner.onRequestMeasure(
             layoutNode = owner.root,
             affectsLookahead = false,
@@ -249,8 +263,14 @@ class WinUIOwnerTest {
 
         assertEquals(emptyList(), outOfFrameEvents)
         assertEquals(measureRequestsAfterDispose, measureRequests)
+        assertTrue(windowInfoAfterDispose.isWindowFocused)
+        assertEquals(IntSize(10, 20), windowInfoAfterDispose.containerSize)
+        assertEquals(Rect(1f, 2f, 3f, 4f), ownerStateAfterDispose.interopViewFocusRect)
+        assertEquals(listOf(Rect(5f, 6f, 7f, 8f)), ownerStateAfterDispose.interopViewBounds)
+        assertEquals(ownerStateAfterDispose, owner.ownerStateForTest())
         assertEquals(0, events.semanticsChanged)
         assertEquals(0, events.rootInvalidated)
+        assertEquals(0, events.interopTreeChanged)
         assertEquals(Offset.Unspecified, events.lastScrollDelta)
         assertNull(owner.outOfFrameExecutor)
     }
@@ -513,6 +533,7 @@ class WinUIOwnerTest {
             onMeasureAndLayoutRequested = onMeasureAndLayoutRequested,
             onRootInvalidated = { events.rootInvalidated += 1 },
             onSemanticsChanged = { events.semanticsChanged += 1 },
+            onInteropTreeChanged = { events.interopTreeChanged += 1 },
             onLayoutChanged = { _, semanticsId ->
                 events.lastLayoutChangedSemanticsId = semanticsId
             },
@@ -528,6 +549,7 @@ class WinUIOwnerTest {
 private class OwnerEvents {
     var rootInvalidated = 0
     var semanticsChanged = 0
+    var interopTreeChanged = 0
     var lastLayoutChangedSemanticsId = -1
     var lastScrollDelta = Offset.Unspecified
     val keepScreenOnValues = mutableListOf<Boolean>()
