@@ -168,7 +168,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
-- **Status:** Open
+- **Status:** Fixed upstream for the compose-winui wrapper paths after
+  updating `external/kotlin-winrt` to `093379d5` (`Wrap resource event callback
+  arguments`).
 - **Observed in:** `Canvas.children` / `Panel.children` returning `UIElement`
   values whose native runtime class is a derived XAML type such as `Canvas` or
   `FrameworkElement`
@@ -185,16 +187,13 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `FrameworkElement.width`, `height`, or `margin` after reading the wrapper back
   from `Canvas.children`. More generally, consumer code cannot safely downcast
   XAML collection/event values to richer generated projections.
-- **compose-winui workaround:** `WinUIView.winui.kt` keeps a strongly typed
-  `Canvas` wrapper inside `WinUIViewHolder` when applying size, margin, and
-  clipping. `WinUIViewSample.kt` avoids derived-wrapper reads from
-  `Canvas.children` and validates relayout through `UIElement.clip`, stable COM
-  identity, and the user `Button` dimensions instead. Search for `KWINRT-009`.
-- **Resolution target:** Expose a stable public projection API that can wrap an
-  `IInspectable` / `IUnknown` as a requested generated runtime class or
-  interface, or make collection projections preserve/recover concrete
-  runtime-class wrappers so normal Kotlin type checks work for projected XAML
-  inheritance.
+- **compose-winui workaround:** Removed from repository-local validation.
+  `WinUIViewSample.kt` now reads the wrapper back from `Canvas.children`,
+  casts it to `Canvas`, and validates wrapper `width`, `height`, `margin`, and
+  clip state directly.
+- **Resolution:** Collection projections now recover concrete XAML
+  runtime-class wrappers through the runtime-class-name RCW factory path for
+  this compose-winui use case.
 
 ## KWINRT-010: Static runtime class shells do not expose callable static members
 
@@ -277,8 +276,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
 - **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
-  through upstream `d76904c6` (`Load WinUI resources through App XAML`);
-  KWINRT-016 no longer blocks this retest.
+  through upstream `093379d5` (`Wrap resource event callback arguments`);
+  KWINRT-016 no longer blocks this retest. The upstream dual-module sample
+  fixed one generated-event-source reproduction path, but compose-winui still
+  fails at shutdown with the same JVM FFM upcall fatal after all repository
+  smoke logs reach `text input session cancellation`.
 - **Observed in:** repository-local `runWinUIViewSample` on Microsoft OpenJDK
   25.0.3 with Windows App SDK callbacks
 - **Symptom:** After several WinUI callback/upcall paths have run, the JVM can
@@ -351,7 +353,7 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-016: Generated Application.Start intrinsic is not lowered for compose-winui
 
 - **Status:** Fixed upstream in local kotlin-winrt `ec8c5a52`, still verified
-  after syncing `external/kotlin-winrt` from upstream `09f97af8`.
+  after syncing `external/kotlin-winrt` from upstream `093379d5`.
 - **Observed in:** earlier repository-local `runWinUIViewSample` attempts after
   clean `:compose:ui:ui:compileKotlinWinuiJvm` rebuilds with JDK 25.
 - **Symptom:** Generated WinRT projection bytecode for
@@ -363,10 +365,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `:compose:ui:ui:winui-samples:compileKotlin` tasks pass. `javap` on
   `Application$Metadata.class` shows `WinRtJvmFfmDowncallHandles` instead of
   `WinRtProjectionIntrinsic.callUnit`, and `runWinUIViewSample` enters
-  `Application.Start`. The later `09f97af8` intrinsic-owner restriction also
-  allows the sample to use ordinary `java.lang.Boolean.getBoolean(...)` for
-  `compose.winui.sample.autoExit` without being mistaken for a WinRT
-  `getBoolean` projection intrinsic.
+  `Application.Start`. The `093379d5` retest also passed
+  `:compose:ui:ui:compileKotlinWinuiJvm`, confirming the compiler-plugin
+  classpath/lowering path remains active for the compose-winui KMP target.
 - **compose-winui workaround:** None active. `Application.winui.kt` continues
   to call the generated `XamlApplication.start { ... }` path.
 - **Resolution target:** Keep the JDK 22+ / JVM target 22 WinUI JVM compiler
@@ -443,8 +444,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
 - **Status:** Open. Still reproduced after syncing `external/kotlin-winrt`
-  from upstream `05273dea` (`Validate nullable content and launcher projection`)
-  and temporarily replacing the compose-winui workaround with generated
+  from upstream `093379d5` (`Wrap resource event callback arguments`) and
+  temporarily replacing the compose-winui workaround with generated
   `DisplayRequest.requestActive()` / `requestRelease()` calls.
 - **Observed in:** `Windows.System.Display.DisplayRequest`
 - **Symptom:** `DisplayRequest()` activates, but calling generated
@@ -457,10 +458,14 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   generated `DisplayRequest`, then invokes `IDisplayRequest.RequestActive` and
   `RequestRelease` through the default interface ABI slots. Search for
   `KWINRT-020`.
-- **Resolution target:** Register generated interface projection factories for
-  default interfaces such as `Windows.System.Display.IDisplayRequest`, or emit
-  runtime-class methods that can invoke the default-interface ABI without the
-  generated wrapper.
+- **Retest note:** The generated call path now compiles, but
+  `runWinUIViewSample` fails as soon as `Modifier.keepScreenOn()` calls
+  `DisplayRequest.requestActive()` with:
+  `Generated interface projection factory for 'windows.system.display.IDisplayRequest' is not registered.`
+- **Resolution target:** Ensure compose-winui's generated support output
+  includes and loads the `IDisplayRequest` interface projection registry, or
+  emit runtime-class methods that can invoke the default-interface ABI without
+  requiring a registered generated interface wrapper.
 
 ## KWINRT-021: Protected WinUI cursor API is not usable from compose-winui
 

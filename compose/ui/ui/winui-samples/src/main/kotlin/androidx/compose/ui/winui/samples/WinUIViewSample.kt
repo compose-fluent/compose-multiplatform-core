@@ -1299,12 +1299,14 @@ private object ComposeWinUiSmokeApp {
         }
         awaitCondition("WinUIView initial relayout bounds") {
             val rootCanvas = rootHost.content as? Canvas
-            // KWINRT-009: collection-returned UIElement wrappers cannot be publicly rewrapped
-            // as FrameworkElement/Canvas, so this smoke validates clip plus the user view size.
-            val wrapper = rootCanvas?.children?.singleOrNull()
+            val wrapper = rootCanvas?.children?.singleOrNull() as? Canvas
             val clip = wrapper?.readClipRectOrNull()
             clip?.width == 80f &&
                 clip.height == 30f &&
+                wrapper.width == 80.0 &&
+                wrapper.height == 30.0 &&
+                wrapper.margin.left == 4.0 &&
+                wrapper.margin.top == 6.0 &&
                 lifecycleProbe.lastButton?.width == 80.0 &&
                 lifecycleProbe.lastButton?.height == 30.0
         }
@@ -1323,12 +1325,16 @@ private object ComposeWinUiSmokeApp {
         x.value = 11
         y.value = 17
         awaitCondition("WinUIView updated relayout bounds") {
-            val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull()
+            val currentWrapper = (rootHost.content as? Canvas)?.children?.singleOrNull() as? Canvas
             val clip = currentWrapper?.readClipRectOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
                 lifecycleProbe.lastButton === button &&
                 clip?.width == 140f &&
                 clip.height == 55f &&
+                currentWrapper.width == 140.0 &&
+                currentWrapper.height == 55.0 &&
+                currentWrapper.margin.left == 11.0 &&
+                currentWrapper.margin.top == 17.0 &&
                 button.width == 140.0 &&
                 button.height == 55.0
         }
