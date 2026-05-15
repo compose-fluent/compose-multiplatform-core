@@ -69,6 +69,39 @@ class WinUIKeyEventProcessorTest {
     }
 
     @Test
+    fun skipsNativeChildEventsWithoutUpdatingModifierState() {
+        val processor = WinUIKeyEventProcessor()
+        val events = mutableListOf<KeyEvent>()
+
+        val skipped = processor.process(
+            eventType = KeyEventType.KeyDown,
+            key = VirtualKey.Control,
+            isHandled = false,
+            nativeEvent = null,
+            shouldDispatchEvent = { false },
+        ) {
+            events += it
+            true
+        }
+        val handled = processor.process(
+            eventType = KeyEventType.KeyDown,
+            key = VirtualKey.A,
+            isHandled = false,
+            nativeEvent = null,
+            shouldDispatchEvent = { true },
+        ) {
+            events += it
+            true
+        }
+
+        assertNull(skipped)
+        assertEquals(true, handled)
+        assertEquals(1, events.size)
+        assertEquals(Key.A, events.single().key)
+        assertEquals(false, events.single().isCtrlPressed)
+    }
+
+    @Test
     fun tracksModifierStateAcrossKeyEvents() {
         val processor = WinUIKeyEventProcessor()
         val events = mutableListOf<KeyEvent>()

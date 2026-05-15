@@ -66,6 +66,7 @@ internal class WinUIKeyInputAdapter(
                     key = args.key,
                     isHandled = args.handled,
                     nativeEvent = args,
+                    shouldDispatchEvent = { args.originalSource.isComposeRootSource(root) },
                     sendKeyEvent = owner::sendKeyEvent,
                 )?.let { handled ->
                     args.handled = handled
@@ -91,9 +92,11 @@ internal class WinUIKeyEventProcessor {
         key: VirtualKey,
         isHandled: Boolean,
         nativeEvent: Any?,
+        shouldDispatchEvent: () -> Boolean = { true },
         sendKeyEvent: (KeyEvent) -> Boolean,
     ): Boolean? {
         if (isHandled) return null
+        if (!shouldDispatchEvent()) return null
         if (eventType == KeyEventType.KeyDown) {
             modifierState.update(key, isPressed = true)
         }
@@ -104,6 +107,9 @@ internal class WinUIKeyEventProcessor {
         return handled
     }
 }
+
+private fun Any?.isComposeRootSource(root: UIElement): Boolean =
+    this == null || this == root
 
 private data class WinUIKeyEventRegistration(
     val removeSlot: Int,
