@@ -231,6 +231,24 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun ownerTracksInteropViewFocusRect() {
+        val owner = createOwner()
+        try {
+            val rect = Rect(1f, 2f, 30f, 40f)
+
+            owner.setInteropViewFocusRect(rect)
+
+            assertEquals(rect, owner.ownerStateForTest().interopViewFocusRect)
+
+            owner.setInteropViewFocusRect(null)
+
+            assertNull(owner.ownerStateForTest().interopViewFocusRect)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
     fun inputModeManagerUpdatesFromRequestsAndOwnerInputEvents() {
         val owner = createOwner()
         try {

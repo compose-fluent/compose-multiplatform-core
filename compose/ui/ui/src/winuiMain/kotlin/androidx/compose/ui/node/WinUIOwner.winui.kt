@@ -157,7 +157,14 @@ internal class WinUIOwner(
     override val softwareKeyboardController: SoftwareKeyboardController = WinUISoftwareKeyboardController
     override val semanticsOwner: SemanticsOwner =
         SemanticsOwner(root, EmptySemanticsModifier(), layoutNodes)
-    override val focusOwner: FocusOwner = FocusOwnerImpl(platformFocusOwner, this)
+    private var interopViewFocusRect: Rect? = null
+    override val focusOwner: FocusOwner = FocusOwnerImpl(
+        WinUIEmbeddedViewPlatformFocusOwner(
+            delegate = platformFocusOwner,
+            embeddedViewFocusRect = { interopViewFocusRect },
+        ),
+        this,
+    )
     private val mutableWindowInfo = WindowInfoImpl()
     override val windowInfo: WindowInfo = mutableWindowInfo
     override val rectManager: RectManager = RectManager(layoutNodes)
@@ -352,6 +359,10 @@ internal class WinUIOwner(
         onMeasureAndLayoutRequested()
     }
 
+    internal fun setInteropViewFocusRect(rect: Rect?) {
+        interopViewFocusRect = rect
+    }
+
     private fun notifyInteropTreeChanged() {
         onInteropTreeChanged()
         registerOnEndApplyChangesListener(onInteropTreeChanged)
@@ -463,6 +474,7 @@ internal class WinUIOwner(
             lastScrollDelta = lastScrollDelta,
             isAccessibilityForcedForTesting = isAccessibilityForcedForTesting,
             accessibilityEventBatchIntervalMillis = accessibilityEventBatchIntervalMillis,
+            interopViewFocusRect = interopViewFocusRect,
         )
 
     override fun screenToLocal(positionOnScreen: Offset): Offset =
@@ -588,7 +600,32 @@ internal data class WinUIOwnerStateForTest(
     val lastScrollDelta: Offset,
     val isAccessibilityForcedForTesting: Boolean,
     val accessibilityEventBatchIntervalMillis: Long,
+    val interopViewFocusRect: Rect?,
 )
+
+private class WinUIEmbeddedViewPlatformFocusOwner(
+    private val delegate: PlatformFocusOwner,
+    private val embeddedViewFocusRect: () -> Rect?,
+) : PlatformFocusOwner {
+    override fun requestOwnerFocus(
+        focusDirection: FocusDirection?,
+        previouslyFocusedRect: Rect?,
+    ): Boolean = delegate.requestOwnerFocus(focusDirection, previouslyFocusedRect)
+
+    override fun clearOwnerFocus() {
+        delegate.clearOwnerFocus()
+    }
+
+    override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean =
+        delegate.moveFocusInChildren(focusDirection)
+
+    override fun getEmbeddedViewFocusRect(): Rect? =
+        embeddedViewFocusRect() ?: delegate.getEmbeddedViewFocusRect()
+
+    override fun focusTargetAvailable() {
+        delegate.focusTargetAvailable()
+    }
+}
 
 private class WinUIInputModeManager : InputModeManager {
     override var inputMode: InputMode by mutableStateOf(InputMode.Keyboard)

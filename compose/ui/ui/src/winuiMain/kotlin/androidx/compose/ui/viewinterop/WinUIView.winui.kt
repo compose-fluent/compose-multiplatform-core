@@ -22,6 +22,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReusableComposeNode
 import androidx.compose.runtime.Updater
 import androidx.compose.runtime.currentComposer
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
 import androidx.compose.ui.focus.FocusEnterExitScope
@@ -29,7 +30,7 @@ import androidx.compose.ui.focus.FocusProperties
 import androidx.compose.ui.focus.FocusPropertiesModifierNode
 import androidx.compose.ui.focus.FocusTargetNode
 import androidx.compose.ui.focus.focusTarget
-import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -38,6 +39,7 @@ import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.node.requireOwner
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.InspectorInfo
@@ -287,6 +289,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     override fun onDeactivate() {
+        updateOwnerInteropFocusRect(null)
         resetBlock(view)
         group.uiElement.children.clear()
         isViewAttachedToGroup = false
@@ -319,6 +322,7 @@ private class WinUIViewHolder<T : UIElement>(
             it.verticalAlignment = VerticalAlignment.Top
         }
         updateClip()
+        updateOwnerInteropFocusRectIfFocused()
         if (changed) {
             notifyInteropLayoutChanged()
         }
@@ -335,6 +339,7 @@ private class WinUIViewHolder<T : UIElement>(
             right = 0.0,
             bottom = 0.0,
         )
+        updateOwnerInteropFocusRectIfFocused()
         if (changed) {
             notifyInteropLayoutChanged()
         }
@@ -362,7 +367,9 @@ private class WinUIViewHolder<T : UIElement>(
     private fun requestNativeFocus(): Boolean =
         runCatching {
             canRequestFocus() && view.focus(FocusState.Programmatic)
-        }.getOrDefault(false)
+        }.getOrDefault(false).also { isFocused ->
+            updateOwnerInteropFocusRect(if (isFocused) interopFocusRect() else null)
+        }
 
     private fun clearNativeFocus() {
         runCatching {
@@ -370,6 +377,7 @@ private class WinUIViewHolder<T : UIElement>(
                 view.focus(FocusState.Unfocused)
             }
         }
+        updateOwnerInteropFocusRect(null)
     }
 
     private fun attachViewToGroup() {
@@ -378,6 +386,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun clearNativeState() {
+        updateOwnerInteropFocusRect(null)
         restoreInteraction()
         clearClip()
         group.uiElement.children.clear()
@@ -409,6 +418,20 @@ private class WinUIViewHolder<T : UIElement>(
         if (clipGeometry == null) return
         clipGeometry = null
         setClip(group.uiElement, null)
+    }
+
+    private fun interopFocusRect(): ComposeRect =
+        ComposeRect(positionX, positionY, positionX + width, positionY + height)
+
+    private fun updateOwnerInteropFocusRectIfFocused() {
+        if (runCatching { view.focusState != FocusState.Unfocused }.getOrDefault(false)) {
+            updateOwnerInteropFocusRect(interopFocusRect())
+        }
+    }
+
+    private fun updateOwnerInteropFocusRect(rect: ComposeRect?) {
+        if (!layoutNode.isAttached) return
+        (layoutNode.requireOwner() as? WinUIOwner)?.setInteropViewFocusRect(rect)
     }
 }
 
