@@ -19,13 +19,12 @@ package androidx.compose.ui.viewinterop
 internal class WinUIInteropMutableTransaction(
     override var isInteropActive: Boolean,
 ) : WinUIInteropTransaction {
-    private val actions = mutableListOf<() -> Unit>()
+    private val _actions = mutableListOf<WinUIInteropAction>()
 
-    override fun performTransaction() {
-        actions.forEach { it.invoke() }
-    }
+    override val actions: List<WinUIInteropAction>
+        get() = _actions
 
-    fun add(action: () -> Unit) {
-        actions += action
+    fun add(action: WinUIInteropAction) {
+        _actions += action
     }
 }

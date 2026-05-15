@@ -154,6 +154,7 @@
 - [x] Add repository-local WinUI owner smoke validation for root pointer-wheel scroll dispatch and `scrollDelta` propagation through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for canceling active pointer input when the owner is disposed.
 - [x] Route WinUI interop view layout changes through `Owner.onInteropViewLayoutChange` so native root synchronization is scheduled when hosted views move or resize.
+- [x] Add repository-local WinUI interop transaction queue unit coverage for dropped frames, late completions, empty transactions, merge behavior, and ring-buffer overflow.
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.
 - [x] Add repository-local WinUIView smoke validation for interop insertion, middle removal, and z-order preservation.
 - [x] Add repository-local WinUIView smoke validation for multiple WinUI control types: `Button`, `TextBox`, and `ToggleSwitch`.

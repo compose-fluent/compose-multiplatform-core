@@ -41,6 +41,7 @@ import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.node.WinUICoordinateMapper
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.viewinterop.WinUIInteropTransaction
 import androidx.compose.ui.viewinterop.WinUIRootContentHost
 import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
@@ -66,9 +67,10 @@ import kotlin.coroutines.CoroutineContext
  * This is intentionally independent from Skiko/Desktop/AWT. Rendering, scheduling, and Owner
  * integration are filled in by the WinUI target rather than delegated to the desktop backend.
  */
-class WinUIComposeView(
+class WinUIComposeView internal constructor(
     val root: UIElement,
     private val setRootContent: (List<UIElement>) -> Unit,
+    private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
 ) {
     constructor() : this(WinUIRootContentHost())
@@ -246,14 +248,24 @@ class WinUIComposeView(
         if (currentInteropRoots.hasSameIdentityOrder(content)) return
         currentInteropRoots = content
         setRootContent(content)
+        retrieveInteropTransaction().performTransaction()
     }
 
-    private constructor(host: WinUIRootContentHost) : this(host.root, host::setRootContent)
+    private constructor(host: WinUIRootContentHost) : this(
+        host.root,
+        host::setRootContent,
+        host::retrieveTransaction,
+    )
 
     private constructor(
         host: WinUIRootContentHost,
         onSensitiveContentChanged: (Boolean) -> Unit,
-    ) : this(host.root, host::setRootContent, onSensitiveContentChanged)
+    ) : this(
+        host.root,
+        host::setRootContent,
+        host::retrieveTransaction,
+        onSensitiveContentChanged,
+    )
 }
 
 private class WinUIDisplayRequestController {

@@ -45,14 +45,13 @@ internal class WinUIRootContentHost {
             interopContainer.setChildren(content)
         }
         transaction.isInteropActive = content.isNotEmpty()
-        retrieveTransaction().performTransaction()
     }
 
     private fun scheduleUpdate(action: () -> Unit) {
         transaction.add(action)
     }
 
-    private fun retrieveTransaction(): WinUIInteropTransaction {
+    fun retrieveTransaction(): WinUIInteropTransaction {
         val result = transaction
         transaction = WinUIInteropMutableTransaction(isInteropActive = isContainerInstalled)
         return result

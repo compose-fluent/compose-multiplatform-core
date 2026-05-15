@@ -16,8 +16,31 @@
 
 package androidx.compose.ui.viewinterop
 
+import androidx.compose.ui.util.fastForEach
+
+/**
+ * Lambda containing changes to WinUI objects, which can be synchronized with a future WinUI
+ * rendering transaction.
+ */
+internal typealias WinUIInteropAction = () -> Unit
+
 internal interface WinUIInteropTransaction {
+    val actions: List<WinUIInteropAction>
     val isInteropActive: Boolean
 
-    fun performTransaction()
+    fun performTransaction() {
+        actions.fastForEach {
+            it.invoke()
+        }
+    }
+
+    companion object {
+        fun merge(
+            transactions: List<WinUIInteropTransaction>
+        ): WinUIInteropTransaction =
+            object : WinUIInteropTransaction {
+                override val actions = transactions.flatMap { it.actions }
+                override val isInteropActive = transactions.any { it.isInteropActive }
+            }
+    }
 }
