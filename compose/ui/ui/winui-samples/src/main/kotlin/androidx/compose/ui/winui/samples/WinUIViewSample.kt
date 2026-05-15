@@ -300,6 +300,7 @@ private fun WinUIViewWindowIntegrationContent(
     expectWindowFocus: Boolean,
     lifecycleProbe: WinUIViewLifecycleProbe,
     onButtonUpdated: (Button) -> Unit,
+    onTextBoxUpdated: (TextBox) -> Unit,
     onToggleSwitchUpdated: (ToggleSwitch) -> Unit,
     onWindowFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
@@ -350,13 +351,25 @@ private fun WinUIViewWindowIntegrationContent(
             lifecycleProbe.lastButton = button
         },
     )
-    // KWINRT-008: live TextBox still fails in the compose-winui sample after App.xaml resource load.
     WinUIView(
         modifier = fixedSizeAndPositionModifier(
             width = 220,
             height = 40,
             x = 0,
             y = 48,
+        ),
+        factory = { TextBox() },
+        update = { textBox ->
+            textBox.text = buttonContent
+            onTextBoxUpdated(textBox)
+        },
+    )
+    WinUIView(
+        modifier = fixedSizeAndPositionModifier(
+            width = 220,
+            height = 40,
+            x = 0,
+            y = 96,
         ),
         factory = { ToggleSwitch() },
         update = { toggleSwitch ->
@@ -499,6 +512,7 @@ private object ComposeWinUiSmokeApp {
                 var backdropSmokePassed by remember { mutableStateOf(false) }
                 var backdropClearSmokePassed by remember { mutableStateOf(false) }
                 var lastButton by remember { mutableStateOf<Button?>(null) }
+                var lastTextBox by remember { mutableStateOf<TextBox?>(null) }
                 var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
                 LaunchedEffect(Unit) {
                     withFrameNanos { }
@@ -537,13 +551,16 @@ private object ComposeWinUiSmokeApp {
                     backdropSmokePassed,
                     backdropClearSmokePassed,
                     lastButton,
+                    lastTextBox,
                     lastToggleSwitch,
                 ) {
-                    val button = lastButton ?: return@LaunchedEffect
+                    lastButton ?: return@LaunchedEffect
+                    val textBox = lastTextBox ?: return@LaunchedEffect
                     val toggleSwitch = lastToggleSwitch ?: return@LaunchedEffect
                     if (
                         windowProbe.updateCount >= 2 &&
                         windowProbe.lastContent == "Hello from Compose WinUI updated" &&
+                        textBox.text == "Hello from Compose WinUI updated" &&
                         toggleSwitch.isOn &&
                         title == "compose-winui sample updated" &&
                         extendsContentIntoTitleBar &&
@@ -569,6 +586,9 @@ private object ComposeWinUiSmokeApp {
                         println("compose-winui-sample: window title=${window.title}")
                         println("compose-winui-sample: window content set")
                         println("compose-winui-sample: window activated")
+                    },
+                    onTextBoxUpdated = { textBox ->
+                        lastTextBox = textBox
                     },
                     onToggleSwitchUpdated = { toggleSwitch ->
                         lastToggleSwitch = toggleSwitch

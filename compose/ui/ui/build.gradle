@@ -117,7 +117,6 @@ if (composeWinUiGradlePluginAvailable) {
         type("Windows.UI.ViewManagement.UISettings")
         type("Windows.UI.Xaml.Interop.Type")
         type("Windows.UI.Xaml.Interop.NotifyCollectionChangedAction")
-        runtimeAsset(layout.projectDirectory.file("src/winuiMain/xaml/App.xaml").asFile.absolutePath)
     }
 
     configurations {
@@ -413,6 +412,7 @@ kotlin {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
                     implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
+                    implementation("io.github.composefluent.winrt:winrt-authoring:0.1.0-SNAPSHOT")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")

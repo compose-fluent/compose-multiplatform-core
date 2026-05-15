@@ -27,10 +27,12 @@ import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
 import io.github.composefluent.winrt.runtime.RuntimeScope
-import io.github.composefluent.winrt.runtime.WinRtUri
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.xaml.LaunchActivatedEventArgs
+import microsoft.ui.xaml.ResourceDictionary
 import microsoft.ui.xaml.Application as XamlApplication
+import microsoft.ui.xaml.controls.XamlControlsResources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -43,22 +45,34 @@ fun Application(
     WinRtWindowsAppSdkBootstrap.initialize().use {
         RuntimeScope.initializeSingleThreaded().use {
             XamlApplication.start {
-                val dispatcherQueue = DispatcherQueue.getForCurrentThread()
-                val application = XamlApplication()
-                XamlApplication.loadComponent(application, WinRtUri("ms-appx:///App.xaml"))
-                val launch = {
-                    WinUIApplicationRuntime(
-                        application = application,
-                        dispatcherQueue = dispatcherQueue,
-                    ).setContent(content)
-                }
-                if (!dispatcherQueue.tryEnqueue { launch() }) {
-                    launch()
-                }
+                WinUIXamlApplication(content)
             }
         }
     }
 }
+
+class WinUIXamlApplication internal constructor(
+    private val content: @Composable ApplicationScope.() -> Unit,
+) : XamlApplication() {
+    private var runtime: WinUIApplicationRuntime? = null
+
+    override fun onLaunched(args: LaunchActivatedEventArgs) {
+        installXamlControlsResources()
+        runtime = WinUIApplicationRuntime(
+            application = this,
+            dispatcherQueue = DispatcherQueue.getForCurrentThread(),
+        ).also { runtime ->
+            runtime.setContent(content)
+        }
+    }
+}
+
+private fun XamlApplication.installXamlControlsResources() {
+    resources.mergedDictionaries.add(loadXamlControlsResources())
+}
+
+private fun loadXamlControlsResources(): ResourceDictionary =
+    XamlControlsResources()
 
 @Stable
 interface ApplicationScope {

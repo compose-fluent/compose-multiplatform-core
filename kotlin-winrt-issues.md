@@ -141,8 +141,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
 
-- **Status:** Partially fixed upstream; retested after updating
-  `external/kotlin-winrt` to `d76904c6` (`Load WinUI resources through App XAML`).
+- **Status:** Fixed upstream; compose workaround removed after updating
+  `external/kotlin-winrt` to `6bb4cb97` (`Complete WinUI KMP resource bootstrap`).
 - **Observed in:** `Microsoft.UI.Xaml.Application.resources` and
   `Microsoft.UI.Xaml.Controls.XamlControlsResources`
 - **Symptom:** Installing WinUI control resources from the compose-winui
@@ -155,16 +155,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** A live-window integration smoke can currently
   host simple controls such as `Button` and `ToggleSwitch`, but enabling a live
   `TextBox` pulls in WinUI text resources and can crash on startup or shutdown.
-- **compose-winui workaround:** `Application.winui.kt` now loads the
-  repository-local `App.xaml` through `Application.loadComponent(...)`, but
-  `WinUIViewSample.kt` still keeps `TextBox` covered by the offscreen
-  control-variety smoke. Re-enabling the live `TextBox` after `d76904c6` made
-  the sample native-failfast with `NTSTATUS 0xC000027B` after the
-  `layout rect changed` smoke, before reaching the previous `KWINRT-013`
-  shutdown point. Search for `KWINRT-008`.
-- **Resolution target:** Make the unpackaged JVM resource setup path support a
-  live `TextBox` in the compose-winui `Application { Window { ... } }` sample
-  without native failfast.
+- **compose-winui workaround:** Removed. `Application.winui.kt` no longer loads
+  a repository-local `App.xaml`, and `WinUIViewSample.kt` now validates a live
+  `TextBox` in the `Application { Window { ... } }` sample path.
+- **Resolution:** The kotlin-winrt WinUI KMP resource bootstrap now stages and
+  initializes the required resources without a compose-winui `App.xaml`.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 

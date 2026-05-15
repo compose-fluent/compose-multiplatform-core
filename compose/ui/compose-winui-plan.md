@@ -164,7 +164,7 @@
 - [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [ ] Resolve the current Windows JVM sample shutdown blocker where JDK 25 FFM upcalls can abort with `upcallLinker.cpp:66` after early WinUIView smoke validation (`KWINRT-013`).
-- [ ] Extend the Windows JVM integration smoke to a live WinUI `TextBox` after `KWINRT-008` is resolved.
+- [x] Extend the Windows JVM integration smoke to a live WinUI `TextBox` after `KWINRT-008` is resolved.
 - [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
 - [ ] Split the current monolithic `runWinUIViewSample` smoke into focused WinUI JVM test/smoke suites, mirroring UIKit's split between unit/instrumented coverage: scene/rendering, interop lifecycle/layout/input, accessibility, text input/keyboard, window/lifecycle, pointer/scroll, resource loading, disposal/leaks, and launch integration.
