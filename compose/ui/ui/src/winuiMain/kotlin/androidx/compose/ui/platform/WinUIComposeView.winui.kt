@@ -16,12 +16,10 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LocalHostDefaultProvider
-import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
@@ -47,19 +45,12 @@ import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.HResult
-import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlin.coroutines.CoroutineContext
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -266,83 +257,6 @@ class WinUIComposeView internal constructor(
         host::retrieveTransaction,
         onSensitiveContentChanged,
     )
-}
-
-private class WinUIDisplayRequestController {
-    private var displayRequest: windows.system.display.DisplayRequest? = null
-    private var isActive = false
-
-    fun setKeepScreenOn(enabled: Boolean) {
-        if (enabled == isActive) return
-        if (enabled) {
-            val request = displayRequest ?: windows.system.display.DisplayRequest().also {
-                displayRequest = it
-            }
-            request.invokeDisplayRequestSlot(windows.system.display.IDisplayRequest.Metadata.REQUESTACTIVE_SLOT)
-            isActive = true
-        } else {
-            val request = displayRequest ?: return
-            request.invokeDisplayRequestSlot(windows.system.display.IDisplayRequest.Metadata.REQUESTRELEASE_SLOT)
-            isActive = false
-        }
-    }
-
-    private fun windows.system.display.DisplayRequest.invokeDisplayRequestSlot(slot: Int) {
-        // KWINRT-020: the generated IDisplayRequest projection factory is not registered.
-        nativeObject.queryInterface(windows.system.display.IDisplayRequest.Metadata.IID)
-            .getOrThrow()
-            .use { displayRequest ->
-                HResult(
-                    ComVtableInvoker.invoke(
-                        instance = displayRequest.pointer,
-                        slot = slot,
-                    ),
-                ).requireSuccess("DisplayRequest")
-            }
-    }
-}
-
-internal class WinUIDispatcher(
-    private val dispatcherQueue: DispatcherQueue,
-) : CoroutineDispatcher() {
-    override fun isDispatchNeeded(context: CoroutineContext): Boolean =
-        runCatching { !dispatcherQueue.hasThreadAccess }.getOrDefault(true)
-
-    override fun dispatch(context: CoroutineContext, block: Runnable) {
-        if (!dispatcherQueue.tryEnqueue { block.run() }) {
-            block.run()
-        }
-    }
-}
-
-internal class WinUIFrameClock(
-    private val dispatcherQueue: DispatcherQueue,
-) : MonotonicFrameClock {
-    private var isFrameScheduled = false
-    private var isCancelled = false
-    private val frameClock = BroadcastFrameClock(::scheduleFrame)
-
-    override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
-        frameClock.withFrameNanos(onFrame)
-
-    fun cancel() {
-        isCancelled = true
-        frameClock.cancel(CancellationException("WinUIComposeView disposed"))
-    }
-
-    private fun scheduleFrame() {
-        if (isCancelled || isFrameScheduled) return
-        isFrameScheduled = true
-        if (!dispatcherQueue.tryEnqueue {
-                isFrameScheduled = false
-                if (!isCancelled) {
-                    frameClock.sendFrame(System.nanoTime())
-                }
-            }
-        ) {
-            isFrameScheduled = false
-        }
-    }
 }
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
