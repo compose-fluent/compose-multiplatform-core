@@ -431,8 +431,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
 - **Status:** Open. Still reproduced after syncing `external/kotlin-winrt`
-  from upstream `093379d5` (`Wrap resource event callback arguments`) and
-  temporarily replacing the compose-winui workaround with generated
+  from upstream `56c9267c` (`Fix multi-module WinUI event source descriptors`)
+  and temporarily replacing the compose-winui workaround with generated
   `DisplayRequest.requestActive()` / `requestRelease()` calls.
 - **Observed in:** `Windows.System.Display.DisplayRequest`
 - **Symptom:** `DisplayRequest()` activates, but calling generated
@@ -441,14 +441,19 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** `Modifier.keepScreenOn()` should use the
   Windows Runtime `DisplayRequest` API, but the generated default-interface
   wrapper is not callable.
-- **compose-winui workaround:** `WinUIComposeView.winui.kt` still activates the
-  generated `DisplayRequest`, then invokes `IDisplayRequest.RequestActive` and
-  `RequestRelease` through the default interface ABI slots. Search for
-  `KWINRT-020`.
-- **Retest note:** The generated call path now compiles, but
-  `runWinUIViewSample` fails as soon as `Modifier.keepScreenOn()` calls
-  `DisplayRequest.requestActive()` with:
+- **compose-winui workaround:** `WinUIDisplayRequestController.winui.kt` still
+  activates the generated `DisplayRequest`, then invokes
+  `IDisplayRequest.RequestActive` and `RequestRelease` through the default
+  interface ABI slots. Search for `KWINRT-020`.
+- **Latest retest note:** On `56c9267c`, the generated call path compiles, but
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` fails as soon as
+  `Modifier.keepScreenOn()` calls `DisplayRequest.requestActive()` with:
   `Generated interface projection factory for 'windows.system.display.IDisplayRequest' is not registered.`
+  The sample process exits with `NTSTATUS 0xC000027B`; no `hs_err_pid*.log` or
+  `replay_pid*.log` was produced in the repository tree for this run. The
+  managed stack reaches `DisplayRequest.requestActive(DisplayRequest.kt:63)` via
+  `WinUIDisplayRequestController.setKeepScreenOn`, `WinUIOwner.incrementKeepScreenOnCount`,
+  and `KeepScreenOnNode.onAttach`.
 - **Resolution target:** Ensure compose-winui's generated support output
   includes and loads the `IDisplayRequest` interface projection registry, or
   emit runtime-class methods that can invoke the default-interface ABI without
