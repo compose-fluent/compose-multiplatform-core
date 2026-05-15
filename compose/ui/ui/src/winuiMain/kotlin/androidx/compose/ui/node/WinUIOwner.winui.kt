@@ -123,7 +123,10 @@ internal class WinUIOwner(
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
     private var hasPendingLayoutCompletedListener = false
+    private var isDisposing = false
     private var isDisposed = false
+    private val isShuttingDown: Boolean
+        get() = isDisposing || isDisposed
     private val accessibilityBridge = WinUIAccessibilityBridge()
 
     override val sharedDrawScope = LayoutNodeDrawScope()
@@ -210,24 +213,40 @@ internal class WinUIOwner(
     }
 
     fun dispose() {
-        isDisposed = true
+        if (isShuttingDown) return
+        isDisposing = true
         outOfFrameQueue.clear()
         if (root.isAttached) {
             root.detach()
         }
+        releaseActivePlatformState()
         cancelPointerInput()
         accessibilityBridge.dispose()
         snapshotObserver.stopObserving()
         rectManager.removeScheduledCallback()
+        onEndApplyChangesListeners.clear()
+        isDisposed = true
+        isDisposing = false
+    }
+
+    private fun releaseActivePlatformState() {
+        if (keepScreenOnCount > 0) {
+            keepScreenOnCount = 0
+            onKeepScreenOnChanged(false)
+        }
+        if (sensitiveContentCount > 0) {
+            sensitiveContentCount = 0
+            onSensitiveContentChanged(false)
+        }
     }
 
     fun setWindowFocused(isWindowFocused: Boolean) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         mutableWindowInfo.isWindowFocused = isWindowFocused
     }
 
     fun setWindowContainerSize(size: IntSize) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         mutableWindowInfo.containerSize = size
         mutableWindowInfo.containerDpSize = with(density) {
             DpSize(size.width.toDp(), size.height.toDp())
@@ -246,7 +265,7 @@ internal class WinUIOwner(
         forceRequest: Boolean,
         scheduleMeasureAndLayout: Boolean,
     ) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         if (affectsLookahead) {
             if (
                 measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
@@ -267,7 +286,7 @@ internal class WinUIOwner(
         affectsLookahead: Boolean,
         forceRequest: Boolean,
     ) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         if (affectsLookahead) {
             if (measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)) {
                 onMeasureAndLayoutRequested()
@@ -280,7 +299,7 @@ internal class WinUIOwner(
     }
 
     override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
         onMeasureAndLayoutRequested()
     }
@@ -307,7 +326,7 @@ internal class WinUIOwner(
     override fun requestAutofill(node: LayoutNode) = Unit
 
     override fun measureAndLayout(sendPointerUpdate: Boolean) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         if (
             measureAndLayoutDelegate.hasPendingMeasureOrLayout ||
             measureAndLayoutDelegate.hasPendingOnPositionedCallbacks ||
@@ -321,7 +340,7 @@ internal class WinUIOwner(
     }
 
     override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         hasPendingLayoutCompletedListener = false
         measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
         if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
@@ -341,14 +360,14 @@ internal class WinUIOwner(
     ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer)
 
     override fun onSemanticsChange() {
-        if (isDisposed) return
+        if (isShuttingDown) return
         semanticsChangeCount += 1
         accessibilityBridge.onSemanticsChange(semanticsOwner)
         onSemanticsChanged(semanticsOwner)
     }
 
     override fun onLayoutChange(layoutNode: LayoutNode) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         layoutChangeCount += 1
         lastLayoutChangedSemanticsId = layoutNode.semanticsId
         accessibilityBridge.onLayoutChange(semanticsOwner, layoutNode.semanticsId)
@@ -357,7 +376,7 @@ internal class WinUIOwner(
 
     override fun onLayoutNodeDeactivated(layoutNode: LayoutNode) {
         rectManager.remove(layoutNode)
-        if (!isDisposed) {
+        if (!isShuttingDown) {
             notifyInteropTreeChanged()
         }
     }
@@ -368,23 +387,23 @@ internal class WinUIOwner(
     }
 
     override fun onPostLayoutNodeReused(layoutNode: LayoutNode, oldSemanticsId: Int) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         notifyInteropTreeChanged()
     }
 
     @InternalComposeUiApi
     override fun onInteropViewLayoutChange(view: InteropView) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         onMeasureAndLayoutRequested()
     }
 
     internal fun setInteropViewFocusRect(rect: Rect?) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         interopViewFocusRect = rect
     }
 
     internal fun setInteropViewBounds(key: Any, bounds: Rect?) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         if (bounds == null) {
             interopViewBounds.remove(key)
         } else {
@@ -398,14 +417,14 @@ internal class WinUIOwner(
     }
 
     override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         if (listener !in onEndApplyChangesListeners) {
             onEndApplyChangesListeners += listener
         }
     }
 
     override fun onEndApplyChanges() {
-        if (isDisposed) {
+        if (isShuttingDown) {
             onEndApplyChangesListeners.clear()
             return
         }
@@ -421,7 +440,7 @@ internal class WinUIOwner(
     }
 
     override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         hasPendingLayoutCompletedListener = true
         measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
         onMeasureAndLayoutRequested()
@@ -436,6 +455,7 @@ internal class WinUIOwner(
         )
 
     override fun incrementSensitiveComponentCount() {
+        if (isShuttingDown) return
         sensitiveContentCount += 1
         if (sensitiveContentCount == 1) {
             onSensitiveContentChanged(true)
@@ -443,6 +463,7 @@ internal class WinUIOwner(
     }
 
     override fun decrementSensitiveComponentCount() {
+        if (isDisposed || sensitiveContentCount == 0) return
         sensitiveContentCount -= 1
         if (sensitiveContentCount == 0) {
             onSensitiveContentChanged(false)
@@ -450,6 +471,7 @@ internal class WinUIOwner(
     }
 
     override fun incrementKeepScreenOnCount() {
+        if (isShuttingDown) return
         keepScreenOnCount += 1
         if (keepScreenOnCount == 1) {
             onKeepScreenOnChanged(true)
@@ -457,6 +479,7 @@ internal class WinUIOwner(
     }
 
     override fun decrementKeepScreenOnCount() {
+        if (isDisposed || keepScreenOnCount == 0) return
         keepScreenOnCount -= 1
         if (keepScreenOnCount == 0) {
             onKeepScreenOnChanged(false)
@@ -464,11 +487,12 @@ internal class WinUIOwner(
     }
 
     override fun voteFrameRate(frameRate: Float) {
+        if (isShuttingDown) return
         lastFrameRateVote = frameRate
     }
 
     override fun dispatchOnScrollChanged(delta: Offset) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         scrollChangeCount += 1
         lastScrollDelta = delta
         accessibilityBridge.onScrollChanged(delta)
@@ -476,16 +500,16 @@ internal class WinUIOwner(
     }
 
     override fun invalidateRootLayer() {
-        if (isDisposed) return
+        if (isShuttingDown) return
         rootInvalidationCount += 1
         onRootInvalidated()
     }
 
     override val outOfFrameExecutor: OutOfFrameExecutor?
-        get() = if (isDisposed) null else this
+        get() = if (isShuttingDown) null else this
 
     override fun schedule(block: () -> Unit) {
-        if (isDisposed) return
+        if (isShuttingDown) return
         val shouldSchedule = outOfFrameQueue.isEmpty()
         outOfFrameQueue.addLast(block)
         if (shouldSchedule) {
@@ -494,7 +518,7 @@ internal class WinUIOwner(
     }
 
     private fun drainOutOfFrameQueue() {
-        while (!isDisposed && outOfFrameQueue.isNotEmpty()) {
+        while (!isShuttingDown && outOfFrameQueue.isNotEmpty()) {
             outOfFrameQueue.removeLast().invoke()
         }
     }
@@ -569,7 +593,7 @@ internal class WinUIOwner(
         isInBounds: Boolean = eventType != PointerEventType.Exit,
         nativeEvent: Any?,
     ): Boolean {
-        if (isDisposed) return false
+        if (isShuttingDown) return false
         inputModeManager.requestInputMode(InputMode.Touch)
         if (eventType != PointerEventType.Exit && isInInteropViewBounds(position)) {
             return false
@@ -619,7 +643,7 @@ internal class WinUIOwner(
     }
 
     internal fun sendKeyEvent(keyEvent: KeyEvent): Boolean {
-        if (isDisposed) return false
+        if (isShuttingDown) return false
         inputModeManager.requestInputMode(InputMode.Keyboard)
         return focusOwner.dispatchKeyEvent(keyEvent) || handleFocusKeys(keyEvent)
     }

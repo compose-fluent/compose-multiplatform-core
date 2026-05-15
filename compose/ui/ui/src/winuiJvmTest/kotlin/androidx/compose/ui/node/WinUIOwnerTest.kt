@@ -175,6 +175,42 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun disposeReleasesActivePlatformStateAndSuppressesFutureStateChanges() {
+        val events = OwnerEvents()
+        val owner = createOwner(events)
+
+        owner.incrementKeepScreenOnCount()
+        owner.incrementKeepScreenOnCount()
+        owner.incrementSensitiveComponentCount()
+        owner.incrementSensitiveComponentCount()
+        owner.voteFrameRate(30f)
+
+        assertEquals(2, owner.ownerStateForTest().keepScreenOnCount)
+        assertEquals(2, owner.ownerStateForTest().sensitiveContentCount)
+        assertEquals(listOf(true), events.keepScreenOnValues)
+        assertEquals(listOf(true), events.sensitiveContentValues)
+
+        owner.dispose()
+
+        assertEquals(0, owner.ownerStateForTest().keepScreenOnCount)
+        assertEquals(0, owner.ownerStateForTest().sensitiveContentCount)
+        assertEquals(listOf(true, false), events.keepScreenOnValues)
+        assertEquals(listOf(true, false), events.sensitiveContentValues)
+
+        owner.incrementKeepScreenOnCount()
+        owner.incrementSensitiveComponentCount()
+        owner.decrementKeepScreenOnCount()
+        owner.decrementSensitiveComponentCount()
+        owner.voteFrameRate(120f)
+
+        assertEquals(0, owner.ownerStateForTest().keepScreenOnCount)
+        assertEquals(0, owner.ownerStateForTest().sensitiveContentCount)
+        assertEquals(30f, owner.ownerStateForTest().lastFrameRateVote)
+        assertEquals(listOf(true, false), events.keepScreenOnValues)
+        assertEquals(listOf(true, false), events.sensitiveContentValues)
+    }
+
+    @Test
     fun outOfFrameExecutorSchedulesAndDrainsForTests() {
         val scheduled = mutableListOf<() -> Unit>()
         val owner = createOwner(
@@ -260,6 +296,7 @@ class WinUIOwnerTest {
         owner.onLayoutChange(owner.root)
         owner.dispatchOnScrollChanged(Offset(1f, 2f))
         owner.invalidateRootLayer()
+        owner.voteFrameRate(120f)
 
         assertEquals(emptyList(), outOfFrameEvents)
         assertEquals(measureRequestsAfterDispose, measureRequests)
