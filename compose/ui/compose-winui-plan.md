@@ -117,6 +117,7 @@
 - [x] Add repository-local `WindowInfo` smoke validation for `Window.Activated` focus loss when a secondary WinUI window is activated and closed.
 - [x] Add repository-local owner disposal smoke coverage by disposing `WinUIComposeView` after lifecycle/reuse validation and using `dispose()` from the WinUI window release path.
 - [x] Add repository-local WinUI text input session lifecycle smoke validation for session replacement and disposal cancellation while the native IME connection remains deferred.
+- [x] Add repository-local WinUI owner unit validation for text input session replacement canceling the previous platform input method session.
 - [x] Add repository-local WinUI `LocalLifecycleOwner` smoke validation for resumed composition state and destroyed state after `WinUIComposeView.dispose()`.
 - [x] Add repository-local WinUI `rememberSaveable` smoke validation for restoring state across `WinUIComposeView.disposeComposition()` and subsequent `setContent()`.
 - [x] Add repository-local WinUI `retain` smoke validation for restoring retained values across `WinUIComposeView.disposeComposition()` and subsequent `setContent()`.

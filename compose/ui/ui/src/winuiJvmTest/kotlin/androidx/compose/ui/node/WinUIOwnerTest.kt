@@ -38,10 +38,17 @@ import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -385,6 +392,59 @@ class WinUIOwnerTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun textInputSessionCancelsPreviousSessionAndActiveInputMethod() = runTest {
+        val owner = createOwner()
+        val events = mutableListOf<String>()
+        try {
+            val first = launch(start = CoroutineStart.UNDISPATCHED) {
+                owner.textInputSession {
+                    events += "first-session"
+                    try {
+                        startInputMethod(WinUITestInputMethodRequest)
+                    } finally {
+                        events += "first-cancelled"
+                    }
+                }
+            }
+
+            assertEquals(listOf("first-session"), events)
+
+            val second = launch(start = CoroutineStart.UNDISPATCHED) {
+                owner.textInputSession {
+                    events += "second-session"
+                    try {
+                        startInputMethod(WinUITestInputMethodRequest)
+                    } finally {
+                        events += "second-cancelled"
+                    }
+                }
+            }
+            runCurrent()
+
+            assertEquals(
+                listOf("first-session", "first-cancelled", "second-session"),
+                events,
+            )
+
+            second.cancelAndJoin()
+
+            assertEquals(
+                listOf(
+                    "first-session",
+                    "first-cancelled",
+                    "second-session",
+                    "second-cancelled",
+                ),
+                events,
+            )
+            assertTrue(first.isCancelled)
+        } finally {
+            owner.dispose()
+        }
+    }
+
     private fun createOwner(
         events: OwnerEvents = OwnerEvents(),
         scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
@@ -453,6 +513,8 @@ private class PointerRecorderNode(
 
     override fun onCancelPointerInput() = Unit
 }
+
+private object WinUITestInputMethodRequest : PlatformTextInputMethodRequest
 
 private object TestPlatformFocusOwner : PlatformFocusOwner {
     override fun requestOwnerFocus(
