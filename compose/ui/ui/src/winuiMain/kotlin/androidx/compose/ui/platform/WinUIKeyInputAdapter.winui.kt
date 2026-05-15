@@ -29,7 +29,6 @@ import io.github.composefluent.winrt.runtime.WinRtDelegateHandle
 import microsoft.ui.xaml.IUIElement
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.input.KeyEventHandler
-import microsoft.ui.xaml.input.KeyRoutedEventArgs
 import windows.system.VirtualKey
 
 internal class WinUIKeyInputAdapter(
@@ -37,7 +36,7 @@ internal class WinUIKeyInputAdapter(
     private val owner: WinUIOwner,
 ) {
     private var isDisposed = false
-    private val modifierState = WinUIKeyModifierState()
+    private val keyEventProcessor = WinUIKeyEventProcessor()
     private val registrations = listOf(
         register(KeyEventType.KeyDown, IUIElement.Metadata.KEYDOWN_ADD_SLOT, IUIElement.Metadata.KEYDOWN_REMOVE_SLOT),
         register(KeyEventType.KeyUp, IUIElement.Metadata.KEYUP_ADD_SLOT, IUIElement.Metadata.KEYUP_REMOVE_SLOT),
@@ -62,13 +61,14 @@ internal class WinUIKeyInputAdapter(
     ): WinUIKeyEventRegistration {
         val delegate = KeyEventHandler { _, args ->
             if (!isDisposed) {
-                if (eventType == KeyEventType.KeyDown) {
-                    modifierState.update(args.key, isPressed = true)
-                }
-                val handled = owner.sendKeyEvent(args.toComposeKeyEvent(eventType, modifierState))
-                args.handled = handled
-                if (eventType == KeyEventType.KeyUp) {
-                    modifierState.update(args.key, isPressed = false)
+                keyEventProcessor.process(
+                    eventType = eventType,
+                    key = args.key,
+                    isHandled = args.handled,
+                    nativeEvent = args,
+                    sendKeyEvent = owner::sendKeyEvent,
+                )?.let { handled ->
+                    args.handled = handled
                 }
             }
         }.createWinRtDelegateHandle()
@@ -79,6 +79,29 @@ internal class WinUIKeyInputAdapter(
             throw throwable
         }
         return WinUIKeyEventRegistration(removeSlot, token, delegate)
+    }
+}
+
+internal class WinUIKeyEventProcessor {
+    private val modifierState = WinUIKeyModifierState()
+
+    @OptIn(InternalComposeUiApi::class)
+    fun process(
+        eventType: KeyEventType,
+        key: VirtualKey,
+        isHandled: Boolean,
+        nativeEvent: Any?,
+        sendKeyEvent: (KeyEvent) -> Boolean,
+    ): Boolean? {
+        if (isHandled) return null
+        if (eventType == KeyEventType.KeyDown) {
+            modifierState.update(key, isPressed = true)
+        }
+        val handled = sendKeyEvent(key.toComposeKeyEvent(eventType, modifierState, nativeEvent))
+        if (eventType == KeyEventType.KeyUp) {
+            modifierState.update(key, isPressed = false)
+        }
+        return handled
     }
 }
 
@@ -117,18 +140,19 @@ private class WinUIKeyModifierState {
 }
 
 @OptIn(InternalComposeUiApi::class)
-private fun KeyRoutedEventArgs.toComposeKeyEvent(
+private fun VirtualKey.toComposeKeyEvent(
     eventType: KeyEventType,
     modifierState: WinUIKeyModifierState,
+    nativeEvent: Any?,
 ) = KeyEvent(
-    key = key.toComposeKey(),
+    key = toComposeKey(),
     type = eventType,
-    codePoint = key.toUtf16CodePoint(),
+    codePoint = toUtf16CodePoint(),
     isCtrlPressed = modifierState.isCtrlPressed,
     isMetaPressed = modifierState.isMetaPressed,
     isAltPressed = modifierState.isAltPressed,
     isShiftPressed = modifierState.isShiftPressed,
-    nativeEvent = this,
+    nativeEvent = nativeEvent,
 )
 
 private fun VirtualKey.toComposeKey(): Key =
