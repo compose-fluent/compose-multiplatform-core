@@ -28,14 +28,15 @@ import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.HResult
 import io.github.composefluent.winrt.runtime.PlatformAbi
 import io.github.composefluent.winrt.runtime.WinRtDelegateHandle
+import io.github.composefluent.winrt.runtime.WinRtProjectionIntrinsic
 import microsoft.ui.input.PointerDeviceType
 import microsoft.ui.input.PointerPoint
 import microsoft.ui.input.PointerUpdateKind
 import microsoft.ui.xaml.IUIElement
 import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.input.IPointerRoutedEventArgs
 import microsoft.ui.xaml.input.PointerEventHandler
 import microsoft.ui.xaml.input.PointerRoutedEventArgs
-import windows.system.VirtualKeyModifiers
 
 internal class WinUIPointerInputAdapter(
     private val root: UIElement,
@@ -204,14 +205,17 @@ private const val MouseWheelDeltaPerTick = 120f
 
 private fun PointerRoutedEventArgs.toComposeKeyboardModifiers(): PointerKeyboardModifiers =
     runCatching {
-        val modifier = keyModifiers
-        PointerKeyboardModifiers(
-            isCtrlPressed = modifier == VirtualKeyModifiers.Control,
-            isMetaPressed = modifier == VirtualKeyModifiers.Windows,
-            isAltPressed = modifier == VirtualKeyModifiers.Menu,
-            isShiftPressed = modifier == VirtualKeyModifiers.Shift,
-        )
+        winUIPointerKeyboardModifiersFromRawBits(readKeyModifierBits())
     }.getOrDefault(PointerKeyboardModifiers())
+
+private fun PointerRoutedEventArgs.readKeyModifierBits(): UInt =
+    // KWINRT-022: read raw flag bits until WinRT flags project as bitmasks, not enum entries.
+    nativeObject.queryInterface(IPointerRoutedEventArgs.Metadata.IID).getOrThrow().use { argsInterface ->
+        WinRtProjectionIntrinsic.getUInt32(
+            argsInterface,
+            IPointerRoutedEventArgs.Metadata.KEYMODIFIERS_GETTER_SLOT,
+        )
+    }
 
 private fun addPointerHandler(
     element: UIElement,

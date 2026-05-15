@@ -478,3 +478,23 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Resolution target:** Provide a supported public projection path for
   projected XAML subclasses or otherwise expose a safe cursor-setting helper
   that does not require consumer code to call protected-interface ABI slots.
+
+## KWINRT-022: WinRT flags project as enum values instead of bitmasks
+
+- **Status:** Open
+- **Observed in:** `Windows.System.VirtualKeyModifiers`, read from
+  `Microsoft.UI.Xaml.Input.PointerRoutedEventArgs.KeyModifiers`
+- **Symptom:** WinRT metadata marks `VirtualKeyModifiers` as a flags enum, but
+  kotlin-winrt projects it as a regular Kotlin `enum class`. Single values such
+  as `Control` can be read, but combined native values such as
+  `Control | Shift` are not entries in the generated enum and throw from
+  `VirtualKeyModifiers.Metadata.fromAbi(...)`.
+- **Impact on compose-winui:** Pointer events delivered to Compose can lose
+  keyboard modifier state whenever more than one WinUI modifier key is pressed.
+- **compose-winui workaround:** `WinUIPointerInputAdapter.winui.kt` reads
+  `PointerRoutedEventArgs.KeyModifiers` as raw ABI bits and maps them to
+  `PointerKeyboardModifiers` in `WinUIPointerKeyboardModifiers.winui.kt`.
+  Search for `KWINRT-022`.
+- **Resolution target:** Project WinRT flags enums as bitmask-capable value
+  types, or otherwise allow unknown combined flag values to be represented
+  without throwing.
