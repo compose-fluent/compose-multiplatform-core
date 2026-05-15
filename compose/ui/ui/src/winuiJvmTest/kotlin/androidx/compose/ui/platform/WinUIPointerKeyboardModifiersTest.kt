@@ -23,19 +23,25 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import windows.system.VirtualKeyModifiers
 
 class WinUIPointerKeyboardModifiersTest {
     @Test
-    fun rawVirtualKeyModifierFlagsMapIndividually() {
-        assertTrue(winUIPointerKeyboardModifiersFromRawBits(1u).isCtrlPressed)
-        assertTrue(winUIPointerKeyboardModifiersFromRawBits(2u).isAltPressed)
-        assertTrue(winUIPointerKeyboardModifiersFromRawBits(4u).isShiftPressed)
-        assertTrue(winUIPointerKeyboardModifiersFromRawBits(8u).isMetaPressed)
+    fun virtualKeyModifierFlagsMapIndividually() {
+        assertTrue(winUIPointerKeyboardModifiersFromWinUI(VirtualKeyModifiers.Control).isCtrlPressed)
+        assertTrue(winUIPointerKeyboardModifiersFromWinUI(VirtualKeyModifiers.Menu).isAltPressed)
+        assertTrue(winUIPointerKeyboardModifiersFromWinUI(VirtualKeyModifiers.Shift).isShiftPressed)
+        assertTrue(winUIPointerKeyboardModifiersFromWinUI(VirtualKeyModifiers.Windows).isMetaPressed)
     }
 
     @Test
-    fun rawVirtualKeyModifierFlagsMapCombinations() {
-        val modifiers = winUIPointerKeyboardModifiersFromRawBits(1u or 2u or 4u or 8u)
+    fun virtualKeyModifierFlagsMapCombinations() {
+        val modifiers = winUIPointerKeyboardModifiersFromWinUI(
+            VirtualKeyModifiers.Control or
+                VirtualKeyModifiers.Menu or
+                VirtualKeyModifiers.Shift or
+                VirtualKeyModifiers.Windows
+        )
 
         assertTrue(modifiers.isCtrlPressed)
         assertTrue(modifiers.isAltPressed)
@@ -44,8 +50,8 @@ class WinUIPointerKeyboardModifiersTest {
     }
 
     @Test
-    fun rawVirtualKeyModifierFlagsIgnoreUnknownBits() {
-        val modifiers = winUIPointerKeyboardModifiersFromRawBits(16u)
+    fun virtualKeyModifierFlagsIgnoreUnknownBits() {
+        val modifiers = winUIPointerKeyboardModifiersFromWinUI(VirtualKeyModifiers(16u))
 
         assertFalse(modifiers.isCtrlPressed)
         assertFalse(modifiers.isAltPressed)

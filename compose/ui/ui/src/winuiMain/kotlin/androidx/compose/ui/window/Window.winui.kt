@@ -24,31 +24,21 @@ import androidx.compose.ui.unit.IntSize
 import io.github.composefluent.winrt.runtime.BooleanMarshaller
 import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.Guid
 import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.IInspectableReference
-import io.github.composefluent.winrt.runtime.ParameterizedInterfaceId
 import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.WinRtDelegateBridge
-import io.github.composefluent.winrt.runtime.WinRtDelegateHandle
-import io.github.composefluent.winrt.runtime.WinRtDelegateValueKind
-import io.github.composefluent.winrt.runtime.WinRtTypeSignature
 import microsoft.ui.composition.Compositor
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.windowing.AppWindow
 import microsoft.ui.windowing.AppWindowChangedEventArgs
 import microsoft.ui.windowing.AppWindowClosingEventArgs
-import microsoft.ui.windowing.IAppWindow
-import microsoft.ui.windowing.IAppWindowClosingEventArgs
 import microsoft.ui.xaml.IWindow
 import microsoft.ui.xaml.IWindow2
-import microsoft.ui.xaml.IWindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivationState
-import microsoft.ui.xaml.WindowEventArgs
 import microsoft.ui.xaml.media.DesktopAcrylicBackdrop
 import microsoft.ui.xaml.media.MicaBackdrop
 import microsoft.ui.xaml.media.SystemBackdrop
+import windows.foundation.TypedEventHandler
 import microsoft.ui.xaml.Window as XamlWindow
 
 sealed class WindowBackdrop {
@@ -120,18 +110,18 @@ private class WinUIWindowNode(
     private var isWindowFocused = false
     private var isReleased = false
     private var isClosingFromRelease = false
-    private var activatedDelegate: WinRtDelegateHandle? =
-        createWindowActivatedDelegate(::handleActivated)
+    private var activatedHandler: TypedEventHandler<Any?, WindowActivatedEventArgs>? =
+        TypedEventHandler { _, args -> handleActivated(args.windowActivationState) }
     private var activatedToken: EventRegistrationToken? =
-        addWindowActivatedHandler(window, requireNotNull(activatedDelegate))
-    private var closedDelegate: WinRtDelegateHandle? = createWindowClosedDelegate(::handleClosed)
-    private var closedToken: EventRegistrationToken? =
-        addWindowClosedHandler(window, requireNotNull(closedDelegate))
-    private var appWindowChangedDelegate: WinRtDelegateHandle? =
-        createAppWindowChangedDelegate(::updateWindowInfo)
+        window.activated.add(requireNotNull(activatedHandler))
+    private var closedHandler: TypedEventHandler<Any?, microsoft.ui.xaml.WindowEventArgs>? =
+        TypedEventHandler { _, _ -> handleClosed() }
+    private var closedToken: EventRegistrationToken? = window.closed.add(requireNotNull(closedHandler))
+    private var appWindowChangedHandler: TypedEventHandler<AppWindow, AppWindowChangedEventArgs>? =
+        TypedEventHandler { _, _ -> updateWindowInfo() }
     private var appWindowChangedToken: EventRegistrationToken? = null
-    private var appWindowClosingDelegate: WinRtDelegateHandle? =
-        createAppWindowClosingDelegate(::handleClosing)
+    private var appWindowClosingHandler: TypedEventHandler<AppWindow, AppWindowClosingEventArgs>? =
+        TypedEventHandler { _, args -> handleClosing(args) }
     private var appWindowClosingToken: EventRegistrationToken? = null
     private var isCaptureProtected = false
 
@@ -216,9 +206,9 @@ private class WinUIWindowNode(
         }
     }
 
-    private fun handleClosing(args: IInspectableReference) {
+    private fun handleClosing(args: AppWindowClosingEventArgs) {
         if (isReleased || isClosingFromRelease) return
-        cancelAppWindowClosing(args)
+        args.cancel = true
         onCloseRequest()
     }
 
@@ -259,50 +249,40 @@ private class WinUIWindowNode(
 
     private fun registerAppWindowChangedHandler() {
         if (appWindowChangedToken != null) return
-        appWindowChangedToken =
-            addAppWindowChangedHandler(window.appWindow, requireNotNull(appWindowChangedDelegate))
+        appWindowChangedToken = window.appWindow.changed.add(requireNotNull(appWindowChangedHandler))
     }
 
     private fun registerAppWindowClosingHandler() {
         if (appWindowClosingToken != null) return
-        appWindowClosingToken =
-            addAppWindowClosingHandler(window.appWindow, requireNotNull(appWindowClosingDelegate))
+        appWindowClosingToken = window.appWindow.closing.add(requireNotNull(appWindowClosingHandler))
     }
 
     private fun removeAppWindowClosingHandler() {
         val token = appWindowClosingToken ?: return
-        val delegate = appWindowClosingDelegate
         appWindowClosingToken = null
-        appWindowClosingDelegate = null
-        runCatching { removeAppWindowClosingHandler(window.appWindow, token) }
-        delegate?.close()
+        appWindowClosingHandler = null
+        runCatching { window.appWindow.closing.remove(token) }
     }
 
     private fun removeAppWindowChangedHandler() {
         val token = appWindowChangedToken ?: return
-        val delegate = appWindowChangedDelegate
         appWindowChangedToken = null
-        appWindowChangedDelegate = null
-        runCatching { removeAppWindowChangedHandler(window.appWindow, token) }
-        delegate?.close()
+        appWindowChangedHandler = null
+        runCatching { window.appWindow.changed.remove(token) }
     }
 
     private fun removeActivatedHandler() {
         val token = activatedToken ?: return
-        val delegate = activatedDelegate
         activatedToken = null
-        activatedDelegate = null
-        runCatching { removeWindowActivatedHandler(window, token) }
-        delegate?.close()
+        activatedHandler = null
+        runCatching { window.activated.remove(token) }
     }
 
     private fun removeClosedHandler() {
         val token = closedToken ?: return
-        val delegate = closedDelegate
         closedToken = null
-        closedDelegate = null
-        runCatching { removeWindowClosedHandler(window, token) }
-        delegate?.close()
+        closedHandler = null
+        runCatching { window.closed.remove(token) }
     }
 }
 
@@ -318,294 +298,5 @@ private fun clearWindowSystemBackdrop(window: XamlWindow) {
                 arg0 = PlatformAbi.nullPointer,
             ),
         ).requireSuccess("Window.SystemBackdrop clear")
-    }
-}
-
-private fun createWindowActivatedDelegate(
-    onActivated: (WindowActivationState) -> Unit,
-): WinRtDelegateHandle =
-    WinRtDelegateBridge.createUnitDelegate(
-        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
-            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
-            WinRtTypeSignature.object_(),
-            WinRtTypeSignature.runtimeClass(
-                WindowActivatedEventArgs.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(WindowActivatedEventArgs.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-        ),
-        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
-    ) { arguments ->
-        val args = arguments.getOrNull(1) as? IInspectableReference ?: return@createUnitDelegate
-        val activationState = try {
-            readWindowActivationState(args)
-        } finally {
-            args.close()
-        }
-        onActivated(activationState)
-    }
-
-private fun readWindowActivationState(args: IInspectableReference): WindowActivationState =
-    args.queryInterface(IWindowActivatedEventArgs.Metadata.IID).getOrThrow().use { eventArgsInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val resultOut = PlatformAbi.allocateInt32Slot(scope)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = eventArgsInterface.pointer,
-                    slot = IWindowActivatedEventArgs.Metadata.WINDOWACTIVATIONSTATE_GETTER_SLOT,
-                    arg0 = resultOut,
-                ),
-            ).requireSuccess("WindowActivatedEventArgs.WindowActivationState")
-            // KWINRT-011: do not call generated internal WindowActivationState.Metadata.fromAbi;
-            // duplicate sample projections can load a class with a different module-mangled name.
-            when (PlatformAbi.readInt32(resultOut)) {
-                0 -> WindowActivationState.CodeActivated
-                1 -> WindowActivationState.Deactivated
-                2 -> WindowActivationState.PointerActivated
-                else -> WindowActivationState.CodeActivated
-            }
-        }
-    }
-
-private fun addWindowActivatedHandler(
-    window: XamlWindow,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IWindow ABI registration until generated event sources are stable.
-    window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = windowInterface.pointer,
-                        slot = IWindow.Metadata.ACTIVATED_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("Window.Activated add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeWindowActivatedHandler(
-    window: XamlWindow,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual Window.Activated registration above.
-    window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = windowInterface.pointer,
-                    slot = IWindow.Metadata.ACTIVATED_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("Window.Activated remove handler")
-        }
-    }
-}
-
-private fun createAppWindowChangedDelegate(
-    onChanged: () -> Unit,
-): WinRtDelegateHandle =
-    WinRtDelegateBridge.createUnitDelegate(
-        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
-            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
-            WinRtTypeSignature.runtimeClass(
-                AppWindow.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(AppWindow.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-            WinRtTypeSignature.runtimeClass(
-                AppWindowChangedEventArgs.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(AppWindowChangedEventArgs.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-        ),
-        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
-    ) { arguments ->
-        (arguments.getOrNull(1) as? IInspectableReference)?.close()
-        onChanged()
-    }
-
-private fun createAppWindowClosingDelegate(
-    onClosing: (IInspectableReference) -> Unit,
-): WinRtDelegateHandle =
-    WinRtDelegateBridge.createUnitDelegate(
-        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
-            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
-            WinRtTypeSignature.runtimeClass(
-                AppWindow.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(AppWindow.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-            WinRtTypeSignature.runtimeClass(
-                AppWindowClosingEventArgs.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(AppWindowClosingEventArgs.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-        ),
-        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
-    ) { arguments ->
-        val args = arguments.getOrNull(1) as? IInspectableReference ?: return@createUnitDelegate
-        try {
-            onClosing(args)
-        } finally {
-            args.close()
-        }
-    }
-
-private fun cancelAppWindowClosing(args: IInspectableReference) {
-    args.queryInterface(IAppWindowClosingEventArgs.Metadata.IID).getOrThrow().use { closingArgs ->
-        HResult(
-            ComVtableInvoker.invokeArgs(
-                instance = closingArgs.pointer,
-                slot = IAppWindowClosingEventArgs.Metadata.CANCEL_SETTER_SLOT,
-                arg0 = BooleanMarshaller.toAbi(true).toInt(),
-            ),
-        ).requireSuccess("AppWindowClosingEventArgs.Cancel")
-    }
-}
-
-private fun addAppWindowChangedHandler(
-    appWindow: AppWindow,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IAppWindow ABI registration until generated event sources are stable.
-    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = appWindowInterface.pointer,
-                        slot = IAppWindow.Metadata.CHANGED_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("AppWindow.Changed add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeAppWindowChangedHandler(
-    appWindow: AppWindow,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual AppWindow.Changed registration above.
-    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = appWindowInterface.pointer,
-                    slot = IAppWindow.Metadata.CHANGED_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("AppWindow.Changed remove handler")
-        }
-    }
-}
-
-private fun addAppWindowClosingHandler(
-    appWindow: AppWindow,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IAppWindow ABI registration until generated event sources are stable.
-    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = appWindowInterface.pointer,
-                        slot = IAppWindow.Metadata.CLOSING_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("AppWindow.Closing add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeAppWindowClosingHandler(
-    appWindow: AppWindow,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual AppWindow.Closing registration above.
-    appWindow.nativeObject.queryInterface(IAppWindow.Metadata.IID).getOrThrow().use { appWindowInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = appWindowInterface.pointer,
-                    slot = IAppWindow.Metadata.CLOSING_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("AppWindow.Closing remove handler")
-        }
-    }
-}
-
-private fun createWindowClosedDelegate(
-    onClosed: () -> Unit,
-): WinRtDelegateHandle =
-    WinRtDelegateBridge.createUnitDelegate(
-        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
-            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
-            WinRtTypeSignature.object_(),
-            WinRtTypeSignature.runtimeClass(
-                WindowEventArgs.Metadata.TYPE_NAME,
-                WinRtTypeSignature.guid(WindowEventArgs.Metadata.DEFAULT_INTERFACE_IID),
-            ),
-        ),
-        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.IINSPECTABLE),
-    ) { arguments ->
-        (arguments.getOrNull(1) as? IInspectableReference)?.close()
-        onClosed()
-    }
-
-private fun addWindowClosedHandler(
-    window: XamlWindow,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IWindow ABI registration until generated event sources are stable.
-    window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = windowInterface.pointer,
-                        slot = IWindow.Metadata.CLOSED_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("Window.Closed add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeWindowClosedHandler(
-    window: XamlWindow,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual Window.Closed registration above.
-    window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = windowInterface.pointer,
-                    slot = IWindow.Metadata.CLOSED_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("Window.Closed remove handler")
-        }
     }
 }

@@ -21,12 +21,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.node.WinUIOwner
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.WinRtDelegateHandle
-import microsoft.ui.xaml.IUIElement
+import io.github.composefluent.winrt.runtime.WinRtEvent
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.input.KeyEventHandler
 import windows.system.VirtualKey
@@ -38,28 +34,24 @@ internal class WinUIKeyInputAdapter(
     private var isDisposed = false
     private val keyEventProcessor = WinUIKeyEventProcessor()
     private val registrations = listOf(
-        register(KeyEventType.KeyDown, IUIElement.Metadata.KEYDOWN_ADD_SLOT, IUIElement.Metadata.KEYDOWN_REMOVE_SLOT),
-        register(KeyEventType.KeyUp, IUIElement.Metadata.KEYUP_ADD_SLOT, IUIElement.Metadata.KEYUP_REMOVE_SLOT),
+        register(KeyEventType.KeyDown, root.keyDown),
+        register(KeyEventType.KeyUp, root.keyUp),
     )
 
     fun dispose() {
         if (isDisposed) return
         isDisposed = true
         registrations.forEach { registration ->
-            runCatching {
-                removeKeyHandler(root, registration.removeSlot, registration.token)
-            }
-            registration.delegate.close()
+            runCatching { registration.event.remove(registration.token) }
         }
     }
 
     @OptIn(InternalComposeUiApi::class)
     private fun register(
         eventType: KeyEventType,
-        addSlot: Int,
-        removeSlot: Int,
+        event: WinRtEvent<KeyEventHandler>,
     ): WinUIKeyEventRegistration {
-        val delegate = KeyEventHandler { _, args ->
+        val handler = KeyEventHandler { _, args ->
             if (!isDisposed) {
                 keyEventProcessor.process(
                     eventType = eventType,
@@ -72,14 +64,8 @@ internal class WinUIKeyInputAdapter(
                     args.handled = handled
                 }
             }
-        }.createWinRtDelegateHandle()
-        val token = try {
-            addKeyHandler(root, addSlot, delegate)
-        } catch (throwable: Throwable) {
-            delegate.close()
-            throw throwable
         }
-        return WinUIKeyEventRegistration(removeSlot, token, delegate)
+        return WinUIKeyEventRegistration(event, event.add(handler), handler)
     }
 }
 
@@ -112,9 +98,9 @@ private fun Any?.isComposeRootSource(root: UIElement): Boolean =
     this == null || this == root
 
 private data class WinUIKeyEventRegistration(
-    val removeSlot: Int,
+    val event: WinRtEvent<KeyEventHandler>,
     val token: EventRegistrationToken,
-    val delegate: WinRtDelegateHandle,
+    val handler: KeyEventHandler,
 )
 
 private class WinUIKeyModifierState {
@@ -326,47 +312,3 @@ private fun VirtualKey.toUtf16CodePoint(): Int =
         VirtualKey.Space -> ' '.code
         else -> 0
     }
-
-private fun addKeyHandler(
-    element: UIElement,
-    slot: Int,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IUIElement ABI registration until generated event sources are stable.
-    element.nativeObject.queryInterface(IUIElement.Metadata.IID).getOrThrow().use { elementInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = elementInterface.pointer,
-                        slot = slot,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("UIElement key add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeKeyHandler(
-    element: UIElement,
-    slot: Int,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual UIElement key registration above.
-    element.nativeObject.queryInterface(IUIElement.Metadata.IID).getOrThrow().use { elementInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = elementInterface.pointer,
-                    slot = slot,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("UIElement key remove handler")
-        }
-    }
-}

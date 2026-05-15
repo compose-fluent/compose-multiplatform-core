@@ -5,9 +5,10 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
-- **Status:** Open. Reproduced after updating `external/kotlin-winrt` from
-  upstream `ec8c5a52`; still tracked as the event-source blocker after the
-  later `09f97af8` retest.
+- **Status:** Fixed upstream. Verified after updating `external/kotlin-winrt`
+  to `56c9267c` (`Fix multi-module WinUI event source descriptors`) and
+  switching compose-winui window, key, pointer, and text-toolbar event
+  registration back to generated `WinRtEvent` accessors.
 - **Observed in:** `Window.closed`, `AppWindow.changed`,
   `AppWindow.closing`, and generated WinRT event accessors
 - **Symptom:** Accessing generated event properties can fail during
@@ -16,12 +17,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** Declarative window lifecycle and `WindowInfo`
   updates need WinUI close/changed events, but using generated event accessors
   currently crashes the sample.
-- **compose-winui workaround:** `Window.winui.kt` manually registers
-  `Window.Closed` through the `IWindow` vtable and `AppWindow.Changed` /
-  `AppWindow.Closing` through the `IAppWindow` vtable, keeping each delegate
-  handle alive until removal. Search for `KWINRT-001`.
-- **Resolution target:** Fix generated event source registry/runtime ABI
-  compatibility so generated `WinRtEvent` properties can be used directly.
+- **compose-winui workaround:** Removed. `Window.winui.kt`,
+  `WinUIKeyInputAdapter.winui.kt`, `WinUIPointerInputAdapter.winui.kt`, and
+  `WinUITextToolbar.winui.kt` now use generated `WinRtEvent.add/remove`.
+- **Resolution target:** Keep generated event registration covered by
+  repository-local `winuiJvmTest` and `runWinUIViewSample` validation.
 
 ## KWINRT-002: Interface projection registry is not reliably initialized
 
@@ -270,12 +270,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
-- **Status:** Open. Still reproduced after updating `external/kotlin-winrt`
-  through upstream `093379d5` (`Wrap resource event callback arguments`);
-  KWINRT-016 no longer blocks this retest. The upstream dual-module sample
-  fixed one generated-event-source reproduction path, but compose-winui still
-  fails at shutdown with the same JVM FFM upcall fatal after all repository
-  smoke logs reach `text input session cancellation`.
+- **Status:** Fixed upstream. Verified after updating `external/kotlin-winrt`
+  to `56c9267c` (`Fix multi-module WinUI event source descriptors`) and
+  switching compose-winui event registration back to generated `WinRtEvent`
+  accessors. `runWinUIViewSample` now reaches
+  `text input session cancellation` and exits successfully.
 - **Observed in:** repository-local `runWinUIViewSample` on Microsoft OpenJDK
   25.0.3 with Windows App SDK callbacks
 - **Symptom:** After several WinUI callback/upcall paths have run, the JVM can
@@ -283,19 +282,12 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `Could not attach thread for upcall. JNI error code: -1`. The generated
   `hs_err_pid*.log` reports the current thread as a native thread and the last
   pc as an FFM upcall stub.
-- **Impact on compose-winui:** The sample now compiles, enters
-  `Application.Start`, and runs through the WinUIView, window, focus, layout,
-  pointer, state, retain, and text-input cancellation smokes, but full process
-  validation can still be interrupted by a VM fatal outside Kotlin exception
-  handling during shutdown.
-- **compose-winui workaround:** `WinUIFrameClock` ignores frame callbacks after
-  disposal, but this does not eliminate the fatal. Keep sample failures with
-  this signature classified as a kotlin-winrt/JDK upcall lifecycle blocker, not
-  as a compose-ui compile failure. Search for `KWINRT-013`.
-- **Resolution target:** Audit kotlin-winrt delegate/upcall lifetime and WinRT
-  callback removal, then either retain/close callback stubs in a shutdown-safe
-  order or avoid callbacks from native threads that the JVM cannot attach during
-  shutdown.
+- **Impact on compose-winui:** Full repository-local sample process validation
+  is no longer blocked by the shutdown-time JVM fatal after the upstream fix and
+  compose-winui workaround removal.
+- **compose-winui workaround:** None active for this issue.
+- **Resolution target:** Keep `runWinUIViewSample` in the WinUI validation path
+  so any future callback-lifetime regression is caught.
 
 ## KWINRT-014: Generated attached dependency property getters can rewrap with module-mangled internals
 
@@ -370,15 +362,15 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-017: WinUI Application access native-failfasts inside Application.Start callback
 
-- **Status:** Superseded by KWINRT-013 after retesting with upstream
-  `ec8c5a52`.
+- **Status:** Superseded by the fixed generated `Application.Start` and event
+  callback path. The latest `56c9267c` retest runs repository-local
+  `runWinUIViewSample` to completion.
 - **Observed in:** earlier local experiments that bypassed KWINRT-016 with a
   direct `IApplicationStatics.Start` ABI call.
 - **Symptom:** After bypassing KWINRT-016, WinUI entered the initialization
   callback, then the process terminated with `NTSTATUS 0xC000027B` before the
   compose sample could create its window. Retesting the natural generated path
-  with upstream `ec8c5a52` now creates the application and runs through the
-  sample smokes until the shutdown-time upcall fatal tracked by KWINRT-013.
+  now creates the application and runs through the sample smokes successfully.
 - **Impact on compose-winui:** The earlier application-access fail-fast is no
   longer the active blocker on the generated `Application.Start` path.
 - **compose-winui workaround:** None.
@@ -392,8 +384,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Status:** Fixed upstream. Verified after updating `external/kotlin-winrt`
   to `05273dea` (`Validate nullable content and launcher projection`) and
   changing repository-local `WinUIViewSample` smokes to read `Button.content`
-  back directly. Full sample process validation still ends at KWINRT-013
-  during shutdown.
+  back directly. A later `56c9267c` retest also completed full sample process
+  validation successfully.
 - **Observed in:** `Microsoft.UI.Xaml.Controls.Button.content`, inherited from
   `ContentControl.Content`, in repository-local `WinUIViewSample` smokes after
   syncing `external/kotlin-winrt` from upstream `ec8c5a52`.
@@ -481,7 +473,9 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-022: WinRT flags project as enum values instead of bitmasks
 
-- **Status:** Open
+- **Status:** Fixed upstream. Verified after updating `external/kotlin-winrt`
+  to `56c9267c`; generated `VirtualKeyModifiers` is now a value class with
+  bitmask operations and `fromAbi(UInt)` preserves combined flag values.
 - **Observed in:** `Windows.System.VirtualKeyModifiers`, read from
   `Microsoft.UI.Xaml.Input.PointerRoutedEventArgs.KeyModifiers`
 - **Symptom:** WinRT metadata marks `VirtualKeyModifiers` as a flags enum, but
@@ -491,10 +485,8 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   `VirtualKeyModifiers.Metadata.fromAbi(...)`.
 - **Impact on compose-winui:** Pointer events delivered to Compose can lose
   keyboard modifier state whenever more than one WinUI modifier key is pressed.
-- **compose-winui workaround:** `WinUIPointerInputAdapter.winui.kt` reads
-  `PointerRoutedEventArgs.KeyModifiers` as raw ABI bits and maps them to
-  `PointerKeyboardModifiers` in `WinUIPointerKeyboardModifiers.winui.kt`.
-  Search for `KWINRT-022`.
-- **Resolution target:** Project WinRT flags enums as bitmask-capable value
-  types, or otherwise allow unknown combined flag values to be represented
-  without throwing.
+- **compose-winui workaround:** Removed. `WinUIPointerInputAdapter.winui.kt`
+  now reads `PointerRoutedEventArgs.keyModifiers` through the generated
+  projection and maps the projected `VirtualKeyModifiers` value.
+- **Resolution target:** Keep the combined and unknown-bit modifier cases in
+  `WinUIPointerKeyboardModifiersTest`.

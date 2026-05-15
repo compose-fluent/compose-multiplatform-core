@@ -17,22 +17,12 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.geometry.Rect
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
+import io.github.composefluent.winrt.runtime.EventHandlerCallback
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.ParameterizedInterfaceId
-import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.WinRtDelegateBridge
-import io.github.composefluent.winrt.runtime.WinRtDelegateHandle
-import io.github.composefluent.winrt.runtime.WinRtDelegateValueKind
-import io.github.composefluent.winrt.runtime.WinRtTypeSignature
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.UIElement
-import microsoft.ui.xaml.controls.IMenuFlyoutItem
 import microsoft.ui.xaml.controls.MenuFlyout
 import microsoft.ui.xaml.controls.MenuFlyoutItem
-import microsoft.ui.xaml.controls.primitives.IFlyoutBase
 import windows.foundation.Point
 
 internal class WinUITextToolbar(
@@ -127,21 +117,20 @@ internal class WinUITextToolbar(
         requests.forEach { request ->
             val item = MenuFlyoutItem()
             item.text = request.label
-            val delegate = RoutedEventHandler { _, _ ->
+            val handler = RoutedEventHandler { _, _ ->
                 request.callback()
                 hide()
-            }.createWinRtDelegateHandle()
+            }
             val token = try {
-                addMenuFlyoutItemClickHandler(item, delegate)
+                item.click.add(handler)
             } catch (throwable: Throwable) {
                 clickRegistrations.forEach(::clearClickRegistration)
-                delegate.close()
                 throw throwable
             }
-            clickRegistrations += WinUITextToolbarClickRegistration(item, token, delegate)
+            clickRegistrations += WinUITextToolbarClickRegistration(item, token, handler)
             flyout.items.add(item)
         }
-        val closedDelegate = createMenuFlyoutClosedDelegate {
+        val closedHandler: EventHandlerCallback<Any?> = { _, _ ->
             val menu = currentMenu
             if (menu?.nativeMenu == flyout) {
                 currentMenu = null
@@ -149,10 +138,9 @@ internal class WinUITextToolbar(
             }
         }
         val closedRegistration = try {
-            addMenuFlyoutClosedHandler(flyout, closedDelegate)
+            WinUITextToolbarClosedRegistration(flyout.closed.add(closedHandler), closedHandler)
         } catch (throwable: Throwable) {
             clickRegistrations.forEach(::clearClickRegistration)
-            closedDelegate.close()
             throw throwable
         }
         return NativeMenu(flyout, clickRegistrations, closedRegistration)
@@ -163,19 +151,15 @@ internal class WinUITextToolbar(
         val closedRegistration = menu.closedRegistration
         if (closedRegistration != null) {
             runCatching {
-                menu.nativeMenu?.let {
-                    removeMenuFlyoutClosedHandler(it, closedRegistration.token)
-                }
+                menu.nativeMenu?.closed?.remove(closedRegistration.token)
             }
-            closedRegistration.delegate.close()
         }
     }
 
     private fun clearClickRegistration(registration: WinUITextToolbarClickRegistration) {
         runCatching {
-            removeMenuFlyoutItemClickHandler(registration.item, registration.token)
+            registration.item.click.remove(registration.token)
         }
-        registration.delegate.close()
     }
 }
 
@@ -195,12 +179,12 @@ internal data class WinUITextToolbarMenu(
 internal data class WinUITextToolbarClickRegistration(
     val item: MenuFlyoutItem,
     val token: EventRegistrationToken,
-    val delegate: WinRtDelegateHandle,
+    val handler: RoutedEventHandler,
 )
 
 internal data class WinUITextToolbarClosedRegistration(
     val token: EventRegistrationToken,
-    val delegate: WinRtDelegateHandle,
+    val handler: EventHandlerCallback<Any?>,
 )
 
 private data class WinUITextToolbarRequest(
@@ -217,102 +201,5 @@ private data class NativeMenu(
 private fun MutableList<WinUITextToolbarRequest>.addRequest(label: String, callback: (() -> Unit)?) {
     if (callback != null) {
         add(WinUITextToolbarRequest(label, callback))
-    }
-}
-
-private fun addMenuFlyoutItemClickHandler(
-    item: MenuFlyoutItem,
-    delegate: WinRtDelegateHandle,
-): EventRegistrationToken =
-    // KWINRT-001: use direct IMenuFlyoutItem ABI registration until generated event sources are stable.
-    item.nativeObject.queryInterface(IMenuFlyoutItem.Metadata.IID).getOrThrow().use { itemInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = itemInterface.pointer,
-                        slot = IMenuFlyoutItem.Metadata.CLICK_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("MenuFlyoutItem.Click add handler")
-                EventRegistrationToken.fromAbi(tokenOut)
-            }
-        }
-    }
-
-private fun removeMenuFlyoutItemClickHandler(
-    item: MenuFlyoutItem,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual MenuFlyoutItem.Click registration above.
-    item.nativeObject.queryInterface(IMenuFlyoutItem.Metadata.IID).getOrThrow().use { itemInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = itemInterface.pointer,
-                    slot = IMenuFlyoutItem.Metadata.CLICK_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("MenuFlyoutItem.Click remove handler")
-        }
-    }
-}
-
-private fun createMenuFlyoutClosedDelegate(
-    onClosed: () -> Unit,
-): WinRtDelegateHandle =
-    WinRtDelegateBridge.createUnitDelegate(
-        iid = ParameterizedInterfaceId.createFromParameterizedInterface(
-            Guid("9DE1C534-6AE1-11E0-84E1-18A905BCC53F"),
-            WinRtTypeSignature.object_(),
-        ),
-        parameterKinds = listOf(WinRtDelegateValueKind.OBJECT, WinRtDelegateValueKind.OBJECT),
-    ) {
-        onClosed()
-    }
-
-private fun addMenuFlyoutClosedHandler(
-    flyout: MenuFlyout,
-    delegate: WinRtDelegateHandle,
-): WinUITextToolbarClosedRegistration =
-    // KWINRT-001: use direct IFlyoutBase ABI registration until generated event sources are stable.
-    flyout.nativeObject.queryInterface(IFlyoutBase.Metadata.IID).getOrThrow().use { flyoutInterface ->
-        delegate.createReference().use { delegateReference ->
-            PlatformAbi.confinedScope().use { scope ->
-                val tokenOut = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-                HResult(
-                    ComVtableInvoker.invokeArgs(
-                        instance = flyoutInterface.pointer,
-                        slot = IFlyoutBase.Metadata.CLOSED_ADD_SLOT,
-                        arg0 = PlatformAbi.fromRawComPtr(delegateReference.pointer),
-                        arg1 = tokenOut,
-                    ),
-                ).requireSuccess("MenuFlyout.Closed add handler")
-                WinUITextToolbarClosedRegistration(EventRegistrationToken.fromAbi(tokenOut), delegate)
-            }
-        }
-    }
-
-private fun removeMenuFlyoutClosedHandler(
-    flyout: MenuFlyout,
-    token: EventRegistrationToken,
-) {
-    // KWINRT-001: pair with the manual MenuFlyout.Closed registration above.
-    flyout.nativeObject.queryInterface(IFlyoutBase.Metadata.IID).getOrThrow().use { flyoutInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val tokenAbi = PlatformAbi.allocateBytes(scope, EventRegistrationToken.BYTE_SIZE.toLong())
-            EventRegistrationToken.copyTo(token, tokenAbi)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = flyoutInterface.pointer,
-                    slot = IFlyoutBase.Metadata.CLOSED_REMOVE_SLOT,
-                    arg0 = tokenAbi,
-                ),
-            ).requireSuccess("MenuFlyout.Closed remove handler")
-        }
     }
 }

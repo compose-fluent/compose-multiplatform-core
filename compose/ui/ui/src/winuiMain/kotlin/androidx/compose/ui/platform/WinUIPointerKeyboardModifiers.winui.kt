@@ -17,21 +17,12 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import windows.system.VirtualKeyModifiers
 
-internal fun winUIPointerKeyboardModifiersFromRawBits(rawBits: UInt): PointerKeyboardModifiers =
+internal fun winUIPointerKeyboardModifiersFromWinUI(modifiers: VirtualKeyModifiers): PointerKeyboardModifiers =
     PointerKeyboardModifiers(
-        isCtrlPressed = rawBits hasWinUIKeyModifier WinUIVirtualKeyModifier.Control,
-        isAltPressed = rawBits hasWinUIKeyModifier WinUIVirtualKeyModifier.Menu,
-        isShiftPressed = rawBits hasWinUIKeyModifier WinUIVirtualKeyModifier.Shift,
-        isMetaPressed = rawBits hasWinUIKeyModifier WinUIVirtualKeyModifier.Windows,
+        isCtrlPressed = modifiers.hasFlag(VirtualKeyModifiers.Control),
+        isAltPressed = modifiers.hasFlag(VirtualKeyModifiers.Menu),
+        isShiftPressed = modifiers.hasFlag(VirtualKeyModifiers.Shift),
+        isMetaPressed = modifiers.hasFlag(VirtualKeyModifiers.Windows),
     )
-
-private infix fun UInt.hasWinUIKeyModifier(modifier: UInt): Boolean =
-    this and modifier != 0u
-
-private object WinUIVirtualKeyModifier {
-    const val Control: UInt = 1u
-    const val Menu: UInt = 2u
-    const val Shift: UInt = 4u
-    const val Windows: UInt = 8u
-}
