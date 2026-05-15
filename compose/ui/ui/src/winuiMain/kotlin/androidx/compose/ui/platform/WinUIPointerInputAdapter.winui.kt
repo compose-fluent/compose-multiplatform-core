@@ -43,6 +43,7 @@ internal class WinUIPointerInputAdapter(
     private val owner: WinUIOwner,
 ) {
     private var isDisposed = false
+    private val pointerEventProcessor = WinUIPointerEventProcessor()
     private val registrations = listOf(
         register(PointerEventType.Press, IUIElement.Metadata.POINTERPRESSED_ADD_SLOT) {
             IUIElement.Metadata.POINTERPRESSED_REMOVE_SLOT
@@ -89,7 +90,13 @@ internal class WinUIPointerInputAdapter(
     ): WinUIPointerEventRegistration {
         val delegate = PointerEventHandler { _, args ->
             if (!isDisposed) {
-                args.handled = dispatchPointerEvent(eventType, args)
+                pointerEventProcessor.process(
+                    event = createPointerEvent(eventType, args),
+                    isHandled = args.handled,
+                    sendPointerEvent = owner::sendPointerEvent,
+                )?.let { handled ->
+                    args.handled = handled
+                }
             }
         }.createWinRtDelegateHandle()
         return registerDelegate(addSlot, removeSlot(), delegate)
@@ -121,13 +128,13 @@ internal class WinUIPointerInputAdapter(
         return WinUIPointerEventRegistration(removeSlot, token, delegate)
     }
 
-    private fun dispatchPointerEvent(
+    private fun createPointerEvent(
         eventType: PointerEventType,
         args: PointerRoutedEventArgs,
-    ): Boolean {
+    ): WinUIPointerEvent {
         val point = args.getCurrentPoint(root)
         val position = point.position
-        return owner.sendPointerEvent(
+        return WinUIPointerEvent(
             eventType = eventType,
             position = Offset(position.x, position.y),
             uptimeMillis = point.timestamp.toLong() / MicrosecondsPerMillisecond,
@@ -149,6 +156,58 @@ internal class WinUIPointerInputAdapter(
         )
     }
 }
+
+internal class WinUIPointerEventProcessor {
+    fun process(
+        event: WinUIPointerEvent,
+        isHandled: Boolean,
+        sendPointerEvent: (
+            eventType: PointerEventType,
+            position: Offset,
+            uptimeMillis: Long,
+            pointerId: Long,
+            down: Boolean,
+            type: PointerType,
+            buttons: PointerButtons,
+            keyboardModifiers: PointerKeyboardModifiers,
+            button: PointerButton?,
+            scrollDelta: Offset,
+            isInBounds: Boolean,
+            nativeEvent: Any?,
+        ) -> Boolean,
+    ): Boolean? {
+        if (isHandled) return null
+        return sendPointerEvent(
+            event.eventType,
+            event.position,
+            event.uptimeMillis,
+            event.pointerId,
+            event.down,
+            event.type,
+            event.buttons,
+            event.keyboardModifiers,
+            event.button,
+            event.scrollDelta,
+            event.isInBounds,
+            event.nativeEvent,
+        )
+    }
+}
+
+internal data class WinUIPointerEvent(
+    val eventType: PointerEventType,
+    val position: Offset,
+    val uptimeMillis: Long,
+    val pointerId: Long,
+    val down: Boolean,
+    val type: PointerType,
+    val buttons: PointerButtons,
+    val keyboardModifiers: PointerKeyboardModifiers,
+    val button: PointerButton?,
+    val scrollDelta: Offset,
+    val isInBounds: Boolean,
+    val nativeEvent: Any?,
+)
 
 private data class WinUIPointerEventRegistration(
     val removeSlot: Int,
