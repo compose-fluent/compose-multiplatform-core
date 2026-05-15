@@ -21,9 +21,11 @@ import windows.foundation.collections.ValueSet
 import windows.system.Launcher
 import windows.system.LauncherOptions
 
-internal fun createWinUIUriHandler(): UriHandler = WinUIUriHandler
+internal fun createWinUIUriHandler(): UriHandler = WinUIUriHandler(::launchWinUIUri)
 
-private object WinUIUriHandler : UriHandler {
+internal class WinUIUriHandler(
+    private val launchUri: (String) -> Unit,
+) : UriHandler {
     override fun openUri(uri: String) {
         require(hasUriScheme(uri)) {
             "URI must include a scheme: $uri"
@@ -34,15 +36,15 @@ private object WinUIUriHandler : UriHandler {
             throw IllegalArgumentException("Cannot open URI: $uri", e)
         }
     }
+}
 
-    private fun launchUri(uri: String) {
-        Launcher.launchUriAsync(
-            uri = WinRtUri(uri),
-            options = LauncherOptions(),
-            inputData = ValueSet(),
-        ).use {
-            // Fire-and-forget, matching UriHandler's synchronous contract.
-        }
+private fun launchWinUIUri(uri: String) {
+    Launcher.launchUriAsync(
+        uri = WinRtUri(uri),
+        options = LauncherOptions(),
+        inputData = ValueSet(),
+    ).use {
+        // Fire-and-forget, matching UriHandler's synchronous contract.
     }
 }
 
