@@ -21,25 +21,31 @@ import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
 
 internal class WinUIPlatformFocusOwner(
-    private val focusRoot: UIElement,
+    private val requestNativeFocus: () -> Boolean,
+    private val clearNativeFocus: () -> Unit,
 ) : PlatformFocusOwner {
-    override fun requestOwnerFocus(
-        focusDirection: FocusDirection?,
-        previouslyFocusedRect: Rect?,
-    ): Boolean {
-        runCatching {
+    constructor(focusRoot: UIElement) : this(
+        requestNativeFocus = {
             focusRoot.isTabStop = true
             focusRoot.focus(FocusState.Programmatic)
-        }
-        return true
-    }
-
-    override fun clearOwnerFocus() {
-        runCatching {
+        },
+        clearNativeFocus = {
             if (focusRoot.focusState != FocusState.Unfocused) {
                 focusRoot.focus(FocusState.Unfocused)
             }
-        }
+        },
+    )
+
+    override fun requestOwnerFocus(
+        focusDirection: FocusDirection?,
+        previouslyFocusedRect: Rect?,
+    ): Boolean = runCatching {
+        requestNativeFocus()
+        true
+    }.getOrDefault(false)
+
+    override fun clearOwnerFocus() {
+        runCatching { clearNativeFocus() }
     }
 
     override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
