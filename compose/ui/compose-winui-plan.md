@@ -85,7 +85,8 @@
 - [x] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
 - [x] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
 - [ ] Support focus transfer between Compose focus targets and WinUI controls, including Tab and Shift+Tab traversal.
-- [ ] Support basic pointer and keyboard input so native WinUI controls can handle their own interaction while Compose receives events outside interop views.
+- [x] Support basic pointer cooperation so native WinUI controls handle pointer input inside `WinUIView` bounds while Compose receives pointer input outside interop views.
+- [ ] Support keyboard/native-focus cooperation so embedded WinUI controls handle their own focused keyboard input while Compose keeps predictable key dispatch outside interop views.
 - [ ] Defer full nested scroll parity until after basic AndroidView-equivalent lifecycle, layout, focus, and input behavior is stable.
 
 ## kotlin-winrt dependencies
@@ -153,6 +154,7 @@
 - [x] Add repository-local WinUI owner smoke validation for root pointer enter/exit dispatch through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for root pointer-wheel scroll dispatch and `scrollDelta` propagation through `PointerInputModifierNode`.
 - [x] Add repository-local WinUI owner smoke validation for canceling active pointer input when the owner is disposed.
+- [x] Add repository-local WinUIView smoke validation that pointer events inside native interop bounds are left for WinUI while outside events still dispatch to Compose.
 - [x] Route WinUI interop view layout changes through `Owner.onInteropViewLayoutChange` so native root synchronization is scheduled when hosted views move or resize.
 - [x] Add repository-local WinUI interop transaction queue unit coverage for dropped frames, late completions, empty transactions, merge behavior, and ring-buffer overflow.
 - [x] Add repository-local WinUIView smoke validation for placement/unplacement without native recreation or release.

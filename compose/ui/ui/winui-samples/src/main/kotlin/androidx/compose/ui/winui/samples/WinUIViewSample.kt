@@ -456,6 +456,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIPointerMoveSmoke()
             runWinUIPointerEnterExitSmoke()
             runWinUIPointerScrollSmoke()
+            runWinUIViewPointerInteropSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
@@ -1964,6 +1965,71 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: pointer input scroll")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIViewPointerInteropSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {
+                    WinUIView(
+                        modifier = fixedSizeAndPositionModifier(
+                            width = 20,
+                            height = 20,
+                            x = 10,
+                            y = 10,
+                        ),
+                        factory = { Button() },
+                    )
+                },
+            ) { measurables, _ ->
+                val placeables = measurables.map { measurable ->
+                    measurable.measure(Constraints.fixed(30, 30))
+                }
+                layout(80, 40) {
+                    placeables.forEach { placeable ->
+                        placeable.place(0, 0)
+                    }
+                }
+            }
+        }
+        awaitCondition("WinUIView pointer interop bounds installed") {
+            (rootHost.content as? Canvas)?.children?.singleOrNull() != null
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(5f, 5f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = true,
+            )
+        ) {
+            "WinUIView pointer interop smoke did not dispatch the outside press event."
+        }
+        awaitCondition("WinUIView pointer interop outside event received") {
+            probe.pressCount == 1
+        }
+        check(
+            !currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(15f, 15f),
+                uptimeMillis = 2L,
+                pointerId = 2L,
+                down = true,
+            )
+        ) {
+            "WinUIView pointer interop smoke dispatched an event inside native bounds."
+        }
+        check(probe.pressCount == 1) {
+            "WinUIView pointer interop smoke delivered native-bounds input to Compose."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: pointer input interop")
     }
 
     @OptIn(InternalComposeUiApi::class)
