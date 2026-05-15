@@ -16,12 +16,39 @@
 
 package androidx.compose.ui.platform
 
+import windows.ui.viewmanagement.UISettings
+
 @Suppress("DEPRECATION")
-internal object WinUIAccessibilityManager : AccessibilityManager {
+internal class WinUIAccessibilityManager(
+    private val messageDurationSeconds: () -> UInt? = {
+        runCatching { UISettings().messageDuration }.getOrNull()
+    },
+) : AccessibilityManager {
     override fun calculateRecommendedTimeoutMillis(
         originalTimeoutMillis: Long,
         containsIcons: Boolean,
         containsText: Boolean,
         containsControls: Boolean,
-    ): Long = originalTimeoutMillis
+    ): Long {
+        if (!containsIcons && !containsText && !containsControls) {
+            return originalTimeoutMillis
+        }
+        val recommendedMillis = messageDurationSeconds()
+            ?.takeIf { it > 0u }
+            ?.let { seconds ->
+                val maxSafeSeconds = Long.MAX_VALUE / MillisecondsPerSecond
+                val secondsAsLong = seconds.toLong()
+                if (secondsAsLong >= maxSafeSeconds) {
+                    Long.MAX_VALUE
+                } else {
+                    secondsAsLong * MillisecondsPerSecond
+                }
+            }
+            ?: return originalTimeoutMillis
+        return maxOf(originalTimeoutMillis, recommendedMillis)
+    }
+
+    private companion object {
+        const val MillisecondsPerSecond = 1_000L
+    }
 }

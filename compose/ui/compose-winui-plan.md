@@ -58,6 +58,7 @@
 - [x] Provide initial WinUI clipboard hooks for `LocalClipboardManager`, `LocalClipboard`, `ClipEntry`, `ClipMetadata`, and `NativeClipboard`, with kotlin-winrt workarounds tracked as `KWINRT-010` through `KWINRT-012`.
 - [x] Provide initial WinUI text input and IME integration hooks, with minimal stubs only where behavior is explicitly deferred.
 - [x] Provide initial WinUI text-toolbar state tracking for copy/paste/cut/select-all/autofill menu requests.
+- [x] Route WinUI accessibility recommended timeouts through `UISettings.messageDuration` for user-visible content.
 - [ ] Provide WinUI accessibility integration hooks that can later map Compose semantics to UI Automation.
 - [x] Ensure lifecycle, retained values, and saveable state behavior have WinUI equivalents instead of relying on Android `ViewTree*Owner` APIs.
 
@@ -146,6 +147,7 @@
 - [x] Add repository-local WinUI owner test validation for out-of-frame executor scheduling and `RootForTest.measureAndLayoutForTest()` draining.
 - [x] Add repository-local WinUI owner test validation for window/screen coordinate mapping delegation.
 - [x] Add repository-local WinUI owner test validation for text-toolbar shown/hidden state and request callbacks.
+- [x] Add repository-local WinUI accessibility manager validation for Windows message-duration based recommended timeouts.
 - [x] Wire WinUI keep-screen-on to `Windows.System.Display.DisplayRequest` and sensitive content to top-level window capture protection.
 - [x] Add repository-local WinUI owner smoke validation for `RootForTest.sendIndirectPointerEvent` dispatching through the focused indirect pointer input node.
 - [x] Add repository-local WinUI owner smoke validation for basic pointer press/release dispatch through `PointerInputModifierNode`.
