@@ -52,6 +52,9 @@ internal class WinUIPointerInputAdapter(
         register(PointerEventType.Release, IUIElement.Metadata.POINTERRELEASED_ADD_SLOT) {
             IUIElement.Metadata.POINTERRELEASED_REMOVE_SLOT
         },
+        register(PointerEventType.Scroll, IUIElement.Metadata.POINTERWHEELCHANGED_ADD_SLOT) {
+            IUIElement.Metadata.POINTERWHEELCHANGED_REMOVE_SLOT
+        },
         registerCancel(IUIElement.Metadata.POINTERCANCELED_ADD_SLOT) {
             IUIElement.Metadata.POINTERCANCELED_REMOVE_SLOT
         },
@@ -127,6 +130,11 @@ internal class WinUIPointerInputAdapter(
             buttons = point.toComposeButtons(),
             keyboardModifiers = args.toComposeKeyboardModifiers(),
             button = point.properties.pointerUpdateKind.toComposeButton(),
+            scrollDelta = if (eventType == PointerEventType.Scroll) {
+                point.properties.toComposeScrollDelta()
+            } else {
+                Offset.Zero
+            },
             nativeEvent = args,
         )
     }
@@ -173,6 +181,17 @@ private fun PointerUpdateKind.toComposeButton(): PointerButton? =
         PointerUpdateKind.XButton2Released -> PointerButton.Forward
         PointerUpdateKind.Other -> null
     }
+
+private fun microsoft.ui.input.PointerPointProperties.toComposeScrollDelta(): Offset {
+    val wheelTicks = mouseWheelDelta.toFloat() / MouseWheelDeltaPerTick
+    return if (isHorizontalMouseWheel) {
+        Offset(wheelTicks, 0f)
+    } else {
+        Offset(0f, -wheelTicks)
+    }
+}
+
+private const val MouseWheelDeltaPerTick = 120f
 
 private fun PointerRoutedEventArgs.toComposeKeyboardModifiers(): PointerKeyboardModifiers =
     runCatching {

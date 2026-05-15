@@ -352,6 +352,7 @@ fun WinUIComposeView.sendPointerEventForTest(
     buttons: PointerButtons = PointerButtons(),
     keyboardModifiers: PointerKeyboardModifiers = PointerKeyboardModifiers(),
     button: PointerButton? = null,
+    scrollDelta: Offset = Offset.Zero,
 ): Boolean = owner.sendPointerEventForTest(
     eventType = eventType,
     position = position,
@@ -362,6 +363,7 @@ fun WinUIComposeView.sendPointerEventForTest(
     buttons = buttons,
     keyboardModifiers = keyboardModifiers,
     button = button,
+    scrollDelta = scrollDelta,
 )
 
 private class WinUIRootContentHost {

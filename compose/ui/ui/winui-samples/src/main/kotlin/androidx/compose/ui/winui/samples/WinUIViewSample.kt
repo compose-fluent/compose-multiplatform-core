@@ -61,6 +61,7 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -440,6 +441,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIRootIndirectPointerSmoke()
             runWinUIPointerInputSmoke()
             runWinUIPointerMoveSmoke()
+            runWinUIPointerScrollSmoke()
             runWinUIPointerCancelOnDisposeSmoke()
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
@@ -1860,6 +1862,40 @@ private object ComposeWinUiSmokeApp {
     }
 
     @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIPointerScrollSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val probe = WinUIPointerInputSmokeProbe()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(probe),
+                content = {},
+            ) { _, _ ->
+                layout(30, 30) {}
+            }
+        }
+        withFrameNanos { }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Scroll,
+                position = Offset(12f, 9f),
+                uptimeMillis = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                scrollDelta = Offset(0f, -1f),
+            )
+        ) {
+            "WinUI pointer input scroll smoke did not dispatch the scroll event."
+        }
+        awaitCondition("WinUI pointer input scroll received") {
+            probe.scrollCount == 1 &&
+                probe.lastPosition == Offset(12f, 9f) &&
+                probe.lastScrollDelta == Offset(0f, -1f)
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: pointer input scroll")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIPointerCancelOnDisposeSmoke() {
         val currentComposeView = WinUIComposeView()
         val probe = WinUIPointerInputSmokeProbe()
@@ -2212,8 +2248,10 @@ private class WinUIPointerInputSmokeProbe {
     var pressCount = 0
     var moveCount = 0
     var releaseCount = 0
+    var scrollCount = 0
     var cancelCount = 0
     var lastPosition: Offset? = null
+    var lastScrollDelta: Offset? = null
 }
 
 private class WinUIOwnerEndApplyChangesProbe {
@@ -2329,11 +2367,13 @@ private class WinUIPointerInputSmokeNode(
         val change = pointerEvent.changes.firstOrNull()
         change?.let {
             probe.lastPosition = it.position
+            probe.lastScrollDelta = it.scrollDelta
         }
         when (pointerEvent.type) {
             PointerEventType.Press -> probe.pressCount += 1
             PointerEventType.Move -> probe.moveCount += 1
             PointerEventType.Release -> probe.releaseCount += 1
+            PointerEventType.Scroll -> probe.scrollCount += 1
         }
         change?.consume()
     }

@@ -485,6 +485,7 @@ internal class WinUIOwner(
         buttons: PointerButtons,
         keyboardModifiers: PointerKeyboardModifiers,
         button: PointerButton?,
+        scrollDelta: Offset = Offset.Zero,
     ): Boolean {
         return sendPointerEvent(
             eventType = eventType,
@@ -496,6 +497,7 @@ internal class WinUIOwner(
             buttons = buttons,
             keyboardModifiers = keyboardModifiers,
             button = button,
+            scrollDelta = scrollDelta,
             nativeEvent = null,
         )
     }
@@ -510,6 +512,7 @@ internal class WinUIOwner(
         buttons: PointerButtons,
         keyboardModifiers: PointerKeyboardModifiers,
         button: PointerButton?,
+        scrollDelta: Offset = Offset.Zero,
         nativeEvent: Any?,
     ): Boolean {
         if (isDisposed) return false
@@ -526,6 +529,7 @@ internal class WinUIOwner(
                     pressure = 1f,
                     type = type,
                     activeHover = type == PointerType.Mouse,
+                    scrollDelta = scrollDelta,
                     scaleGestureFactor = 1f,
                     panGestureOffset = Offset.Zero,
                     originalEventPosition = position,
