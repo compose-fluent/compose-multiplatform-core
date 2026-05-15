@@ -178,6 +178,7 @@ private class WinUIViewHolder<T : UIElement>(
     private val view: T,
     initialDensity: Density,
 ) : InteropViewFactoryHolder(), WinUIInteropViewHost {
+    private val interopView = view.asInteropView()
     private val group = InteropViewGroup(
         Canvas().also {
             it.children.add(view)
@@ -278,7 +279,7 @@ private class WinUIViewHolder<T : UIElement>(
         registerReleaseCleanup(::clearNativeState)
     }
 
-    override fun getInteropView(): InteropView = view.asInteropView()
+    override fun getInteropView(): InteropView = interopView
 
     override fun onReuse() {
         if (!isViewAttachedToGroup) {
@@ -290,6 +291,7 @@ private class WinUIViewHolder<T : UIElement>(
 
     override fun onDeactivate() {
         updateOwnerInteropFocusRect(null)
+        updateOwnerInteropBounds(null)
         resetBlock(view)
         group.uiElement.children.clear()
         isViewAttachedToGroup = false
@@ -322,6 +324,7 @@ private class WinUIViewHolder<T : UIElement>(
             it.verticalAlignment = VerticalAlignment.Top
         }
         updateClip()
+        updateOwnerInteropBoundsIfActive()
         updateOwnerInteropFocusRectIfFocused()
         if (changed) {
             notifyInteropLayoutChanged()
@@ -339,6 +342,7 @@ private class WinUIViewHolder<T : UIElement>(
             right = 0.0,
             bottom = 0.0,
         )
+        updateOwnerInteropBoundsIfActive()
         updateOwnerInteropFocusRectIfFocused()
         if (changed) {
             notifyInteropLayoutChanged()
@@ -348,7 +352,7 @@ private class WinUIViewHolder<T : UIElement>(
     @OptIn(InternalComposeUiApi::class)
     private fun notifyInteropLayoutChanged() {
         if (!layoutNode.isAttached) return
-        layoutNode.requireOwner().onInteropViewLayoutChange(view.asInteropView())
+        layoutNode.requireOwner().onInteropViewLayoutChange(interopView)
     }
 
     private fun applyInteraction(isUserInteractionEnabled: Boolean) {
@@ -383,10 +387,12 @@ private class WinUIViewHolder<T : UIElement>(
     private fun attachViewToGroup() {
         group.uiElement.children.add(view)
         isViewAttachedToGroup = true
+        updateOwnerInteropBoundsIfActive()
     }
 
     private fun clearNativeState() {
         updateOwnerInteropFocusRect(null)
+        updateOwnerInteropBounds(null)
         restoreInteraction()
         clearClip()
         group.uiElement.children.clear()
@@ -422,6 +428,18 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun interopFocusRect(): ComposeRect =
         ComposeRect(positionX, positionY, positionX + width, positionY + height)
+
+    private fun interopBounds(): ComposeRect =
+        ComposeRect(positionX, positionY, positionX + width, positionY + height)
+
+    private fun updateOwnerInteropBoundsIfActive() {
+        updateOwnerInteropBounds(if (isViewAttachedToGroup) interopBounds() else null)
+    }
+
+    private fun updateOwnerInteropBounds(bounds: ComposeRect?) {
+        if (!layoutNode.isAttached) return
+        (layoutNode.requireOwner() as? WinUIOwner)?.setInteropViewBounds(interopView, bounds)
+    }
 
     private fun updateOwnerInteropFocusRectIfFocused() {
         if (runCatching { view.focusState != FocusState.Unfocused }.getOrDefault(false)) {

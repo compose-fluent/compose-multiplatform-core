@@ -29,14 +29,19 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.keepScreenOn
+import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.RootMeasurePolicy
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
+import androidx.compose.ui.unit.IntSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -249,6 +254,74 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun ownerTracksInteropViewBounds() {
+        val owner = createOwner()
+        try {
+            val key = Any()
+            val bounds = Rect(1f, 2f, 30f, 40f)
+
+            owner.setInteropViewBounds(key, bounds)
+
+            assertEquals(listOf(bounds), owner.ownerStateForTest().interopViewBounds)
+
+            owner.setInteropViewBounds(key, null)
+
+            assertEquals(emptyList(), owner.ownerStateForTest().interopViewBounds)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun pointerEventsInsideInteropViewBoundsAreNotDispatchedToCompose() {
+        val owner = createOwner()
+        val events = mutableListOf<PointerEventType>()
+        try {
+            val pointerNode = LayoutNode().also {
+                it.modifier = PointerRecorderElement(events)
+                it.measurePolicy = fixedMeasurePolicy(100, 100)
+            }
+            owner.root.insertAt(0, pointerNode)
+            owner.setWindowContainerSize(IntSize(100, 100))
+            owner.measureAndLayout()
+
+            assertTrue(
+                owner.sendPointerEventForTest(
+                    eventType = PointerEventType.Press,
+                    position = Offset(60f, 60f),
+                    uptimeMillis = 1L,
+                    pointerId = 1L,
+                    down = true,
+                    type = PointerType.Mouse,
+                    buttons = PointerButtons(isPrimaryPressed = true),
+                    keyboardModifiers = PointerKeyboardModifiers(),
+                    button = PointerButton.Primary,
+                )
+            )
+            assertEquals(listOf(PointerEventType.Press), events)
+
+            owner.setInteropViewBounds(Any(), Rect(0f, 0f, 50f, 50f))
+
+            assertFalse(
+                owner.sendPointerEventForTest(
+                    eventType = PointerEventType.Press,
+                    position = Offset(10f, 10f),
+                    uptimeMillis = 2L,
+                    pointerId = 2L,
+                    down = true,
+                    type = PointerType.Mouse,
+                    buttons = PointerButtons(isPrimaryPressed = true),
+                    keyboardModifiers = PointerKeyboardModifiers(),
+                    button = PointerButton.Primary,
+                )
+            )
+            assertEquals(listOf(PointerEventType.Press), events)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
     fun inputModeManagerUpdatesFromRequestsAndOwnerInputEvents() {
         val owner = createOwner()
         try {
@@ -310,6 +383,40 @@ private class OwnerEvents {
     var lastScrollDelta = Offset.Unspecified
     val keepScreenOnValues = mutableListOf<Boolean>()
     val sensitiveContentValues = mutableListOf<Boolean>()
+}
+
+private fun fixedMeasurePolicy(width: Int, height: Int) = MeasurePolicy { _, _ ->
+    layout(width, height) {}
+}
+
+private data class PointerRecorderElement(
+    val events: MutableList<PointerEventType>,
+) : ModifierNodeElement<PointerRecorderNode>() {
+    override fun create(): PointerRecorderNode = PointerRecorderNode(events)
+
+    override fun update(node: PointerRecorderNode) {
+        node.events = events
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "pointerRecorder"
+    }
+}
+
+private class PointerRecorderNode(
+    var events: MutableList<PointerEventType>,
+) : Modifier.Node(), PointerInputModifierNode {
+    override fun onPointerEvent(
+        pointerEvent: PointerEvent,
+        pass: PointerEventPass,
+        bounds: IntSize,
+    ) {
+        if (pass == PointerEventPass.Main) {
+            events += pointerEvent.type
+        }
+    }
+
+    override fun onCancelPointerInput() = Unit
 }
 
 private object TestPlatformFocusOwner : PlatformFocusOwner {

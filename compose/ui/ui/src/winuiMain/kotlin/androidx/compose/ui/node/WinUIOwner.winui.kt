@@ -181,6 +181,7 @@ internal class WinUIOwner(
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
     private var keepScreenOnCount = 0
     private var sensitiveContentCount = 0
+    private val interopViewBounds = mutableMapOf<Any, Rect>()
     private var semanticsChangeCount = 0
     private var layoutChangeCount = 0
     private var lastLayoutChangedSemanticsId = -1
@@ -363,6 +364,14 @@ internal class WinUIOwner(
         interopViewFocusRect = rect
     }
 
+    internal fun setInteropViewBounds(key: Any, bounds: Rect?) {
+        if (bounds == null) {
+            interopViewBounds.remove(key)
+        } else {
+            interopViewBounds[key] = bounds
+        }
+    }
+
     private fun notifyInteropTreeChanged() {
         onInteropTreeChanged()
         registerOnEndApplyChangesListener(onInteropTreeChanged)
@@ -475,6 +484,7 @@ internal class WinUIOwner(
             isAccessibilityForcedForTesting = isAccessibilityForcedForTesting,
             accessibilityEventBatchIntervalMillis = accessibilityEventBatchIntervalMillis,
             interopViewFocusRect = interopViewFocusRect,
+            interopViewBounds = interopViewBounds.values.toList(),
         )
 
     override fun screenToLocal(positionOnScreen: Offset): Offset =
@@ -533,6 +543,9 @@ internal class WinUIOwner(
     ): Boolean {
         if (isDisposed) return false
         inputModeManager.requestInputMode(InputMode.Touch)
+        if (eventType != PointerEventType.Exit && isInInteropViewBounds(position)) {
+            return false
+        }
         val event = PointerInputEvent(
             eventType = eventType,
             uptime = uptimeMillis,
@@ -564,6 +577,14 @@ internal class WinUIOwner(
         )
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
     }
+
+    private fun isInInteropViewBounds(position: Offset): Boolean =
+        interopViewBounds.values.any { bounds ->
+            position.x >= bounds.left &&
+                position.x < bounds.right &&
+                position.y >= bounds.top &&
+                position.y < bounds.bottom
+        }
 
     internal fun cancelPointerInput() {
         pointerInputEventProcessor.processCancel()
@@ -601,6 +622,7 @@ internal data class WinUIOwnerStateForTest(
     val isAccessibilityForcedForTesting: Boolean,
     val accessibilityEventBatchIntervalMillis: Long,
     val interopViewFocusRect: Rect?,
+    val interopViewBounds: List<Rect>,
 )
 
 private class WinUIEmbeddedViewPlatformFocusOwner(
