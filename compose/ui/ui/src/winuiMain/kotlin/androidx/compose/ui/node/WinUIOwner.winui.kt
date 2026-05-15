@@ -19,10 +19,7 @@ package androidx.compose.ui.node
 import androidx.collection.IntObjectMap
 import androidx.collection.MutableIntObjectMap
 import androidx.collection.mutableIntObjectMapOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.retain.RetainedValuesStore
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.SessionMutex
 import androidx.compose.ui.autofill.Autofill
@@ -34,6 +31,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.focus.FocusOwnerImpl
 import androidx.compose.ui.focus.PlatformFocusOwner
+import androidx.compose.ui.focus.WinUIEmbeddedViewPlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
@@ -45,6 +43,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.WinUIHapticFeedback
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.input.WinUIInputModeManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -675,37 +674,3 @@ internal data class WinUIOwnerStateForTest(
     val interopViewFocusRect: Rect?,
     val interopViewBounds: List<Rect>,
 )
-
-private class WinUIEmbeddedViewPlatformFocusOwner(
-    private val delegate: PlatformFocusOwner,
-    private val embeddedViewFocusRect: () -> Rect?,
-) : PlatformFocusOwner {
-    override fun requestOwnerFocus(
-        focusDirection: FocusDirection?,
-        previouslyFocusedRect: Rect?,
-    ): Boolean = delegate.requestOwnerFocus(focusDirection, previouslyFocusedRect)
-
-    override fun clearOwnerFocus() {
-        delegate.clearOwnerFocus()
-    }
-
-    override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean =
-        delegate.moveFocusInChildren(focusDirection)
-
-    override fun getEmbeddedViewFocusRect(): Rect? =
-        embeddedViewFocusRect() ?: delegate.getEmbeddedViewFocusRect()
-
-    override fun focusTargetAvailable() {
-        delegate.focusTargetAvailable()
-    }
-}
-
-private class WinUIInputModeManager : InputModeManager {
-    override var inputMode: InputMode by mutableStateOf(InputMode.Keyboard)
-        private set
-
-    override fun requestInputMode(inputMode: InputMode): Boolean {
-        this.inputMode = inputMode
-        return true
-    }
-}
