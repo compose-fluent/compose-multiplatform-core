@@ -73,6 +73,8 @@ if (composeWinUiGradlePluginAvailable) {
         type("Windows.UI.Core.CoreCursor")
         type("Windows.UI.Core.CoreCursorType")
         type("Microsoft.UI.Input.InputCursor")
+        type("Microsoft.UI.Input.InputSystemCursor")
+        type("Microsoft.UI.Input.InputSystemCursorShape")
         type("Microsoft.UI.Xaml.Application")
         type("Microsoft.UI.Xaml.DependencyProperty")
         type("Microsoft.UI.Xaml.FrameworkElement")

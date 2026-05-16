@@ -573,18 +573,21 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Impact on compose-winui:** `Modifier.pointerHoverIcon(...)` needs to update
   the cursor on the WinUI root element when Compose hover state changes.
 - **compose-winui behavior:** The direct `IUIElementProtected` slot call was
-  removed. `WinUIPointerIconService` still tracks the requested Compose pointer
-  icon, but `WinUIPointerCursorAdapter.winui.kt` does not apply it to the WinUI
-  root until compose-winui owns a projected subclass that can set the protected
-  property through normal Kotlin access rules.
-- **Resolution target:** Handle this in compose-winui by moving cursor handling
-  to a projected subclass/derived WinUI element that can access the protected
-  property. Do not reintroduce direct protected-interface slot calls for this
+  removed. `WinUIRootContentHost` now uses `WinUIRootContentControl`, a
+  `ContentControl` subclass that applies Compose pointer icons by setting the
+  protected `UIElement.ProtectedCursor` property through normal Kotlin
+  protected-member access. `WinUIPointerCursorAdapter` creates
+  `Microsoft.UI.Input.InputSystemCursor` instances and delegates the protected
+  setter call to that root subclass.
+- **Resolution target:** Keep cursor behavior in the compose-owned root
+  subclass and do not reintroduce direct protected-interface slot calls for this
   behavior.
 - **Latest artifact check:** On `56c9267c`, `javap` still shows
   `UIElement.getProtectedCursor()` and `setProtectedCursor(InputCursor)` as
   protected members, matching WinUI's access model. Compose no longer bypasses
-  that protected access with a vtable slot call.
+  that protected access with a vtable slot call. The compose-winui protected
+  subclass path compiles and the repository-local `runWinUIViewSample` smoke
+  path exits successfully.
 
 ## KWINRT-022: WinRT flags project as enum values instead of bitmasks
 

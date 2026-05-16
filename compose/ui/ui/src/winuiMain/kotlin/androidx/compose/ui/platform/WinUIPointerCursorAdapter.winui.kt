@@ -17,18 +17,42 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.input.pointer.PointerIcon
-import microsoft.ui.xaml.UIElement
+import androidx.compose.ui.input.pointer.WinUIPointerIcon
+import androidx.compose.ui.viewinterop.WinUIRootContentControl
+import microsoft.ui.input.InputSystemCursor
+import microsoft.ui.input.InputSystemCursorShape
+import windows.ui.core.CoreCursorType
 
 internal class WinUIPointerCursorAdapter(
-    @Suppress("UNUSED_PARAMETER")
-    root: UIElement,
+    private val root: WinUIRootContentControl,
 ) {
-    @Suppress("UNUSED_PARAMETER")
+    private val cursors = mutableMapOf<InputSystemCursorShape, InputSystemCursor>()
+
     fun setIcon(icon: PointerIcon) {
-        // UIElement.ProtectedCursor is intentionally protected by WinUI. Cursor application
-        // should move to a projected root subclass instead of bypassing the protected API.
+        root.setComposePointerCursor(cursor(icon.toInputSystemCursorShape()))
     }
 
     fun dispose() {
+        if (cursors.isNotEmpty()) {
+            root.setComposePointerCursor(cursor(InputSystemCursorShape.Arrow))
+            cursors.values.forEach(InputSystemCursor::close)
+            cursors.clear()
+        }
+    }
+
+    private fun cursor(shape: InputSystemCursorShape): InputSystemCursor {
+        return cursors.getOrPut(shape) {
+            InputSystemCursor.create(shape)
+        }
+    }
+}
+
+private fun PointerIcon.toInputSystemCursorShape(): InputSystemCursorShape {
+    val cursorType = (this as? WinUIPointerIcon)?.cursorType ?: CoreCursorType.Arrow
+    return when (cursorType) {
+        CoreCursorType.Cross -> InputSystemCursorShape.Cross
+        CoreCursorType.Hand -> InputSystemCursorShape.Hand
+        CoreCursorType.IBeam -> InputSystemCursorShape.IBeam
+        else -> InputSystemCursorShape.Arrow
     }
 }

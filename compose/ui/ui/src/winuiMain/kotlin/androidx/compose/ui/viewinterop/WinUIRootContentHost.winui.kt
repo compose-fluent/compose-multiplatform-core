@@ -20,7 +20,7 @@ import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.controls.ContentControl
 
 internal class WinUIRootContentHost {
-    val root = ContentControl()
+    val root = WinUIRootContentControl()
     private val emptyContent = ContentControl()
     private var transaction = WinUIInteropMutableTransaction(isInteropActive = false)
     private val interopContainer = WinUIInteropRootContainer(::scheduleUpdate)

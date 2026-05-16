@@ -41,6 +41,7 @@ import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.WinUIInteropTransaction
 import androidx.compose.ui.viewinterop.WinUIRootContentHost
+import androidx.compose.ui.viewinterop.WinUIRootContentControl
 import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
@@ -59,7 +60,7 @@ import kotlinx.coroutines.launch
  * integration are filled in by the WinUI target rather than delegated to the desktop backend.
  */
 class WinUIComposeView internal constructor(
-    val root: UIElement,
+    private val rootContentControl: WinUIRootContentControl,
     private val setRootContent: (List<UIElement>) -> Unit,
     private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
@@ -73,6 +74,9 @@ class WinUIComposeView internal constructor(
     internal val rootNode = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
     }
+    val root: UIElement
+        get() = rootContentControl
+
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,
     ).apply {
@@ -82,7 +86,7 @@ class WinUIComposeView internal constructor(
     private val hostDefaultProvider = WinUIHostDefaultProvider(architectureComponentsOwner)
     private val retainedValuesStore = WinUIRetainedValuesStore()
     private val displayRequestController = WinUIDisplayRequestController()
-    private val pointerCursorAdapter = WinUIPointerCursorAdapter(root)
+    private val pointerCursorAdapter = WinUIPointerCursorAdapter(rootContentControl)
     private val pointerIconService = WinUIPointerIconService(pointerCursorAdapter::setIcon)
     internal val owner = WinUIOwner(
         root = rootNode,
