@@ -11,10 +11,11 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 - **Still worth upstream Gradle/plugin work:** `KWINRT-008` follow-up for full
   Windows SDK PRI pipeline alignment, and the KMP graph baseline covering
   customized source sets, transitive identity, and support artifact merging.
-- **Needs generated-artifact inspection before runtime changes:** `KWINRT-020`
-  should be checked against duplicate FQNs, `type-index.tsv`,
-  `WinRTInterfaceProjectionRegistry.class`, and exact module origin in the
-  compose-winui graph.
+- **Exact generated-artifact finding:** `KWINRT-020` reproduces because the
+  compose graph contains duplicate fixed-FQN
+  `io.github.composefluent.winrt.projections.support.WinRTInterfaceProjectionRegistry`
+  classes. The `:compose:ui:ui` registry contains `IDisplayRequest`, but the
+  downstream sample registry loaded by fixed class name does not.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   synchronous clipboard caching and `KWINRT-019` focus timing should be handled
   in compose-winui unless new ABI evidence appears.
@@ -474,10 +475,10 @@ issue has a stable id so compose-winui workarounds can reference it directly.
 
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
-- **Status:** Open pending exact generated-artifact inspection. Still
-  reproduced after syncing `external/kotlin-winrt` from upstream `56c9267c`
-  (`Fix multi-module WinUI event source descriptors`) and temporarily replacing
-  the compose-winui workaround with generated `DisplayRequest.requestActive()` /
+- **Status:** Open with exact generated-artifact evidence. Still reproduced
+  after syncing `external/kotlin-winrt` from upstream `56c9267c` (`Fix
+  multi-module WinUI event source descriptors`) and temporarily replacing the
+  compose-winui workaround with generated `DisplayRequest.requestActive()` /
   `requestRelease()` calls.
 - **Observed in:** `Windows.System.Display.DisplayRequest`
 - **Symptom:** `DisplayRequest()` activates, but calling generated
@@ -499,14 +500,25 @@ issue has a stable id so compose-winui workarounds can reference it directly.
   managed stack reaches `DisplayRequest.requestActive(DisplayRequest.kt:63)` via
   `WinUIDisplayRequestController.setKeepScreenOn`, `WinUIOwner.incrementKeepScreenOnCount`,
   and `KeepScreenOnNode.onAttach`.
+- **Generated artifact analysis:** The compose-ui output contains
+  `windows/system/display/IDisplayRequestNativeProjection$Factory.class` and
+  its fixed-FQN `WinRTInterfaceProjectionRegistry.class` registers
+  `Windows.System.Display.IDisplayRequest`. The downstream
+  `winui-samples` output also contains a fixed-FQN
+  `WinRTInterfaceProjectionRegistry.class`, but that registry only contains the
+  sample module's small projection set such as `Windows.Foundation.IStringable`
+  and URI interfaces, not `IDisplayRequest`. All inspected
+  `kotlin-winrt/type-index.tsv` files in these outputs are empty, so the fixed
+  registrar class can only represent one classpath entry while resources do not
+  preserve the interface registry entries. This matches the runtime source
+  comment that a fixed registrar class can only represent one classpath entry.
 - **Resolution target:** Ensure compose-winui's generated support output
   includes and loads the `IDisplayRequest` interface projection registry, or
   emit runtime-class methods that can invoke the default-interface ABI without
-  requiring a registered generated interface wrapper. Before changing runtime
-  code, inspect the compose generated artifacts for duplicate FQNs,
-  `type-index.tsv`, `WinRTInterfaceProjectionRegistry.class`, and whether the
-  interface descriptor comes from the expected module in the exact compose-winui
-  graph.
+  requiring a registered generated interface wrapper. More generally, preserve
+  multi-module interface projection registry entries through resources or
+  unique generated support classes instead of relying on one fixed-FQN
+  `WinRTInterfaceProjectionRegistry` per classpath.
 
 ## KWINRT-021: Protected WinUI cursor API is not usable from compose-winui
 
