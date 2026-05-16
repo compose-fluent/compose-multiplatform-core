@@ -411,7 +411,7 @@ kotlin {
 
         sourceSets {
             winuiMain {
-                dependsOn(commonMain)
+                dependsOn(skikoMain)
                 dependencies {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
@@ -481,6 +481,19 @@ tasks.withType(KotlinCompile).configureEach { task ->
 if (composeWinUiGradlePluginAvailable) {
     tasks.withType(KotlinCompile).configureEach { task ->
         if (!task.name.contains("Winui")) return
+        // WinUI sits below skikoMain in the source-set graph, but it must keep
+        // WinUI/XAML actuals where skikoMain uses generic or Win32-backed
+        // implementations. Start with a WinUI-first bridge and selectively
+        // allow skikoMain scene/rendering sources as skiko-winui lands.
+        if (task.name == "compileKotlinWinuiJvm") {
+            task.setSource(project.files(
+                    "src/commonMain/kotlin",
+                    "src/jvmAndAndroidMain/kotlin",
+                    "src/winuiMain/kotlin",
+                    "src/winuiJvmMain/kotlin",
+                    layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin"),
+            ))
+        }
         task.dependsOn("generateWinRtProjections")
         task.compilerOptions {
             it.jvmTarget.set(JvmTarget.JVM_22)
