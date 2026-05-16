@@ -229,7 +229,9 @@ baseline, not every retest attempt.
   element is loaded/layout-ready.
 - **compose-winui target:** Move focus requests to loaded/layout-ready points
   rather than adding a kotlin-winrt helper or ABI workaround.
-- **Validation:** `WinUIPlatformFocusOwnerTest` covers current focus behavior.
+- **Validation:** `WinUIPlatformFocusOwnerTest` covers current focus behavior;
+  `runWinUIViewSample` now covers compose-winui deferring native focus transfer
+  until the embedded WinUI control is loaded/layout-ready.
 
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 

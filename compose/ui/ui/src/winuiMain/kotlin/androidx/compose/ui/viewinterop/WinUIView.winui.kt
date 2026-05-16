@@ -48,9 +48,12 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
+import io.github.composefluent.winrt.runtime.EventHandlerCallback
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
+import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.VerticalAlignment
 import microsoft.ui.xaml.automation.AutomationProperties
@@ -200,6 +203,8 @@ private class WinUIViewHolder<T : UIElement>(
     private val initialViewTabStop = view.isTabStop
     private val initialControlEnabled = (view as? Control)?.isEnabled
     private var nativeAccessibilityOverrideApplied = false
+    private var loadedFocusToken: EventRegistrationToken? = null
+    private var layoutUpdatedFocusToken: EventRegistrationToken? = null
     private val releaseCleanups = mutableListOf<() -> Unit>()
 
     override val interopRoot: UIElement
@@ -293,6 +298,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     override fun onDeactivate() {
+        cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
         resetBlock(view)
@@ -378,20 +384,85 @@ private class WinUIViewHolder<T : UIElement>(
     private fun canRequestFocus(): Boolean =
         isViewAttachedToGroup && properties.isUserInteractionEnabled && view.isTabStop
 
-    private fun requestNativeFocus(): Boolean =
+    private fun requestNativeFocus(): Boolean {
+        if (!canRequestFocus()) {
+            cancelDeferredNativeFocus()
+            return false
+        }
+        if (requestNativeFocusNow()) {
+            cancelDeferredNativeFocus()
+            return true
+        }
+        val frameworkElement = view as? FrameworkElement ?: return false
+        requestNativeFocusWhenLayoutReady(frameworkElement)
+        return true
+    }
+
+    private fun requestNativeFocusNow(): Boolean =
         runCatching {
             canRequestFocus() && view.focus(FocusState.Programmatic)
         }.getOrDefault(false).also { isFocused ->
-            updateOwnerInteropFocusRect(if (isFocused) interopFocusRect() else null)
+            if (isFocused) {
+                updateOwnerInteropFocusRect(interopFocusRect())
+            }
         }
 
+    private fun requestNativeFocusWhenLayoutReady(frameworkElement: FrameworkElement) {
+        if (runCatching { frameworkElement.isLoaded }.getOrDefault(false)) {
+            requestNativeFocusOnNextLayoutUpdated(frameworkElement)
+        } else {
+            requestNativeFocusOnLoaded(frameworkElement)
+        }
+    }
+
+    private fun requestNativeFocusOnLoaded(frameworkElement: FrameworkElement) {
+        if (loadedFocusToken != null) return
+        val handler = RoutedEventHandler { _, _ ->
+            clearLoadedFocusRequest(frameworkElement)
+            if (!requestNativeFocusNow()) {
+                requestNativeFocusOnNextLayoutUpdated(frameworkElement)
+            }
+        }
+        loadedFocusToken = frameworkElement.loaded.add(handler)
+    }
+
+    private fun requestNativeFocusOnNextLayoutUpdated(frameworkElement: FrameworkElement) {
+        if (layoutUpdatedFocusToken != null) return
+        val handler: EventHandlerCallback<Any?> = { _, _ ->
+            clearLayoutUpdatedFocusRequest(frameworkElement)
+            requestNativeFocusNow()
+        }
+        layoutUpdatedFocusToken = frameworkElement.layoutUpdated.add(handler)
+    }
+
     private fun clearNativeFocus() {
+        cancelDeferredNativeFocus()
         runCatching {
             if (view.focusState != FocusState.Unfocused) {
                 view.focus(FocusState.Unfocused)
             }
         }
         updateOwnerInteropFocusRect(null)
+    }
+
+    private fun cancelDeferredNativeFocus() {
+        val frameworkElement = view as? FrameworkElement ?: return
+        clearLoadedFocusRequest(frameworkElement)
+        clearLayoutUpdatedFocusRequest(frameworkElement)
+    }
+
+    private fun clearLoadedFocusRequest(frameworkElement: FrameworkElement) {
+        loadedFocusToken?.let { token ->
+            runCatching { frameworkElement.loaded.remove(token) }
+            loadedFocusToken = null
+        }
+    }
+
+    private fun clearLayoutUpdatedFocusRequest(frameworkElement: FrameworkElement) {
+        layoutUpdatedFocusToken?.let { token ->
+            runCatching { frameworkElement.layoutUpdated.remove(token) }
+            layoutUpdatedFocusToken = null
+        }
     }
 
     private fun attachViewToGroup() {
@@ -401,6 +472,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun clearNativeState() {
+        cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
         restoreInteraction()

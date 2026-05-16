@@ -303,6 +303,7 @@ private fun WinUIViewWindowIntegrationContent(
     toggleOn: Boolean,
     expectWindowFocus: Boolean,
     lifecycleProbe: WinUIViewLifecycleProbe,
+    buttonModifier: Modifier = Modifier,
     onButtonUpdated: (Button) -> Unit,
     onTextBoxUpdated: (TextBox) -> Unit,
     onToggleSwitchUpdated: (ToggleSwitch) -> Unit,
@@ -334,7 +335,7 @@ private fun WinUIViewWindowIntegrationContent(
             height = 40,
             x = 0,
             y = 0,
-        ),
+        ).then(buttonModifier),
         factory = {
             lifecycleProbe.factoryCount += 1
             Button()
@@ -519,6 +520,8 @@ private object ComposeWinUiSmokeApp {
                 var lastButton by remember { mutableStateOf<Button?>(null) }
                 var lastTextBox by remember { mutableStateOf<TextBox?>(null) }
                 var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
+                val nativeFocusRequester = remember { FocusRequester() }
+                var nativeFocusSmokePassed by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     withFrameNanos { }
                     content = "Hello from Compose WinUI updated"
@@ -558,6 +561,7 @@ private object ComposeWinUiSmokeApp {
                     lastButton,
                     lastTextBox,
                     lastToggleSwitch,
+                    nativeFocusSmokePassed,
                 ) {
                     lastButton ?: return@LaunchedEffect
                     val textBox = lastTextBox ?: return@LaunchedEffect
@@ -571,16 +575,31 @@ private object ComposeWinUiSmokeApp {
                         extendsContentIntoTitleBar &&
                         backdrop == WindowBackdrop.None &&
                         backdropSmokePassed &&
-                        backdropClearSmokePassed
+                        backdropClearSmokePassed &&
+                        nativeFocusSmokePassed
                     ) {
                         windowSmokePassed = true
                     }
+                }
+                LaunchedEffect(lastButton, mainWindowFocusedOnce) {
+                    val button = lastButton ?: return@LaunchedEffect
+                    if (!mainWindowFocusedOnce || nativeFocusSmokePassed) return@LaunchedEffect
+                    withFrameNanos { }
+                    check(nativeFocusRequester.requestFocus()) {
+                        "WinUIView native focus smoke could not focus the interop host."
+                    }
+                    awaitCondition("WinUIView native focus transfer") {
+                        button.focusState != microsoft.ui.xaml.FocusState.Unfocused
+                    }
+                    nativeFocusSmokePassed = true
+                    println("compose-winui-sample: native focus transfer")
                 }
                 WinUIViewWindowIntegrationContent(
                     buttonContent = content,
                     toggleOn = content.endsWith("updated"),
                     expectWindowFocus = true,
                     lifecycleProbe = windowProbe,
+                    buttonModifier = Modifier.focusRequester(nativeFocusRequester),
                     onButtonUpdated = { button ->
                         composeView = button
                         lastButton = button
