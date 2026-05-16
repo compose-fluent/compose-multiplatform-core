@@ -18,14 +18,47 @@ package androidx.compose.ui.draganddrop
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.platform.InspectorInfo
 
 internal object WinUIDragAndDropManager : DragAndDropManager {
-    override val modifier: Modifier = Modifier
+    private val rootDragAndDropNode = DragAndDropNode()
+    private val interestedTargets = mutableSetOf<DragAndDropTarget>()
+
+    override val modifier: Modifier = RootWinUIDragAndDropElement(rootDragAndDropNode)
     override val isRequestDragAndDropTransferRequired: Boolean = false
 
     override fun requestDragAndDropTransfer(node: DragAndDropNode, offset: Offset) = Unit
 
-    override fun registerTargetInterest(target: DragAndDropTarget) = Unit
+    override fun registerTargetInterest(target: DragAndDropTarget) {
+        interestedTargets.add(target)
+    }
 
-    override fun isInterestedTarget(target: DragAndDropTarget): Boolean = false
+    override fun isInterestedTarget(target: DragAndDropTarget): Boolean =
+        interestedTargets.contains(target)
+
+    internal fun onDragEnded(event: DragAndDropEvent) {
+        rootDragAndDropNode.onEnded(event)
+        interestedTargets.clear()
+    }
+
+    internal fun clearTargetInterestForTest() {
+        interestedTargets.clear()
+    }
+}
+
+private class RootWinUIDragAndDropElement(
+    private val dragAndDropNode: DragAndDropNode,
+) : ModifierNodeElement<DragAndDropNode>() {
+    override fun create(): DragAndDropNode = dragAndDropNode
+
+    override fun update(node: DragAndDropNode) = Unit
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "RootWinUIDragAndDropNode"
+    }
+
+    override fun equals(other: Any?): Boolean = other === this
+
+    override fun hashCode(): Int = dragAndDropNode.hashCode()
 }
