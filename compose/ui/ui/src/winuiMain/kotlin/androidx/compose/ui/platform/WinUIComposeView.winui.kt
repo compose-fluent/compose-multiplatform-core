@@ -191,10 +191,11 @@ class WinUIComposeView internal constructor(
     }
 
     private fun createComposition(): Composition {
-        WinUIScheduler.register(root.dispatcherQueue)
-        GlobalSnapshotManager.ensureStarted(root.dispatcherQueue)
-        val dispatcher = WinUIDispatcher(root.dispatcherQueue)
-        val currentFrameClock = WinUIFrameClock(root.dispatcherQueue)
+        val dispatcherQueue = requireRootDispatcherQueue()
+        WinUIScheduler.register(dispatcherQueue)
+        GlobalSnapshotManager.ensureStarted(dispatcherQueue)
+        val dispatcher = WinUIDispatcher(dispatcherQueue)
+        val currentFrameClock = WinUIFrameClock(dispatcherQueue)
         val recomposerParentJob = SupervisorJob()
         val recomposerContext = dispatcher + currentFrameClock + recomposerParentJob
         val currentRecomposer = Recomposer(recomposerContext)
@@ -219,7 +220,7 @@ class WinUIComposeView internal constructor(
     private fun scheduleRootContentSync() {
         if (isDisposed || isRootContentSyncScheduled) return
         isRootContentSyncScheduled = true
-        if (!root.dispatcherQueue.tryEnqueue {
+        if (!requireRootDispatcherQueue().tryEnqueue {
                 isRootContentSyncScheduled = false
                 if (!isDisposed) {
                     syncRootContent()
@@ -234,9 +235,13 @@ class WinUIComposeView internal constructor(
     }
 
     private fun scheduleOutOfFrame(block: () -> Unit) {
-        if (!root.dispatcherQueue.tryEnqueue { block() }) {
+        if (!requireRootDispatcherQueue().tryEnqueue { block() }) {
             block()
         }
+    }
+
+    private fun requireRootDispatcherQueue() = checkNotNull(root.dispatcherQueue) {
+        "WinUI root DispatcherQueue is not available."
     }
 
     private fun updateRootContent(content: List<UIElement>) {

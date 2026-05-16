@@ -16,9 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.HResult
-
 internal class WinUIDisplayRequestController {
     private var displayRequest: windows.system.display.DisplayRequest? = null
     private var isActive = false
@@ -29,31 +26,12 @@ internal class WinUIDisplayRequestController {
             val request = displayRequest ?: windows.system.display.DisplayRequest().also {
                 displayRequest = it
             }
-            request.invokeDisplayRequestSlot(
-                windows.system.display.IDisplayRequest.Metadata.REQUESTACTIVE_SLOT
-            )
+            request.requestActive()
             isActive = true
         } else {
             val request = displayRequest ?: return
-            request.invokeDisplayRequestSlot(
-                windows.system.display.IDisplayRequest.Metadata.REQUESTRELEASE_SLOT
-            )
+            request.requestRelease()
             isActive = false
         }
-    }
-
-    private fun windows.system.display.DisplayRequest.invokeDisplayRequestSlot(slot: Int) {
-        // KWINRT-020: merged compiler-support contains IDisplayRequest, but the
-        // downstream sample still does not register its generated projection factory.
-        nativeObject.queryInterface(windows.system.display.IDisplayRequest.Metadata.IID)
-            .getOrThrow()
-            .use { displayRequest ->
-                HResult(
-                    ComVtableInvoker.invoke(
-                        instance = displayRequest.pointer,
-                        slot = slot,
-                    ),
-                ).requireSuccess("DisplayRequest")
-            }
     }
 }

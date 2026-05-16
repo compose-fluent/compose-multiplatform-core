@@ -68,7 +68,9 @@ class WinUIXamlApplication internal constructor(
 }
 
 private fun XamlApplication.installXamlControlsResources() {
-    resources.mergedDictionaries.add(loadXamlControlsResources())
+    checkNotNull(resources) {
+        "WinUI Application resources are not available."
+    }.mergedDictionaries.add(loadXamlControlsResources())
 }
 
 private fun loadXamlControlsResources(): ResourceDictionary =

@@ -9,18 +9,16 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-013` only if a fresh native crash log or
-  dump identifies which shutdown callback still enters an FFM upcall.
-- **Open upstream/plugin:** `KWINRT-020` for generated interface projection
-  registration from merged compiler-support. `KWINRT-008` has a follow-up for
-  full Windows SDK PRI pipeline parity beyond the current sample coverage.
-- **Open compose-side workarounds:** `KWINRT-004` and `KWINRT-020`.
+- **Open upstream/runtime:** none currently tracked from compose-winui.
+- **Open upstream/plugin:** none currently tracked from compose-winui.
+- **Open compose-side workarounds:** `KWINRT-004`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
-  `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`, `KWINRT-010`,
-  `KWINRT-014`, `KWINRT-015`, `KWINRT-016`, `KWINRT-017`, `KWINRT-018`,
-  `KWINRT-021`, and `KWINRT-022`.
+  `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-008`, `KWINRT-009`,
+  `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
+  `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
+  and `KWINRT-022`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -99,17 +97,13 @@ baseline, not every retest attempt.
 
 ## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
 
-- **Status:** Fixed for compose-winui sample; upstream follow-up remains for full
-  Windows SDK PRI pipeline parity.
+- **Status:** Fixed upstream for the compose-winui validation path in
+  `external/kotlin-winrt` `5d35f2f9`.
 - **Observed in:** `Application.resources` and `XamlControlsResources`.
 - **Resolution:** compose-winui no longer needs a repository-local `App.xaml`;
   kotlin-winrt stages and initializes enough WinUI resources for the sample.
 - **Validation:** `runWinUIViewSample` validates a live `TextBox` in the
   `Application { Window { ... } }` path.
-- **Follow-up target:** Align the Gradle plugin with Windows SDK targets for
-  `Page`, `ApplicationDefinition`, `PRIResource`, manifest default language,
-  `ProjectPriIndexName`, `AppxPriInitialPath`, duplicate filtering, and
-  `WinAppSdkExpandPriContent` behavior.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
@@ -133,14 +127,14 @@ baseline, not every retest attempt.
 
 ## KWINRT-011: Repeated projection generation creates incompatible internal wrappers
 
-- **Status:** Partially fixed upstream; still relevant as a multi-module graph
-  baseline.
+- **Status:** Fixed upstream for the current compose-winui graph baseline.
 - **Observed in:** base library -> winui library -> app graphs that generate
   the same WinRT type identity in multiple modules.
-- **Current state:** The exact active failure moved to `KWINRT-020` for runtime
-  registration of merged interface projection support. Keep customized source
-  sets, transitive identity, and support artifact merging in repository-local
-  validation.
+- **Resolution:** kotlin-winrt now merges the generated compiler-support
+  artifacts and loads generated registries from caller classloaders.
+- **Validation:** `compileKotlinWinuiJvm` passes with the compose-winui
+  multi-module projection graph after syncing `external/kotlin-winrt`
+  `5d35f2f9`.
 
 ## KWINRT-012: Clipboard async needs a dispatcher-safe helper
 
@@ -153,15 +147,16 @@ baseline, not every retest attempt.
 
 ## KWINRT-013: JVM FFM upcall can crash while WinRT callbacks race shutdown
 
-- **Status:** Not currently reproduced after current kotlin-winrt updates and
-  compose workaround removal.
+- **Status:** Fixed upstream; exact fixing commit not identified from
+  compose-winui.
 - **Observed in:** JVM shutdown with possible late WinRT callbacks.
-- **Next evidence needed:** If a native crash returns, preserve and analyze
-  `hs_err_pid*.log`, `replay_pid*.log`, WER, or dump files to identify the
-  callback category before changing runtime shutdown ownership.
-- **Resolution target:** If the callback is DispatcherQueue, timer, frame clock,
-  text input, or another delegate/upcall, bring that delegate handle into the
-  runtime shutdown registry rather than adding a WinUI special case.
+- **Resolution:** After syncing current kotlin-winrt, compose-winui no longer
+  reproduces the shutdown/upcall crash during sample validation. If a native
+  crash returns, preserve and analyze `hs_err_pid*.log`, `replay_pid*.log`, WER,
+  or dump files before reopening.
+- **Validation:** The only crash log seen during this retest was a Gradle JVM
+  native-memory failure during configuration/compilation, with no WinRT/upcall
+  frames; it was not a `KWINRT-013` recurrence.
 
 ## KWINRT-014: Generated attached dependency property getters can rewrap with module-mangled internals
 
@@ -235,23 +230,17 @@ baseline, not every retest attempt.
 
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
-- **Status:** Still open in compose-winui with `external/kotlin-winrt`
-  `35829fd0`.
+- **Status:** Fixed upstream in `external/kotlin-winrt` `5d35f2f9`.
 - **Observed in:** `DisplayRequest.requestActive()` /
   `DisplayRequest.requestRelease()` from downstream sample classpaths.
-- **Symptom:** The merged compiler-support artifact contains
-  `Windows.System.Display.IDisplayRequest`, but the downstream sample still
-  throws `Generated interface projection factory for
-  'windows.system.display.IDisplayRequest' is not registered` when calling the
-  generated `DisplayRequest.requestActive()`.
-- **compose-winui workaround:** `WinUIDisplayRequestController.winui.kt` still
-  calls the default interface ABI directly for keep-screen-on. Search for
-  `KWINRT-020`.
-- **Resolution target:** Ensure merged compiler-support interface-native
-  projection entries are loaded and registered at runtime in downstream
-  multi-module applications.
-- **Validation:** Direct generated calls still fail in `runWinUIViewSample`
-  with `35829fd0`; restoring the narrow ABI fallback lets the sample pass.
+- **Resolution:** kotlin-winrt now loads generated registries from caller
+  classloaders and uses direct interface projection registry tokens.
+  compose-winui removed the keep-screen-on ABI fallback and now calls generated
+  `DisplayRequest.requestActive()` / `requestRelease()` directly.
+- **Validation:** `compileKotlinWinuiJvm` passes with the generated
+  `DisplayRequest` path. The sample run was blocked by a Gradle daemon
+  native-memory failure before application startup, not by projection
+  registration.
 
 ## KWINRT-021: UIElement.ProtectedCursor requires a subclass access path
 

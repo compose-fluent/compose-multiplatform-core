@@ -175,7 +175,7 @@
 - [x] Add focus and input smoke coverage for Compose focus targets around hosted WinUI controls, keyboard events, Compose pointer delivery outside hosted controls, and hosted-control pointer exclusion. Tab traversal and native focus transfer are covered by the adjacent root traversal and loaded/layout-ready native focus smokes.
 - [x] Add repository-local WinUI key input processor coverage proving native-child key events are left to WinUI and do not update Compose modifier state.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
-- [ ] Keep shutdown/upcall validation for `KWINRT-013`: if `upcallLinker.cpp:66` returns, preserve and analyze `hs_err`, WER, or dump output to identify whether the late callback is EventSource, DispatcherQueue, timer, frame clock, text input, or another delegate before changing kotlin-winrt.
+- [x] Retest shutdown/upcall validation after current kotlin-winrt sync: `KWINRT-013` is treated as fixed upstream, though compose-winui did not identify the exact fixing commit. If `upcallLinker.cpp:66` returns, preserve and analyze `hs_err`, WER, or dump output before reopening it.
 - [x] Extend the Windows JVM integration smoke to a live WinUI `TextBox` after `KWINRT-008` is resolved.
 - [ ] Add Windows mingwX64 integration smoke test for the same shared `WinUIView` sample after the mingw target is enabled.
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
@@ -186,7 +186,8 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-013`: Not currently reproduced on the latest compose-winui sample, but still the primary runtime shutdown issue to catch with native crash evidence if it returns. Do not add WinUI-specific shutdown guesses without first classifying the callback from logs or a dump.
-- `KWINRT-008`: Compose no longer needs `App.xaml` for the sample path, but kotlin-winrt still needs full Windows SDK PRI pipeline alignment rather than package-specific resource handling.
+- No active kotlin-winrt blocker is currently tracked from compose-winui after syncing `external/kotlin-winrt` `5d35f2f9`.
+- `KWINRT-008`: Fixed for the compose-winui validation path; `App.xaml` is no longer required.
+- `KWINRT-013`: Treated as fixed upstream. The exact fixing commit was not identified from compose-winui; reopen only with fresh native crash evidence and log/dump analysis.
+- `KWINRT-020`: Fixed by the current registry/classloader changes. compose-winui removed the keep-screen-on ABI fallback and now uses generated `DisplayRequest.requestActive()` / `requestRelease()` directly.
 - KMP graph baseline: Keep testing customized source sets, transitive identity, and support artifact merging. Do not regress to a single-module JVM sample as the only kotlin-winrt validation shape.
-- `KWINRT-020`: Still reproduced in compose-winui on `35829fd0`. The merged compiler-support artifact contains `Windows.System.Display.IDisplayRequest`, but the downstream sample still throws `Generated interface projection factory for 'windows.system.display.IDisplayRequest' is not registered` when calling generated `DisplayRequest.requestActive()`, so compose-winui keeps the narrow keep-screen-on ABI fallback for now.

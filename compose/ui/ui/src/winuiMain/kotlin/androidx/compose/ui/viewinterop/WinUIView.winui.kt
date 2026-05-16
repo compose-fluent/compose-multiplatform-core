@@ -60,6 +60,7 @@ import microsoft.ui.xaml.automation.AutomationProperties
 import microsoft.ui.xaml.automation.peers.AccessibilityView
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.Control
+import microsoft.ui.xaml.controls.UIElementCollection
 import microsoft.ui.xaml.media.RectangleGeometry
 import windows.foundation.Rect
 import windows.foundation.Size
@@ -185,7 +186,7 @@ private class WinUIViewHolder<T : UIElement>(
     private val interopView = view.asInteropView()
     private val group = InteropViewGroup(
         Canvas().also {
-            it.children.add(view)
+            it.requiredChildren.add(view)
             it.horizontalAlignment = HorizontalAlignment.Left
             it.verticalAlignment = VerticalAlignment.Top
         }
@@ -302,7 +303,7 @@ private class WinUIViewHolder<T : UIElement>(
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
         resetBlock(view)
-        group.uiElement.children.clear()
+        group.uiElement.requiredChildren.clear()
         isViewAttachedToGroup = false
     }
 
@@ -372,7 +373,7 @@ private class WinUIViewHolder<T : UIElement>(
     private fun applyNativeAccessibility(isNativeAccessibilityEnabled: Boolean) {
         if (isNativeAccessibilityEnabled) {
             if (nativeAccessibilityOverrideApplied) {
-                view.clearValue(AutomationProperties.accessibilityViewProperty)
+                view.clearValue(requiredAccessibilityViewProperty)
                 nativeAccessibilityOverrideApplied = false
             }
         } else {
@@ -466,7 +467,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun attachViewToGroup() {
-        group.uiElement.children.add(view)
+        group.uiElement.requiredChildren.add(view)
         isViewAttachedToGroup = true
         updateOwnerInteropBoundsIfActive()
     }
@@ -478,7 +479,7 @@ private class WinUIViewHolder<T : UIElement>(
         restoreInteraction()
         restoreNativeAccessibility()
         clearClip()
-        group.uiElement.children.clear()
+        group.uiElement.requiredChildren.clear()
         isViewAttachedToGroup = false
     }
 
@@ -495,7 +496,7 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun restoreNativeAccessibility() {
         if (!nativeAccessibilityOverrideApplied) return
-        view.clearValue(AutomationProperties.accessibilityViewProperty)
+        view.clearValue(requiredAccessibilityViewProperty)
         nativeAccessibilityOverrideApplied = false
     }
 
@@ -670,6 +671,16 @@ private fun UIElement.measureUnclippedDesiredSize(): IntSize {
 
 private fun Int.toWinUISize(): Double =
     if (this > 0) toDouble() else Double.NaN
+
+private val Canvas.requiredChildren: UIElementCollection
+    get() = checkNotNull(children) {
+        "WinUI Canvas children collection is not available."
+    }
+
+private val requiredAccessibilityViewProperty
+    get() = checkNotNull(AutomationProperties.accessibilityViewProperty) {
+        "WinUI AutomationProperties.AccessibilityViewProperty is not available."
+    }
 
 private fun Float.toComposeLayoutSize(): Int =
     when {

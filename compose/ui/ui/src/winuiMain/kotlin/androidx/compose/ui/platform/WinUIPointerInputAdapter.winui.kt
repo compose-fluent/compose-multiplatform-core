@@ -93,6 +93,9 @@ internal class WinUIPointerInputAdapter(
     ): WinUIPointerEvent {
         val point = args.getCurrentPoint(root)
         val position = point.position
+        val properties = checkNotNull(point.properties) {
+            "WinUI pointer properties are not available."
+        }
         return WinUIPointerEvent(
             eventType = eventType,
             position = Offset(position.x, position.y),
@@ -102,11 +105,11 @@ internal class WinUIPointerInputAdapter(
                 eventType != PointerEventType.Scroll &&
                 point.isInContact,
             type = point.toComposePointerType(),
-            buttons = point.toComposeButtons(),
+            buttons = properties.toComposeButtons(),
             keyboardModifiers = args.toComposeKeyboardModifiers(),
-            button = point.properties.pointerUpdateKind.toComposeButton(),
+            button = properties.pointerUpdateKind.toComposeButton(),
             scrollDelta = if (eventType == PointerEventType.Scroll) {
-                point.properties.toComposeScrollDelta()
+                properties.toComposeScrollDelta()
             } else {
                 Offset.Zero
             },
@@ -184,14 +187,13 @@ private fun PointerPoint.toComposePointerType(): PointerType =
         PointerDeviceType.Touchpad -> PointerType.Touch
     }
 
-private fun PointerPoint.toComposeButtons(): PointerButtons {
-    val properties = properties
+private fun microsoft.ui.input.PointerPointProperties.toComposeButtons(): PointerButtons {
     return PointerButtons(
-        isPrimaryPressed = properties.isLeftButtonPressed,
-        isSecondaryPressed = properties.isRightButtonPressed,
-        isTertiaryPressed = properties.isMiddleButtonPressed,
-        isBackPressed = properties.isXButton1Pressed,
-        isForwardPressed = properties.isXButton2Pressed,
+        isPrimaryPressed = isLeftButtonPressed,
+        isSecondaryPressed = isRightButtonPressed,
+        isTertiaryPressed = isMiddleButtonPressed,
+        isBackPressed = isXButton1Pressed,
+        isForwardPressed = isXButton2Pressed,
     )
 }
 

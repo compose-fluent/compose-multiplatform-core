@@ -67,21 +67,24 @@ internal class WinUICoordinateMapper(
         private fun UIElement.localToScreen(localPosition: Offset): Offset {
             val xamlRoot = runCatching { xamlRoot }.getOrNull() ?: return localPosition
             val positionInWindow = calculatePositionInWindow(localPosition)
-            return xamlRoot.coordinateConverter
+            val coordinateConverter = xamlRoot.coordinateConverter ?: return positionInWindow
+            return coordinateConverter
                 .convertLocalToScreen(positionInWindow.toWinRtPoint())
                 .toOffset()
         }
 
         private fun UIElement.screenToLocal(positionOnScreen: Offset): Offset {
             val xamlRoot = runCatching { xamlRoot }.getOrNull() ?: return positionOnScreen
-            val positionInWindow = xamlRoot.coordinateConverter
+            val coordinateConverter = xamlRoot.coordinateConverter ?: return positionOnScreen
+            val positionInWindow = coordinateConverter
                 .convertScreenToLocal(positionOnScreen.toWinRtPointInt32())
                 .toOffset()
             return calculateLocalPosition(positionInWindow)
         }
 
         private fun UIElement.rootTransformToWindow() = runCatching {
-            transformToVisual(xamlRoot.content as UIElement)
+            val root = xamlRoot ?: return@runCatching null
+            transformToVisual(root.content as UIElement)
         }.getOrNull()
 
         private fun Offset.toWinRtPoint(): Point = Point(x, y)

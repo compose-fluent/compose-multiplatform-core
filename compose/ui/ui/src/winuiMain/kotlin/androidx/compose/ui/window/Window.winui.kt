@@ -99,11 +99,17 @@ private class WinUIWindowNode(
 ) : WinUIApplicationNode(), WindowScope {
     override val window: XamlWindow = XamlWindow()
     override val appWindow: AppWindow
-        get() = window.appWindow
+        get() = checkNotNull(window.appWindow) {
+            "WinUI Window AppWindow is not available."
+        }
     override val compositor: Compositor
-        get() = window.compositor
+        get() = checkNotNull(window.compositor) {
+            "WinUI Window Compositor is not available."
+        }
     override val dispatcherQueue: DispatcherQueue
-        get() = window.dispatcherQueue
+        get() = checkNotNull(window.dispatcherQueue) {
+            "WinUI Window DispatcherQueue is not available."
+        }
 
     private var composeView: WinUIComposeView? = null
     private var hasActivated = false
@@ -128,14 +134,14 @@ private class WinUIWindowNode(
     var onCloseRequest: () -> Unit = {}
 
     init {
-        applicationContext?.attachWindow(window.dispatcherQueue)
+        applicationContext?.attachWindow(dispatcherQueue)
     }
 
     var title: String
         get() = window.title
         set(value) {
             window.title = value
-            window.appWindow.title = value
+            appWindow.title = value
         }
 
     var extendsContentIntoTitleBar: Boolean
@@ -231,7 +237,7 @@ private class WinUIWindowNode(
 
     private fun updateWindowInfo() {
         val view = composeView ?: return
-        val appWindowSize = window.appWindow.size
+        val appWindowSize = appWindow.size
         view.setWindowContainerSize(
             IntSize(
                 width = appWindowSize.width,
@@ -249,26 +255,26 @@ private class WinUIWindowNode(
 
     private fun registerAppWindowChangedHandler() {
         if (appWindowChangedToken != null) return
-        appWindowChangedToken = window.appWindow.changed.add(requireNotNull(appWindowChangedHandler))
+        appWindowChangedToken = appWindow.changed.add(requireNotNull(appWindowChangedHandler))
     }
 
     private fun registerAppWindowClosingHandler() {
         if (appWindowClosingToken != null) return
-        appWindowClosingToken = window.appWindow.closing.add(requireNotNull(appWindowClosingHandler))
+        appWindowClosingToken = appWindow.closing.add(requireNotNull(appWindowClosingHandler))
     }
 
     private fun removeAppWindowClosingHandler() {
         val token = appWindowClosingToken ?: return
         appWindowClosingToken = null
         appWindowClosingHandler = null
-        runCatching { window.appWindow.closing.remove(token) }
+        runCatching { appWindow.closing.remove(token) }
     }
 
     private fun removeAppWindowChangedHandler() {
         val token = appWindowChangedToken ?: return
         appWindowChangedToken = null
         appWindowChangedHandler = null
-        runCatching { window.appWindow.changed.remove(token) }
+        runCatching { appWindow.changed.remove(token) }
     }
 
     private fun removeActivatedHandler() {
