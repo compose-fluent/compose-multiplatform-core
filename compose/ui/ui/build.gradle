@@ -89,6 +89,8 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Window")
         type("Microsoft.UI.Xaml.WindowActivatedEventArgs")
         type("Microsoft.UI.Xaml.WindowActivationState")
+        type("Microsoft.UI.Xaml.Automation.AccessibilityView")
+        type("Microsoft.UI.Xaml.Automation.AutomationProperties")
         type("Microsoft.UI.Xaml.Input.PointerEventHandler")
         type("Microsoft.UI.Xaml.Input.PointerRoutedEventArgs")
         type("Microsoft.UI.Xaml.Input.KeyEventHandler")

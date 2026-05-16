@@ -43,7 +43,8 @@ internal class WinUIDisplayRequestController {
     }
 
     private fun windows.system.display.DisplayRequest.invokeDisplayRequestSlot(slot: Int) {
-        // KWINRT-020: the generated IDisplayRequest projection factory is not registered.
+        // KWINRT-020: merged compiler-support contains IDisplayRequest, but the
+        // downstream sample still does not register its generated projection factory.
         nativeObject.queryInterface(windows.system.display.IDisplayRequest.Metadata.IID)
             .getOrThrow()
             .use { displayRequest ->

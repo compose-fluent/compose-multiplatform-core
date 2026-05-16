@@ -80,7 +80,7 @@
 - [x] Add initial WinUIView measure policy plus size and root-position propagation from Compose layout to the WinUI wrapper and `FrameworkElement` child.
 - [x] Wire initial `WinUIInteropProperties.clipToBounds` support to a WinUI `RectangleGeometry` clip on the native wrapper.
 - [x] Wire initial `WinUIInteropProperties.isUserInteractionEnabled` support to WinUI hit testing, user-element Tab focus, and `Control.isEnabled`.
-- [ ] Wire `WinUIInteropProperties.isNativeAccessibilityEnabled` support to `AutomationProperties.AccessibilityView` after detached-element crashes and projection wrapper conflicts are resolved (`KWINRT-014`, `KWINRT-015`).
+- [x] Wire `WinUIInteropProperties.isNativeAccessibilityEnabled` support to `AutomationProperties.AccessibilityView`.
 - [x] Use an initial Canvas-backed WinUI interop root container so wrapper position and z-order are controlled by Compose tree order instead of Grid layout behavior.
 - [x] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
 - [x] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
@@ -134,7 +134,7 @@
 - [x] Add repository-local WinUIView smoke validation for updating native interaction state across hit testing, Tab focus, and `Control.isEnabled`.
 - [x] Add repository-local WinUIView smoke validation for restoring native interaction state and clearing native clip on release.
 - [ ] Add repository-local WinUIView smoke validation for native WinUI event-token registration and release cleanup after generated WinUI event sources are usable from compose-winui (`KWINRT-016`).
-- [ ] Add repository-local WinUIView smoke validation for toggling native accessibility participation through `AutomationProperties.AccessibilityView` after `KWINRT-014` and `KWINRT-015` are resolved.
+- [x] Add repository-local WinUIView smoke validation for toggling native accessibility participation through `AutomationProperties.AccessibilityView`.
 - [x] Add repository-local WinUIView smoke validation for unclipped native child bounds inside clipped Compose wrapper bounds.
 - [x] Add repository-local WinUIView smoke validation for relayout after Compose size and position state changes.
 - [x] Add repository-local WinUI owner smoke validation for snapshot-observed layout state invalidating measure/layout without recomposition.
@@ -189,4 +189,4 @@
 - `KWINRT-013`: Not currently reproduced on the latest compose-winui sample, but still the primary runtime shutdown issue to catch with native crash evidence if it returns. Do not add WinUI-specific shutdown guesses without first classifying the callback from logs or a dump.
 - `KWINRT-008`: Compose no longer needs `App.xaml` for the sample path, but kotlin-winrt still needs full Windows SDK PRI pipeline alignment rather than package-specific resource handling.
 - KMP graph baseline: Keep testing customized source sets, transitive identity, and support artifact merging. Do not regress to a single-module JVM sample as the only kotlin-winrt validation shape.
-- `KWINRT-020`: Still reproduced in compose-winui on `56c9267c`. Exact artifact inspection shows duplicate fixed-FQN `WinRTInterfaceProjectionRegistry` classes: `:compose:ui:ui` contains the `IDisplayRequest` registry entry, while the downstream sample's same-FQN registry is the one visible through fixed class-name loading and does not contain `IDisplayRequest`; inspected `type-index.tsv` files are empty, so interface registry entries are not preserved as resources.
+- `KWINRT-020`: Still reproduced in compose-winui on `97f15295`. The merged compiler-support artifact contains `Windows.System.Display.IDisplayRequest`, but the downstream sample still throws `Generated interface projection factory for 'windows.system.display.IDisplayRequest' is not registered` when calling generated `DisplayRequest.requestActive()`, so compose-winui keeps the narrow keep-screen-on ABI fallback for now.

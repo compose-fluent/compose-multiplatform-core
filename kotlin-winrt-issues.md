@@ -11,15 +11,15 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** `KWINRT-013` only if a fresh native crash log or
   dump identifies which shutdown callback still enters an FFM upcall.
-- **Open upstream/plugin:** `KWINRT-020` for multi-module generated interface
-  projection registry ownership. `KWINRT-008` has a follow-up for full Windows
-  SDK PRI pipeline parity beyond the current sample coverage.
-- **Open compose-side workarounds:** `KWINRT-003`, `KWINRT-004`, `KWINRT-005`,
-  `KWINRT-007`, `KWINRT-014`, and `KWINRT-015`.
+- **Open upstream/plugin:** `KWINRT-020` for generated interface projection
+  registration from merged compiler-support. `KWINRT-008` has a follow-up for
+  full Windows SDK PRI pipeline parity beyond the current sample coverage.
+- **Open compose-side workarounds:** `KWINRT-004` and `KWINRT-020`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
-- **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-006`,
-  `KWINRT-009`, `KWINRT-010`, `KWINRT-016`, `KWINRT-017`, `KWINRT-018`,
+- **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
+  `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`, `KWINRT-010`,
+  `KWINRT-014`, `KWINRT-015`, `KWINRT-016`, `KWINRT-017`, `KWINRT-018`,
   `KWINRT-021`, and `KWINRT-022`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
@@ -45,16 +45,13 @@ baseline, not every retest attempt.
 
 ## KWINRT-003: Nullable XAML content properties throw on null ABI returns
 
-- **Status:** Not reproduced in the current smoke path, but generated nullability
-  still needs cleanup.
+- **Status:** Fixed upstream and retested in compose-winui with
+  `external/kotlin-winrt` `97f15295`.
 - **Observed in:** `ContentControl.content` after setting it to `null`.
-- **Symptom:** A null ABI return can surface as `WINRT_E_NULL_ABI_RETURN`
-  instead of Kotlin `null`.
-- **compose-winui workaround:** Release validation treats
-  `WINRT_E_NULL_ABI_RETURN` as null where it reads cleared `ContentControl`
-  content. Search for `KWINRT-003`.
-- **Resolution target:** Generate nullable Kotlin property contracts, or map
-  nullable ABI returns to `null`, for unsettable XAML content properties.
+- **Resolution:** Generated `ContentControl.content` is nullable in the compose
+  projection, and no compose-side `WINRT_E_NULL_ABI_RETURN` workaround remains.
+- **Validation:** `compileKotlinWinuiJvm` and `runWinUIViewSample` pass; the
+  sample reads generated `ContentControl.content` for button content checks.
 
 ## KWINRT-004: Nullable XAML runtime-class properties are generated as non-null setters
 
@@ -69,15 +66,14 @@ baseline, not every retest attempt.
 
 ## KWINRT-005: Windows.System.Launcher projection pulls invalid Package wrappers
 
-- **Status:** Partially fixed upstream; still open for the natural one-argument
-  `Launcher.launchUriAsync(uri)` path.
+- **Status:** Fixed upstream and retested in compose-winui with
+  `external/kotlin-winrt` `97f15295`.
 - **Observed in:** `Windows.System.Launcher` and dependent
   `Windows.ApplicationModel.Package` projections.
-- **Resolution:** compose-winui removed the manual `ILauncherStatics` vtable path
-  and now uses the generated three-argument
-  `Launcher.launchUriAsync(uri, options, inputData)` overload.
-- **Validation:** `compileKotlinWinuiJvm` and `WinUIUriHandlerTest` pass with the
-  generated three-argument overload.
+- **Resolution:** compose-winui uses the natural generated
+  `Launcher.launchUriAsync(uri)` path.
+- **Validation:** `compileKotlinWinuiJvm` and `runWinUIViewSample` pass with the
+  generated one-argument overload.
 
 ## KWINRT-006: Nullable UIElement.Clip setter is generated as non-null
 
@@ -89,16 +85,15 @@ baseline, not every retest attempt.
 
 ## KWINRT-007: Canvas attached property setters can crash the WinUI runtime
 
-- **Status:** Not currently actionable upstream without fresh native crash
-  evidence.
+- **Status:** Not reproduced with current kotlin-winrt; no upstream action
+  without fresh native crash evidence.
 - **Observed in:** `Canvas.setLeft(UIElement, Double)`,
   `Canvas.setTop(UIElement, Double)`, and `DependencyObject.setValue(...)` for
   `Canvas.LeftProperty` / `Canvas.TopProperty`.
-- **Symptom:** Detached/offscreen smoke hosts have previously crashed in
-  `Microsoft.UI.Xaml.dll` before an HRESULT returned to Kotlin.
-- **compose-winui workaround:** `WinUIView.winui.kt` uses a Canvas root for
-  z-order, but writes wrapper position through `FrameworkElement.margin`.
-  Search for `KWINRT-007`.
+- **Resolution:** compose-winui removed the margin fallback and now uses
+  generated `Canvas.setLeft` / `Canvas.setTop` for WinUIView placement.
+- **Validation:** `runWinUIViewSample` passes and verifies initial and updated
+  `Canvas.getLeft` / `Canvas.getTop` wrapper positions.
 - **Next evidence needed:** If this reproduces, attach `hs_err`, WER, or dump
   analysis before changing kotlin-winrt.
 
@@ -142,9 +137,10 @@ baseline, not every retest attempt.
   baseline.
 - **Observed in:** base library -> winui library -> app graphs that generate
   the same WinRT type identity in multiple modules.
-- **Current state:** The exact active failure moved to `KWINRT-020` for fixed-FQN
-  interface registry ownership. Keep customized source sets, transitive
-  identity, and support artifact merging in repository-local validation.
+- **Current state:** The exact active failure moved to `KWINRT-020` for runtime
+  registration of merged interface projection support. Keep customized source
+  sets, transitive identity, and support artifact merging in repository-local
+  validation.
 
 ## KWINRT-012: Clipboard async needs a dispatcher-safe helper
 
@@ -169,24 +165,30 @@ baseline, not every retest attempt.
 
 ## KWINRT-014: Generated attached dependency property getters can rewrap with module-mangled internals
 
-- **Status:** Not currently projected in the compose-winui graph; not retested
-  as an active runtime path.
+- **Status:** Fixed upstream and retested in compose-winui with
+  `external/kotlin-winrt` `97f15295`.
 - **Observed in:** attached dependency property getters such as automation
   properties.
-- **compose-winui workaround:** Keep `WinUIInteropProperties.isNativeAccessibilityEnabled`
-  deferred until attached property projection and detached-element behavior are
-  both validated. Search for `KWINRT-014`.
-- **Resolution target:** Recheck if compose-winui starts using generated
-  attached property getters again.
+- **Resolution:** compose-winui uses generated
+  `AutomationProperties.accessibilityViewProperty`,
+  `AutomationProperties.getAccessibilityView`, and
+  `DependencyObject.clearValue`.
+- **Validation:** `runWinUIViewSample` passes while applying
+  `WinUIInteropProperties.isNativeAccessibilityEnabled=false` and reading back
+  `AccessibilityView.Raw`.
 
 ## KWINRT-015: AutomationProperties.SetAccessibilityView can native-crash detached XAML elements
 
-- **Status:** Not currently actionable upstream without fresh native crash
-  evidence.
+- **Status:** Not reproduced with current kotlin-winrt; no upstream action
+  without fresh native crash evidence.
 - **Observed in:** `AutomationProperties.SetAccessibilityView(...)` on detached
   or offscreen XAML elements.
-- **compose-winui workaround:** Native accessibility participation remains
-  deferred for `WinUIView` interop properties. Search for `KWINRT-015`.
+- **Resolution:** compose-winui now wires
+  `WinUIInteropProperties.isNativeAccessibilityEnabled` through generated
+  `AutomationProperties.setAccessibilityView` and clears the override on
+  release.
+- **Validation:** `runWinUIViewSample` passes with native accessibility disabled
+  for hosted WinUI buttons.
 - **Next evidence needed:** If the crash reproduces, inspect native logs/dumps
   first. If the dump shows a WinUI detached/offscreen precondition, compose-winui
   should defer until attached/loaded.
@@ -231,18 +233,23 @@ baseline, not every retest attempt.
 
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
-- **Status:** Open with exact generated-artifact evidence.
+- **Status:** Still open in compose-winui with `external/kotlin-winrt`
+  `97f15295`.
 - **Observed in:** `DisplayRequest.requestActive()` /
   `DisplayRequest.requestRelease()` from downstream sample classpaths.
-- **Symptom:** The `:compose:ui:ui` generated registry contains
-  `Windows.System.Display.IDisplayRequest`, but the downstream sample also has a
-  fixed-FQN `WinRTInterfaceProjectionRegistry` that does not contain that entry.
+- **Symptom:** The merged compiler-support artifact contains
+  `Windows.System.Display.IDisplayRequest`, but the downstream sample still
+  throws `Generated interface projection factory for
+  'windows.system.display.IDisplayRequest' is not registered` when calling the
+  generated `DisplayRequest.requestActive()`.
 - **compose-winui workaround:** `WinUIDisplayRequestController.winui.kt` still
   calls the default interface ABI directly for keep-screen-on. Search for
   `KWINRT-020`.
-- **Resolution target:** Preserve multi-module interface projection registry
-  entries through resources or unique generated support classes instead of one
-  fixed-FQN registrar per classpath.
+- **Resolution target:** Ensure merged compiler-support interface-native
+  projection entries are loaded and registered at runtime in downstream
+  multi-module applications.
+- **Validation:** Direct generated calls failed in `runWinUIViewSample`;
+  restoring the narrow ABI fallback lets the sample pass.
 
 ## KWINRT-021: UIElement.ProtectedCursor requires a subclass access path
 

@@ -114,6 +114,8 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
+import microsoft.ui.xaml.automation.AutomationProperties
+import microsoft.ui.xaml.automation.peers.AccessibilityView
 import microsoft.ui.xaml.controls.Button
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
@@ -129,6 +131,7 @@ import kotlinx.coroutines.launch
 fun WinUIViewSampleContent(
     modifier: Modifier = Modifier,
     content: String = "Hello from Compose WinUI",
+    isNativeAccessibilityEnabled: Boolean = true,
     isUserInteractionEnabled: Boolean = true,
     clipToBounds: Boolean = false,
     expectWindowFocus: Boolean = false,
@@ -139,6 +142,7 @@ fun WinUIViewSampleContent(
     WinUIView(
         modifier = modifier,
         properties = WinUIInteropProperties(
+            isNativeAccessibilityEnabled = isNativeAccessibilityEnabled,
             isUserInteractionEnabled = isUserInteractionEnabled,
             clipToBounds = clipToBounds,
         ),
@@ -655,6 +659,7 @@ private object ComposeWinUiSmokeApp {
                         x = 17,
                         y = 23,
                     ),
+                    isNativeAccessibilityEnabled = false,
                     isUserInteractionEnabled = false,
                     clipToBounds = true,
                     lifecycleProbe = lifecycleProbe,
@@ -681,6 +686,9 @@ private object ComposeWinUiSmokeApp {
         }
         check(!button.isEnabled) {
             "WinUIView did not disable the native Button control when interaction was disabled."
+        }
+        check(AutomationProperties.getAccessibilityView(button) == AccessibilityView.Raw) {
+            "WinUIView did not apply isNativeAccessibilityEnabled=false to the native Button."
         }
         check(button.width == 123.0 && button.height == 45.0) {
             "WinUIView did not apply Compose size to the native Button: " +
@@ -712,6 +720,7 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.setContent {
             if (showInterop) {
                 WinUIViewSampleContent(
+                    isNativeAccessibilityEnabled = false,
                     isUserInteractionEnabled = false,
                     lifecycleProbe = lifecycleProbe,
                 )
@@ -1326,8 +1335,8 @@ private object ComposeWinUiSmokeApp {
                 clip.height == 30f &&
                 wrapper.width == 80.0 &&
                 wrapper.height == 30.0 &&
-                wrapper.margin.left == 4.0 &&
-                wrapper.margin.top == 6.0 &&
+                Canvas.getLeft(wrapper) == 4.0 &&
+                Canvas.getTop(wrapper) == 6.0 &&
                 lifecycleProbe.lastButton?.width == 80.0 &&
                 lifecycleProbe.lastButton?.height == 30.0
         }
@@ -1354,8 +1363,8 @@ private object ComposeWinUiSmokeApp {
                 clip.height == 55f &&
                 currentWrapper.width == 140.0 &&
                 currentWrapper.height == 55.0 &&
-                currentWrapper.margin.left == 11.0 &&
-                currentWrapper.margin.top == 17.0 &&
+                Canvas.getLeft(currentWrapper) == 11.0 &&
+                Canvas.getTop(currentWrapper) == 17.0 &&
                 button.width == 140.0 &&
                 button.height == 55.0
         }

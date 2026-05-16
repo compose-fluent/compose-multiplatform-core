@@ -51,9 +51,10 @@ import androidx.compose.ui.unit.constrainWidth
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
-import microsoft.ui.xaml.Thickness
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.VerticalAlignment
+import microsoft.ui.xaml.automation.AutomationProperties
+import microsoft.ui.xaml.automation.peers.AccessibilityView
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.Control
 import microsoft.ui.xaml.media.RectangleGeometry
@@ -198,6 +199,7 @@ private class WinUIViewHolder<T : UIElement>(
     private val initialViewHitTestVisible = view.isHitTestVisible
     private val initialViewTabStop = view.isTabStop
     private val initialControlEnabled = (view as? Control)?.isEnabled
+    private var nativeAccessibilityOverrideApplied = false
     private val releaseCleanups = mutableListOf<() -> Unit>()
 
     override val interopRoot: UIElement
@@ -228,6 +230,7 @@ private class WinUIViewHolder<T : UIElement>(
         set(value) {
             field = value
             applyInteraction(value.isUserInteractionEnabled)
+            applyNativeAccessibility(value.isNativeAccessibilityEnabled)
             updateClip()
         }
 
@@ -335,13 +338,8 @@ private class WinUIViewHolder<T : UIElement>(
         val changed = positionX != x || positionY != y
         positionX = x
         positionY = y
-        // KWINRT-007: Canvas.Left/Top attached property setters crash in the offscreen smoke host.
-        group.uiElement.margin = Thickness(
-            left = x.toDouble(),
-            top = y.toDouble(),
-            right = 0.0,
-            bottom = 0.0,
-        )
+        Canvas.setLeft(group.uiElement, x.toDouble())
+        Canvas.setTop(group.uiElement, y.toDouble())
         updateOwnerInteropBoundsIfActive()
         updateOwnerInteropFocusRectIfFocused()
         if (changed) {
@@ -362,6 +360,18 @@ private class WinUIViewHolder<T : UIElement>(
         (view as? Control)?.let { control ->
             control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
                 isUserInteractionEnabled
+        }
+    }
+
+    private fun applyNativeAccessibility(isNativeAccessibilityEnabled: Boolean) {
+        if (isNativeAccessibilityEnabled) {
+            if (nativeAccessibilityOverrideApplied) {
+                view.clearValue(AutomationProperties.accessibilityViewProperty)
+                nativeAccessibilityOverrideApplied = false
+            }
+        } else {
+            AutomationProperties.setAccessibilityView(view, AccessibilityView.Raw)
+            nativeAccessibilityOverrideApplied = true
         }
     }
 
@@ -394,6 +404,7 @@ private class WinUIViewHolder<T : UIElement>(
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
         restoreInteraction()
+        restoreNativeAccessibility()
         clearClip()
         group.uiElement.children.clear()
         isViewAttachedToGroup = false
@@ -408,6 +419,12 @@ private class WinUIViewHolder<T : UIElement>(
                 control.isEnabled = it
             }
         }
+    }
+
+    private fun restoreNativeAccessibility() {
+        if (!nativeAccessibilityOverrideApplied) return
+        view.clearValue(AutomationProperties.accessibilityViewProperty)
+        nativeAccessibilityOverrideApplied = false
     }
 
     private fun updateClip() {
