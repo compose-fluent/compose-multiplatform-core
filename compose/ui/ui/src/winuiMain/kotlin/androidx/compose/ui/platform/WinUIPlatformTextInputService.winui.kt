@@ -27,20 +27,49 @@ import androidx.compose.ui.text.input.PlatformTextInputService
 import androidx.compose.ui.text.input.TextFieldValue
 
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
+    private var activeInputSession: WinUITextInputSessionState? = null
+
+    internal val isInputActive: Boolean
+        get() = activeInputSession != null
+
+    internal val isSoftwareKeyboardVisible: Boolean
+        get() = activeInputSession?.isSoftwareKeyboardVisible == true
+
+    internal val currentValue: TextFieldValue?
+        get() = activeInputSession?.value
+
     override fun startInput(
         value: TextFieldValue,
         imeOptions: ImeOptions,
         onEditCommand: (List<EditCommand>) -> Unit,
         onImeActionPerformed: (ImeAction) -> Unit,
-    ) = Unit
+    ) {
+        activeInputSession = WinUITextInputSessionState(
+            value = value,
+            imeOptions = imeOptions,
+            onEditCommand = onEditCommand,
+            onImeActionPerformed = onImeActionPerformed,
+        )
+    }
 
-    override fun stopInput() = Unit
+    override fun stopInput() {
+        activeInputSession = null
+    }
 
-    override fun showSoftwareKeyboard() = Unit
+    override fun showSoftwareKeyboard() {
+        activeInputSession = activeInputSession?.copy(isSoftwareKeyboardVisible = true)
+    }
 
-    override fun hideSoftwareKeyboard() = Unit
+    override fun hideSoftwareKeyboard() {
+        activeInputSession = activeInputSession?.copy(isSoftwareKeyboardVisible = false)
+    }
 
-    override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) = Unit
+    override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
+        activeInputSession = activeInputSession?.copy(
+            oldValue = oldValue,
+            value = newValue,
+        )
+    }
 
     override fun updateTextLayoutResult(
         textFieldValue: TextFieldValue,
@@ -49,5 +78,31 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         textFieldToRootTransform: (Matrix) -> Unit,
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
-    ) = Unit
+    ) {
+        activeInputSession = activeInputSession?.copy(
+            textFieldValue = textFieldValue,
+            offsetMapping = offsetMapping,
+            textLayoutResult = textLayoutResult,
+            innerTextFieldBounds = innerTextFieldBounds,
+            decorationBoxBounds = decorationBoxBounds,
+        )
+    }
+
+    internal fun resetForTest() {
+        activeInputSession = null
+    }
 }
+
+private data class WinUITextInputSessionState(
+    val value: TextFieldValue,
+    val imeOptions: ImeOptions,
+    val onEditCommand: (List<EditCommand>) -> Unit,
+    val onImeActionPerformed: (ImeAction) -> Unit,
+    val oldValue: TextFieldValue? = null,
+    val isSoftwareKeyboardVisible: Boolean = false,
+    val textFieldValue: TextFieldValue? = null,
+    val offsetMapping: OffsetMapping? = null,
+    val textLayoutResult: TextLayoutResult? = null,
+    val innerTextFieldBounds: Rect? = null,
+    val decorationBoxBounds: Rect? = null,
+)

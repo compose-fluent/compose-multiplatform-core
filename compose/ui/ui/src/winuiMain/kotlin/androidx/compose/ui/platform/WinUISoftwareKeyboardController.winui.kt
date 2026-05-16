@@ -17,7 +17,11 @@
 package androidx.compose.ui.platform
 
 internal object WinUISoftwareKeyboardController : SoftwareKeyboardController {
-    override fun show() = Unit
+    override fun show() {
+        WinUIPlatformTextInputService.showSoftwareKeyboard()
+    }
 
-    override fun hide() = Unit
+    override fun hide() {
+        WinUIPlatformTextInputService.hideSoftwareKeyboard()
+    }
 }
