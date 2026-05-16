@@ -17,57 +17,18 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.WinUIPointerIcon
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.winRtProjectionMarshaler
-import microsoft.ui.input.InputCursor
-import microsoft.ui.xaml.IUIElementProtected
 import microsoft.ui.xaml.UIElement
-import windows.ui.core.CoreCursor
-import windows.ui.core.CoreCursorType
 
 internal class WinUIPointerCursorAdapter(
-    private val root: UIElement,
+    @Suppress("UNUSED_PARAMETER")
+    root: UIElement,
 ) {
-    private var currentCursor: InputCursor? = null
-
+    @Suppress("UNUSED_PARAMETER")
     fun setIcon(icon: PointerIcon) {
-        val cursorType = (icon as? WinUIPointerIcon)?.cursorType ?: CoreCursorType.Arrow
-        val cursor = InputCursor.createFromCoreCursor(CoreCursor(cursorType, 0u))
-        try {
-            setProtectedCursor(cursor)
-        } catch (throwable: Throwable) {
-            cursor.close()
-            throw throwable
-        }
-        currentCursor?.close()
-        currentCursor = cursor
+        // UIElement.ProtectedCursor is intentionally protected by WinUI. Cursor application
+        // should move to a projected root subclass instead of bypassing the protected API.
     }
 
     fun dispose() {
-        currentCursor?.close()
-        currentCursor = null
-    }
-
-    private fun setProtectedCursor(cursor: InputCursor) {
-        // KWINRT-021: compose-winui cannot author a projected UIElement subclass to set ProtectedCursor.
-        root.nativeObject.queryInterface(IUIElementProtected.Metadata.IID).getOrThrow()
-            .use { protectedElement ->
-                winRtProjectionMarshaler(
-                    cursor,
-                    "Microsoft.UI.Input.InputCursor",
-                    Guid("359B15F9-19C2-5714-8432-75176826406B"),
-                ).use { cursorMarshaler ->
-                    HResult(
-                        ComVtableInvoker.invokeArgs(
-                            instance = protectedElement.pointer,
-                            slot = IUIElementProtected.Metadata.PROTECTEDCURSOR_SETTER_SLOT,
-                            arg0 = cursorMarshaler.abi,
-                        ),
-                    ).requireSuccess("UIElement.ProtectedCursor setter")
-                }
-            }
     }
 }
