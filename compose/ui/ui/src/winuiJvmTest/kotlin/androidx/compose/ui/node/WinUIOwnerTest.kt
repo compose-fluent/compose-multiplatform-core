@@ -204,6 +204,45 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun rootResizeInvalidatesRootLayerAfterMeasureAndLayout() {
+        val events = OwnerEvents()
+        val owner = createOwner(events)
+        try {
+            owner.root.insertAt(
+                0,
+                LayoutNode().also {
+                    it.measurePolicy = fillMaxConstraintsMeasurePolicy()
+                }
+            )
+
+            val initialInvalidations = owner.ownerStateForTest().rootInvalidationCount
+            val initialPlatformInvalidations = events.rootInvalidated
+
+            owner.setWindowContainerSize(IntSize(10, 20))
+            owner.measureAndLayout()
+
+            val firstResizeInvalidations = owner.ownerStateForTest().rootInvalidationCount
+            val firstResizePlatformInvalidations = events.rootInvalidated
+            assertTrue(firstResizeInvalidations > initialInvalidations)
+            assertTrue(firstResizePlatformInvalidations > initialPlatformInvalidations)
+
+            owner.setWindowContainerSize(IntSize(10, 20))
+            owner.measureAndLayout()
+
+            assertEquals(firstResizeInvalidations, owner.ownerStateForTest().rootInvalidationCount)
+            assertEquals(firstResizePlatformInvalidations, events.rootInvalidated)
+
+            owner.setWindowContainerSize(IntSize(30, 40))
+            owner.measureAndLayout()
+
+            assertTrue(owner.ownerStateForTest().rootInvalidationCount > firstResizeInvalidations)
+            assertTrue(events.rootInvalidated > firstResizePlatformInvalidations)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
     fun disposeReleasesActivePlatformStateAndSuppressesFutureStateChanges() {
         val events = OwnerEvents()
         val owner = createOwner(events)
@@ -624,6 +663,10 @@ private class OwnerEvents {
 
 private fun fixedMeasurePolicy(width: Int, height: Int) = MeasurePolicy { _, _ ->
     layout(width, height) {}
+}
+
+private fun fillMaxConstraintsMeasurePolicy() = MeasurePolicy { _, constraints ->
+    layout(constraints.maxWidth, constraints.maxHeight) {}
 }
 
 private data class PointerRecorderElement(

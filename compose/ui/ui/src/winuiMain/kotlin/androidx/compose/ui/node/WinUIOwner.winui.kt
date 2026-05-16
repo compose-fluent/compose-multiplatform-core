@@ -334,7 +334,10 @@ internal class WinUIOwner(
             hasPendingLayoutCompletedListener
         ) {
             hasPendingLayoutCompletedListener = false
-            measureAndLayoutDelegate.measureAndLayout()
+            val rootNodeResized = measureAndLayoutDelegate.measureAndLayout()
+            if (rootNodeResized) {
+                invalidateRootLayer()
+            }
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
             rectManager.dispatchCallbacks()
         }
