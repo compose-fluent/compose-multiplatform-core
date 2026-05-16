@@ -68,9 +68,8 @@ internal class WinUIClipboard : Clipboard {
         lastPlainText != null || getWinUIContent().contains(winUITextFormat)
 
     internal fun getTextBlocking(): String? {
-        // KWINRT-012: WinRT DataPackageView.GetTextAsync cannot be synchronously
-        // joined on the UI thread. Preserve Android-like ClipboardManager
-        // setText/getText round-trips for in-process writes without blocking.
+        // The deprecated ClipboardManager API is synchronous. Preserve Android-like
+        // setText/getText round-trips for in-process writes without blocking WinRT async work.
         lastPlainText?.let { return it }
         val content = getWinUIContent()
         if (!content.contains(winUITextFormat)) {
