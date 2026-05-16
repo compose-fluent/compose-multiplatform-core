@@ -310,7 +310,9 @@ internal class WinUIOwner(
     override fun onPostAttach(node: LayoutNode) = Unit
 
     override fun onDetach(node: LayoutNode) {
-        layoutNodes.remove(node.semanticsId)
+        checkNotNull(layoutNodes.remove(node.semanticsId)) {
+            "Invalid usage of Owner.onDetach: layoutNode was not previously attached"
+        }
         measureAndLayoutDelegate.onNodeDetached(node)
         snapshotObserver.clear(node)
         rectManager.remove(node)

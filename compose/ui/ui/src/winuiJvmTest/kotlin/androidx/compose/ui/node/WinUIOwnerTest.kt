@@ -51,6 +51,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -169,6 +170,34 @@ class WinUIOwnerTest {
 
             assertEquals(0, owner.ownerStateForTest().sensitiveContentCount)
             assertEquals(listOf(true, false), events.sensitiveContentValues)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun detachRequiresPreviouslyAttachedNode() {
+        val owner = createOwner()
+        try {
+            val node = LayoutNode().also {
+                it.measurePolicy = RootMeasurePolicy
+            }
+
+            owner.root.insertAt(0, node)
+
+            assertEquals(node, owner.layoutNodes[node.semanticsId])
+
+            owner.root.removeAt(0, 1)
+
+            assertNull(owner.layoutNodes[node.semanticsId])
+
+            val unattachedNode = LayoutNode().also {
+                it.measurePolicy = RootMeasurePolicy
+            }
+
+            assertFailsWith<IllegalStateException> {
+                owner.onDetach(unattachedNode)
+            }
         } finally {
             owner.dispose()
         }
