@@ -105,6 +105,7 @@ import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -121,6 +122,7 @@ import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.ContentControl
 import microsoft.ui.xaml.controls.TextBox
 import microsoft.ui.xaml.controls.ToggleSwitch
+import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.UIElement
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -466,6 +468,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewRelayoutSmoke()
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
+            runWinUIViewGeneratedEventCleanupSmoke()
             runWinUISaveableStateSmoke()
             runWinUIRetainedValuesSmoke()
             runWinUITextInputSessionSmoke()
@@ -1104,6 +1107,44 @@ private object ComposeWinUiSmokeApp {
                 "first=${firstProbe.releaseCount} second=${secondProbe.releaseCount} " +
                 "third=${thirdProbe.releaseCount}."
         }
+    }
+
+    private suspend fun runWinUIViewGeneratedEventCleanupSmoke() {
+        var token: EventRegistrationToken? = null
+        var registered = false
+        var removed = false
+        var clickCount = 0
+        val currentComposeView = WinUIComposeView()
+        currentComposeView.setContent {
+            WinUIView(
+                factory = { Button() },
+                update = { button ->
+                    if (!registered) {
+                        token = button.click.add(RoutedEventHandler { _, _ ->
+                            clickCount += 1
+                        })
+                        registered = true
+                    }
+                },
+                onRelease = { button ->
+                    button.click.remove(checkNotNull(token) {
+                        "WinUIView generated event cleanup smoke did not register a click token."
+                    })
+                    removed = true
+                },
+            )
+        }
+        awaitCondition("WinUIView generated event token registration") {
+            registered && token != null
+        }
+        currentComposeView.dispose()
+        check(removed) {
+            "WinUIView generated event cleanup smoke did not remove the click token on release."
+        }
+        check(clickCount == 0) {
+            "WinUIView generated event cleanup smoke unexpectedly handled $clickCount clicks."
+        }
+        println("compose-winui-sample: generated event cleanup")
     }
 
     private fun runWinUIViewControlVarietySmoke() {
