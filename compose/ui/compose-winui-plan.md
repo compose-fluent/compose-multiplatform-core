@@ -172,7 +172,7 @@
 - [x] Add repository-local WinUI platform focus owner unit validation for native root focus attempt, exception handling, and clear-focus delegation.
 - [x] Route focused embedded WinUI view bounds into `PlatformFocusOwner.getEmbeddedViewFocusRect()` so focus search can use native interop geometry once embedded focus succeeds.
 - [x] Add repository-local WinUIView smoke validation for Compose `FocusRequester` focus transfer to a native WinUI control after compose-winui moves the native focus request to a loaded/layout-ready point.
-- [ ] Add focus and input tests for clicks, keyboard events, Tab traversal, and focus transfer between Compose and WinUI controls after the compose-side loaded/layout-ready focus path is implemented.
+- [x] Add focus and input smoke coverage for Compose focus targets around hosted WinUI controls, keyboard events, Compose pointer delivery outside hosted controls, and hosted-control pointer exclusion. Tab traversal and native focus transfer are covered by the adjacent root traversal and loaded/layout-ready native focus smokes.
 - [x] Add repository-local WinUI key input processor coverage proving native-child key events are left to WinUI and do not update Compose modifier state.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [ ] Keep shutdown/upcall validation for `KWINRT-013`: if `upcallLinker.cpp:66` returns, preserve and analyze `hs_err`, WER, or dump output to identify whether the late callback is EventSource, DispatcherQueue, timer, frame clock, text input, or another delegate before changing kotlin-winrt.

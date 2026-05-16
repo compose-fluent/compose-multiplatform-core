@@ -455,6 +455,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIOwnerLayerTransformSmoke()
             runWinUIRootKeyEventSmoke()
             runWinUIRootFocusTraversalKeySmoke()
+            runWinUIViewFocusInputIntegrationSmoke()
             runWinUIRootSemanticsSmoke()
             runWinUIOwnerEndApplyChangesSmoke()
             runWinUIRootUncaughtExceptionHandlerSmoke()
@@ -1731,6 +1732,136 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: root focus traversal key event")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIViewFocusInputIntegrationSmoke() {
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.root as ContentControl
+        val firstRequester = FocusRequester()
+        val secondRequester = FocusRequester()
+        val pointerProbe = WinUIPointerInputSmokeProbe()
+        var firstFocused = false
+        var secondFocused = false
+        var button: Button? = null
+        val secondKeyEvents = mutableListOf<Long>()
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.winUIPointerInputSmoke(pointerProbe),
+                content = {
+                    Layout(
+                        modifier = Modifier
+                            .focusRequester(firstRequester)
+                            .onFocusChanged {
+                                firstFocused = it.isFocused
+                            }
+                            .focusTarget(),
+                        content = {},
+                    ) { _, _ ->
+                        layout(10, 20) {}
+                    }
+                    WinUIView(
+                        modifier = fixedSizeAndPositionModifier(
+                            width = 20,
+                            height = 20,
+                            x = 10,
+                            y = 0,
+                        ),
+                        factory = { Button() },
+                        update = {
+                            button = it
+                        },
+                    )
+                    Layout(
+                        modifier = Modifier
+                            .focusRequester(secondRequester)
+                            .onFocusChanged {
+                                secondFocused = it.isFocused
+                            }
+                            .focusTarget()
+                            .onKeyEvent {
+                                secondKeyEvents += it.key.keyCode
+                                true
+                            },
+                        content = {},
+                    ) { _, _ ->
+                        layout(10, 20) {}
+                    }
+                },
+            ) { measurables, _ ->
+                val first = measurables[0].measure(Constraints.fixed(10, 20))
+                val native = measurables[1].measure(Constraints.fixed(20, 20))
+                val second = measurables[2].measure(Constraints.fixed(10, 20))
+                layout(40, 20) {
+                    first.place(0, 0)
+                    native.place(10, 0)
+                    second.place(30, 0)
+                }
+            }
+        }
+        awaitCondition("WinUIView focus input integration bounds installed") {
+            (rootHost.content as? Canvas)?.children?.singleOrNull() != null && button != null
+        }
+        check(firstRequester.requestFocus()) {
+            "WinUIView focus input integration smoke could not focus first Compose target."
+        }
+        awaitCondition("WinUIView focus input integration first focused") {
+            firstFocused && !secondFocused
+        }
+        check(secondRequester.requestFocus()) {
+            "WinUIView focus input integration smoke could not focus second Compose target."
+        }
+        awaitCondition("WinUIView focus input integration second focused") {
+            !firstFocused && secondFocused &&
+                button?.focusState == microsoft.ui.xaml.FocusState.Unfocused
+        }
+        check(
+            currentComposeView.rootForTest().sendKeyEvent(
+                KeyEvent(key = Key.B, type = KeyEventType.KeyDown)
+            )
+        ) {
+            "WinUIView focus input integration smoke did not dispatch keyboard input."
+        }
+        check(secondKeyEvents == listOf(Key.B.keyCode)) {
+            "WinUIView focus input integration smoke dispatched unexpected keys: $secondKeyEvents."
+        }
+        check(firstRequester.requestFocus()) {
+            "WinUIView focus input integration smoke could not return focus to Compose."
+        }
+        awaitCondition("WinUIView focus input integration returned to compose") {
+            firstFocused && !secondFocused &&
+                button?.focusState == microsoft.ui.xaml.FocusState.Unfocused
+        }
+        check(
+            currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(5f, 5f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = true,
+            )
+        ) {
+            "WinUIView focus input integration smoke did not dispatch outside pointer input."
+        }
+        awaitCondition("WinUIView focus input integration outside pointer") {
+            pointerProbe.pressCount == 1
+        }
+        check(
+            !currentComposeView.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(15f, 5f),
+                uptimeMillis = 2L,
+                pointerId = 2L,
+                down = true,
+            )
+        ) {
+            "WinUIView focus input integration smoke dispatched native-bounds pointer input."
+        }
+        check(pointerProbe.pressCount == 1) {
+            "WinUIView focus input integration smoke delivered native-bounds pointer input."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: focus input integration")
     }
 
     private fun runWinUIRootSemanticsSmoke() {
