@@ -236,7 +236,7 @@ baseline, not every retest attempt.
 ## KWINRT-020: DisplayRequest default interface projection is not registered
 
 - **Status:** Still open in compose-winui with `external/kotlin-winrt`
-  `97f15295`.
+  `35829fd0`.
 - **Observed in:** `DisplayRequest.requestActive()` /
   `DisplayRequest.requestRelease()` from downstream sample classpaths.
 - **Symptom:** The merged compiler-support artifact contains
@@ -250,8 +250,8 @@ baseline, not every retest attempt.
 - **Resolution target:** Ensure merged compiler-support interface-native
   projection entries are loaded and registered at runtime in downstream
   multi-module applications.
-- **Validation:** Direct generated calls failed in `runWinUIViewSample`;
-  restoring the narrow ABI fallback lets the sample pass.
+- **Validation:** Direct generated calls still fail in `runWinUIViewSample`
+  with `35829fd0`; restoring the narrow ABI fallback lets the sample pass.
 
 ## KWINRT-021: UIElement.ProtectedCursor requires a subclass access path
 
