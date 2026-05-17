@@ -207,7 +207,7 @@ internal class WinUIOwner(
     init {
         root.layoutDirection = layoutDirection
         root.viewConfiguration = viewConfiguration
-        root.modifier = focusOwner.modifier
+        root.modifier = focusOwner.modifier.then(dragAndDropManager.modifier)
         snapshotObserver.startObserving()
         root.attach(this)
         measureAndLayoutDelegate.updateRootConstraints(Constraints())

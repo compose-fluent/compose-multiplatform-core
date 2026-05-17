@@ -18,17 +18,41 @@ package androidx.compose.ui.draganddrop
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.InspectorInfo
 
 internal object WinUIDragAndDropManager : DragAndDropManager {
     private val rootDragAndDropNode = DragAndDropNode()
     private val interestedTargets = mutableSetOf<DragAndDropTarget>()
+    private var starter: WinUIDragAndDropStarter? = null
 
     override val modifier: Modifier = RootWinUIDragAndDropElement(rootDragAndDropNode)
-    override val isRequestDragAndDropTransferRequired: Boolean = false
+    override val isRequestDragAndDropTransferRequired: Boolean
+        get() = starter != null
 
-    override fun requestDragAndDropTransfer(node: DragAndDropNode, offset: Offset) = Unit
+    override fun requestDragAndDropTransfer(node: DragAndDropNode, offset: Offset) {
+        val currentStarter = starter ?: return
+        var isTransferStarted = false
+        val dragAndDropSourceScope = object : DragAndDropStartTransferScope {
+            override fun startDragAndDropTransfer(
+                transferData: DragAndDropTransferData,
+                decorationSize: Size,
+                drawDragDecoration: DrawScope.() -> Unit,
+            ): Boolean {
+                isTransferStarted = currentStarter.startDragAndDropTransfer(
+                    transferData = transferData,
+                    decorationSize = decorationSize,
+                    drawDragDecoration = drawDragDecoration,
+                )
+                return isTransferStarted
+            }
+        }
+        with(node) {
+            dragAndDropSourceScope.startDragAndDropTransfer(offset) { isTransferStarted }
+        }
+    }
 
     override fun registerTargetInterest(target: DragAndDropTarget) {
         interestedTargets.add(target)
@@ -45,6 +69,18 @@ internal object WinUIDragAndDropManager : DragAndDropManager {
     internal fun clearTargetInterestForTest() {
         interestedTargets.clear()
     }
+
+    internal fun setStarterForTest(starter: WinUIDragAndDropStarter?) {
+        this.starter = starter
+    }
+}
+
+internal fun interface WinUIDragAndDropStarter {
+    fun startDragAndDropTransfer(
+        transferData: DragAndDropTransferData,
+        decorationSize: Size,
+        drawDragDecoration: DrawScope.() -> Unit,
+    ): Boolean
 }
 
 private class RootWinUIDragAndDropElement(
