@@ -67,7 +67,24 @@ internal class WinUIPointerInputAdapter(
                 pointerEventProcessor.process(
                     event = createPointerEvent(eventType, args),
                     isHandled = args.handled,
-                    sendPointerEvent = owner::sendPointerEvent,
+                    sendPointerEvent = { eventType, position, uptimeMillis, pointerId, down, type,
+                            buttons, keyboardModifiers, button, scrollDelta, isInBounds,
+                            nativeEvent ->
+                        owner.sendPointerEvent(
+                            eventType = eventType,
+                            position = position,
+                            uptimeMillis = uptimeMillis,
+                            pointerId = pointerId,
+                            down = down,
+                            type = type,
+                            buttons = buttons,
+                            keyboardModifiers = keyboardModifiers,
+                            button = button,
+                            scrollDelta = scrollDelta,
+                            isInBounds = isInBounds,
+                            nativeEvent = nativeEvent,
+                        )
+                    },
                 )?.let { handled ->
                     args.handled = handled
                 }

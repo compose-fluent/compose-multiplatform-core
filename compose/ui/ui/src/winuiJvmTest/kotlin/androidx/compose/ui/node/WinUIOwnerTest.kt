@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -541,6 +542,80 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun measureAndLayoutCanResendLastMousePointerPosition() {
+        val owner = createOwner()
+        val events = mutableListOf<PointerEventType>()
+        try {
+            var pointerNodeX = 50
+            val pointerNode = LayoutNode().also {
+                it.modifier = PointerRecorderElement(events)
+                it.measurePolicy = fillMaxConstraintsMeasurePolicy()
+            }
+            val parentNode = LayoutNode().also {
+                it.measurePolicy = singleChildOffsetMeasurePolicy { pointerNodeX }
+                it.insertAt(0, pointerNode)
+            }
+            owner.root.insertAt(0, parentNode)
+            owner.setWindowContainerSize(IntSize(100, 100))
+            owner.measureAndLayout()
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(10f, 10f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+            )
+
+            assertEquals(emptyList(), events)
+            assertEquals(PointerEventType.Move, owner.ownerStateForTest().lastMousePointerEvent?.eventType)
+
+            pointerNodeX = 0
+            owner.onRequestMeasure(
+                layoutNode = parentNode,
+                affectsLookahead = false,
+                forceRequest = true,
+                scheduleMeasureAndLayout = false,
+            )
+            owner.measureAndLayout(sendPointerUpdate = true)
+
+            assertEquals(listOf(PointerEventType.Enter), events)
+
+            pointerNodeX = 50
+            owner.onRequestMeasure(
+                layoutNode = parentNode,
+                affectsLookahead = false,
+                forceRequest = true,
+                scheduleMeasureAndLayout = false,
+            )
+            owner.measureAndLayout(sendPointerUpdate = false)
+
+            assertEquals(listOf(PointerEventType.Enter), events)
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Exit,
+                position = Offset(10f, 10f),
+                uptimeMillis = 2L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+                isInBounds = false,
+            )
+
+            assertNull(owner.ownerStateForTest().lastMousePointerEvent)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
     fun inputModeManagerUpdatesFromRequestsAndOwnerInputEvents() {
         val owner = createOwner()
         try {
@@ -667,6 +742,13 @@ private fun fixedMeasurePolicy(width: Int, height: Int) = MeasurePolicy { _, _ -
 
 private fun fillMaxConstraintsMeasurePolicy() = MeasurePolicy { _, constraints ->
     layout(constraints.maxWidth, constraints.maxHeight) {}
+}
+
+private fun singleChildOffsetMeasurePolicy(offsetX: () -> Int) = MeasurePolicy { measurables, _ ->
+    val placeable = measurables.single().measure(Constraints.fixed(20, 20))
+    layout(100, 100) {
+        placeable.placeRelative(offsetX(), 0)
+    }
 }
 
 private data class PointerRecorderElement(

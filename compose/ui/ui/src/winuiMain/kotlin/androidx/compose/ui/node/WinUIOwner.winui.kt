@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.WinUIAccessibilityBridgeState
 import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
+import androidx.compose.ui.platform.WinUIPointerEvent
 import androidx.compose.ui.platform.WinUIPlatformTextInputSession
 import androidx.compose.ui.platform.WinUIPlatformTextInputService
 import androidx.compose.ui.platform.WinUISoftwareKeyboardController
@@ -195,6 +196,7 @@ internal class WinUIOwner(
     private var lastFrameRateVote = Float.NaN
     private var scrollChangeCount = 0
     private var lastScrollDelta = Offset.Zero
+    private var lastMousePointerEvent: WinUIPointerEvent? = null
     override val measureIteration: Long
         get() = measureAndLayoutDelegate.measureIteration
     override val viewConfiguration: ViewConfiguration = WinUIViewConfiguration
@@ -340,6 +342,9 @@ internal class WinUIOwner(
             }
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
             rectManager.dispatchCallbacks()
+            if (sendPointerUpdate) {
+                resendLastMousePointerEvent()
+            }
         }
     }
 
@@ -347,6 +352,7 @@ internal class WinUIOwner(
         if (isShuttingDown) return
         hasPendingLayoutCompletedListener = false
         measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
+        resendLastMousePointerEvent()
         if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
         }
@@ -541,6 +547,7 @@ internal class WinUIOwner(
             accessibility = accessibilityBridge.stateForTest(),
             interopViewFocusRect = interopViewFocusRect,
             interopViewBounds = interopViewBounds.values.toList(),
+            lastMousePointerEvent = lastMousePointerEvent,
         )
 
     override fun screenToLocal(positionOnScreen: Offset): Offset =
@@ -596,9 +603,28 @@ internal class WinUIOwner(
         scrollDelta: Offset = Offset.Zero,
         isInBounds: Boolean = eventType != PointerEventType.Exit,
         nativeEvent: Any?,
+        updateLastPointerEvent: Boolean = true,
     ): Boolean {
         if (isShuttingDown) return false
         inputModeManager.requestInputMode(InputMode.Touch)
+        if (updateLastPointerEvent) {
+            updateLastMousePointerEvent(
+                WinUIPointerEvent(
+                    eventType = eventType,
+                    position = position,
+                    uptimeMillis = uptimeMillis,
+                    pointerId = pointerId,
+                    down = down,
+                    type = type,
+                    buttons = buttons,
+                    keyboardModifiers = keyboardModifiers,
+                    button = button,
+                    scrollDelta = scrollDelta,
+                    isInBounds = isInBounds,
+                    nativeEvent = nativeEvent,
+                )
+            )
+        }
         if (eventType != PointerEventType.Exit && isInInteropViewBounds(position)) {
             return false
         }
@@ -634,6 +660,39 @@ internal class WinUIOwner(
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
     }
 
+    private fun updateLastMousePointerEvent(event: WinUIPointerEvent) {
+        if (event.type != PointerType.Mouse || event.eventType == PointerEventType.Exit) {
+            lastMousePointerEvent = null
+            return
+        }
+        if (event.eventType == PointerEventType.Scroll) return
+        lastMousePointerEvent = event.copy(
+            eventType = PointerEventType.Move,
+            button = null,
+            scrollDelta = Offset.Zero,
+            nativeEvent = null,
+        )
+    }
+
+    private fun resendLastMousePointerEvent() {
+        val event = lastMousePointerEvent ?: return
+        sendPointerEvent(
+            eventType = PointerEventType.Move,
+            position = event.position,
+            uptimeMillis = event.uptimeMillis,
+            pointerId = event.pointerId,
+            down = event.down,
+            type = event.type,
+            buttons = event.buttons,
+            keyboardModifiers = event.keyboardModifiers,
+            button = null,
+            scrollDelta = Offset.Zero,
+            isInBounds = event.isInBounds,
+            nativeEvent = null,
+            updateLastPointerEvent = false,
+        )
+    }
+
     private fun isInInteropViewBounds(position: Offset): Boolean =
         interopViewBounds.values.any { bounds ->
             position.x >= bounds.left &&
@@ -643,6 +702,7 @@ internal class WinUIOwner(
         }
 
     internal fun cancelPointerInput() {
+        lastMousePointerEvent = null
         pointerInputEventProcessor.processCancel()
     }
 
@@ -678,4 +738,5 @@ internal data class WinUIOwnerStateForTest(
     val accessibility: WinUIAccessibilityBridgeState,
     val interopViewFocusRect: Rect?,
     val interopViewBounds: List<Rect>,
+    val lastMousePointerEvent: WinUIPointerEvent?,
 )
