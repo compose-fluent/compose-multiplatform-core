@@ -19,8 +19,22 @@ package androidx.compose.ui.graphics
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 
 internal object WinUIGraphicsContext : GraphicsContext {
-    override fun createGraphicsLayer(): GraphicsLayer =
-        error("WinUI GraphicsLayer is not implemented yet.")
+    var activeGraphicsLayersCount = 0
+        private set
 
-    override fun releaseGraphicsLayer(layer: GraphicsLayer) = Unit
+    override fun createGraphicsLayer(): GraphicsLayer {
+        activeGraphicsLayersCount++
+        return GraphicsLayer()
+    }
+
+    override fun releaseGraphicsLayer(layer: GraphicsLayer) {
+        if (!layer.isReleased) {
+            activeGraphicsLayersCount--
+            layer.isReleased = true
+        }
+    }
+
+    internal fun resetForTest() {
+        activeGraphicsLayersCount = 0
+    }
 }

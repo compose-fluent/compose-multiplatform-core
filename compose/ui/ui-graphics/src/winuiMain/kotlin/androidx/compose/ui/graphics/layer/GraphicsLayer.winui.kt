@@ -61,7 +61,6 @@ actual class GraphicsLayer {
     actual var clip: Boolean = false
     actual var renderEffect: RenderEffect? = null
     actual var isReleased: Boolean = false
-        private set
 
     private var currentOutline: Outline? = null
 
