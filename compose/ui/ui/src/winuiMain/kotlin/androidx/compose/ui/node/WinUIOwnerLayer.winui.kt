@@ -50,6 +50,8 @@ internal class WinUIOwnerLayer(
     private var scaleX = 1f
     private var scaleY = 1f
     private var clip = false
+    private var isDirty = true
+    private var displayListUpdateCount = 0
 
     override fun updateLayerProperties(scope: ReusableGraphicsLayerScope) {
         transformOrigin = scope.transformOrigin
@@ -87,6 +89,7 @@ internal class WinUIOwnerLayer(
     }
 
     override fun drawLayer(canvas: Canvas, parentLayer: GraphicsLayer?) {
+        updateDisplayList()
         canvas.save()
         canvas.concat(matrix)
         canvas.translate(position.x.toFloat(), position.y.toFloat())
@@ -97,16 +100,22 @@ internal class WinUIOwnerLayer(
         canvas.restore()
     }
 
-    override fun updateDisplayList() = Unit
+    override fun updateDisplayList() {
+        if (!isDirty) return
+        displayListUpdateCount++
+        isDirty = false
+    }
 
     override fun invalidate() {
         if (!isDestroyed) {
+            isDirty = true
             invalidateParentLayer()
         }
     }
 
     override fun destroy() {
         isDestroyed = true
+        isDirty = false
     }
 
     override fun mapOffset(point: Offset, inverse: Boolean): Offset {
@@ -205,5 +214,24 @@ internal class WinUIOwnerLayer(
         isIdentity = true
         isInverseMatrixDirty = false
         isInverseMatrixValid = true
+        isDirty = true
+        displayListUpdateCount = 0
     }
+
+    internal fun stateForTest(): WinUIOwnerLayerState =
+        WinUIOwnerLayerState(
+            isDirty = isDirty,
+            isDestroyed = isDestroyed,
+            displayListUpdateCount = displayListUpdateCount,
+            position = position,
+            size = size,
+        )
 }
+
+internal data class WinUIOwnerLayerState(
+    val isDirty: Boolean,
+    val isDestroyed: Boolean,
+    val displayListUpdateCount: Int,
+    val position: IntOffset,
+    val size: IntSize,
+)
