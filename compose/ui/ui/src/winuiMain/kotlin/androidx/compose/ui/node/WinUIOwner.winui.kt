@@ -367,7 +367,7 @@ internal class WinUIOwner(
         drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
         invalidateParentLayer: () -> Unit,
         explicitLayer: GraphicsLayer?,
-    ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer)
+    ): OwnedLayer = WinUIOwnerLayer(drawBlock, invalidateParentLayer, ::voteFrameRate)
 
     override fun onSemanticsChange() {
         if (isShuttingDown) return

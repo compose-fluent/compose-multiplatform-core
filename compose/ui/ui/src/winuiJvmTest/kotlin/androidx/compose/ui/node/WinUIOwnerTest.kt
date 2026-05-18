@@ -17,6 +17,7 @@
 package androidx.compose.ui.node
 
 import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.PlatformFocusOwner
@@ -238,6 +239,35 @@ class WinUIOwnerTest {
 
             assertTrue(owner.ownerStateForTest().rootInvalidationCount > firstResizeInvalidations)
             assertTrue(events.rootInvalidated > firstResizePlatformInvalidations)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun createdLayerVotesFrameRateThroughOwner() {
+        val owner = createOwner()
+        try {
+            val layer = owner.createLayer(
+                drawBlock = { _, _ -> },
+                invalidateParentLayer = {},
+            )
+
+            layer.resize(IntSize(10, 20))
+
+            assertEquals(
+                FrameRateCategory.High.value,
+                owner.ownerStateForTest().lastFrameRateVote,
+            )
+
+            layer.frameRate = 30f
+            layer.updateDisplayList()
+
+            assertEquals(30f, owner.ownerStateForTest().lastFrameRateVote)
+
+            layer.destroy()
+            assertEquals(0f, layer.frameRate)
+            assertFalse(layer.isFrameRateFromParent)
         } finally {
             owner.dispose()
         }

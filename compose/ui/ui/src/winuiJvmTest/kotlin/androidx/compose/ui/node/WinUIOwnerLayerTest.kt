@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.node
 
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.graphics.ReusableGraphicsLayerScope
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -60,9 +61,11 @@ class WinUIOwnerLayerTest {
     @Test
     fun resizeAndPropertyUpdatesDirtyDisplayListButMoveOnlyInvalidatesParent() {
         var parentInvalidations = 0
+        val frameRateVotes = mutableListOf<Float>()
         val layer = WinUIOwnerLayer(
             drawBlock = { _, _ -> },
             invalidateParentLayer = { parentInvalidations++ },
+            voteFrameRate = { frameRateVotes += it },
         )
         layer.updateDisplayList()
 
@@ -71,6 +74,7 @@ class WinUIOwnerLayerTest {
         assertTrue(layer.stateForTest().isDirty)
         assertEquals(IntSize(20, 30), layer.stateForTest().size)
         assertEquals(1, parentInvalidations)
+        assertEquals(listOf(FrameRateCategory.High.value), frameRateVotes)
 
         layer.updateDisplayList()
         layer.move(IntOffset(4, 5))
@@ -78,6 +82,10 @@ class WinUIOwnerLayerTest {
         assertFalse(layer.stateForTest().isDirty)
         assertEquals(IntOffset(4, 5), layer.stateForTest().position)
         assertEquals(2, parentInvalidations)
+        assertEquals(
+            listOf(FrameRateCategory.High.value, FrameRateCategory.High.value),
+            frameRateVotes,
+        )
 
         val scope = ReusableGraphicsLayerScope()
         scope.translationX = 12f
@@ -85,6 +93,32 @@ class WinUIOwnerLayerTest {
 
         assertTrue(layer.stateForTest().isDirty)
         assertEquals(3, parentInvalidations)
+        assertEquals(
+            listOf(FrameRateCategory.High.value, FrameRateCategory.High.value, 0f),
+            frameRateVotes,
+        )
+    }
+
+    @Test
+    fun updateDisplayListVotesNonZeroFrameRate() {
+        val frameRateVotes = mutableListOf<Float>()
+        val layer = WinUIOwnerLayer(
+            drawBlock = { _, _ -> },
+            invalidateParentLayer = {},
+            voteFrameRate = { frameRateVotes += it },
+        )
+
+        layer.frameRate = 24f
+        layer.updateDisplayList()
+        layer.updateDisplayList()
+
+        assertEquals(listOf(24f, 24f), frameRateVotes)
+
+        layer.frameRate = 0f
+        layer.invalidate()
+        layer.updateDisplayList()
+
+        assertEquals(listOf(24f, 24f), frameRateVotes)
     }
 
     @Test

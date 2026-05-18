@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.node
 
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.geometry.MutableRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.IntSize
 internal class WinUIOwnerLayer(
     private var drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
     private var invalidateParentLayer: () -> Unit,
+    private var voteFrameRate: (Float) -> Unit = {},
 ) : OwnedLayer {
     private val matrix = Matrix()
     private val inverseMatrix = Matrix()
@@ -64,6 +66,7 @@ internal class WinUIOwnerLayer(
         scaleY = scope.scaleY
         clip = scope.clip
         updateMatrix()
+        voteFrameRate(frameRate)
         invalidate()
     }
 
@@ -78,12 +81,14 @@ internal class WinUIOwnerLayer(
     override fun move(position: IntOffset) {
         if (position == this.position) return
         this.position = position
+        voteFrameRate(FrameRateCategory.High.value)
         invalidateParentLayer()
     }
 
     override fun resize(size: IntSize) {
         if (size == this.size) return
         this.size = size
+        voteFrameRate(FrameRateCategory.High.value)
         updateMatrix()
         invalidate()
     }
@@ -101,6 +106,9 @@ internal class WinUIOwnerLayer(
     }
 
     override fun updateDisplayList() {
+        if (frameRate != 0f) {
+            voteFrameRate(frameRate)
+        }
         if (!isDirty) return
         displayListUpdateCount++
         isDirty = false
@@ -116,6 +124,8 @@ internal class WinUIOwnerLayer(
     override fun destroy() {
         isDestroyed = true
         isDirty = false
+        frameRate = 0f
+        isFrameRateFromParent = false
     }
 
     override fun mapOffset(point: Offset, inverse: Boolean): Offset {
