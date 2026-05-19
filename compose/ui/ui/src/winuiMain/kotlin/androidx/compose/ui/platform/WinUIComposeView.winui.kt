@@ -115,6 +115,7 @@ class WinUIComposeView internal constructor(
     private var isDisposed = false
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
     private val pointerInputAdapter = WinUIPointerInputAdapter(root, owner)
+    private val dragAndDropAdapter = WinUIDragAndDropAdapter(root)
 
     fun setContent(content: @Composable () -> Unit) {
         check(!isDisposed) {
@@ -176,6 +177,7 @@ class WinUIComposeView internal constructor(
         disposeComposition()
         keyInputAdapter.dispose()
         pointerInputAdapter.dispose()
+        dragAndDropAdapter.dispose()
         pointerCursorAdapter.dispose()
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
