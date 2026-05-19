@@ -179,6 +179,7 @@
 - [x] Add repository-local WinUI key input processor coverage proving native-child key events are left to WinUI and do not update Compose modifier state.
 - [x] Add repository-local WinUI drag-and-drop manager coverage for platform drag session start, move, changed, drop, exit, end, and target-interest cleanup.
 - [x] Wire WinUI root XAML drag/drop events into Compose drag-and-drop target dispatch with event-token cleanup on `WinUIComposeView.dispose()`.
+- [x] Align WinUI `PopupProperties` value equality with other Compose platforms and cover all public fields in WinUI JVM tests.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [x] Retest shutdown/upcall validation after current kotlin-winrt sync: `KWINRT-013` is treated as fixed upstream, though compose-winui did not identify the exact fixing commit. If `upcallLinker.cpp:66` returns, preserve and analyze `hs_err`, WER, or dump output before reopening it.
 - [x] Extend the Windows JVM integration smoke to a live WinUI `TextBox` after `KWINRT-008` is resolved.
