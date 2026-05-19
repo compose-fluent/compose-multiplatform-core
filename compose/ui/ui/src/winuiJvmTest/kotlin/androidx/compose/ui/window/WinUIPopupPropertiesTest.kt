@@ -20,7 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
-class WinUIPopupPropertiesTest {
+class WinUIWindowPropertiesTest {
     @Test
     fun popupPropertiesUseValueEquality() {
         val first = PopupProperties(
@@ -51,5 +51,31 @@ class WinUIPopupPropertiesTest {
         assertNotEquals(baseline, PopupProperties(dismissOnClickOutside = false))
         assertNotEquals(baseline, PopupProperties(clippingEnabled = false))
         assertNotEquals(baseline, PopupProperties(usePlatformDefaultWidth = true))
+    }
+
+    @Test
+    fun dialogPropertiesUseValueEquality() {
+        val first = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        )
+        val second = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        )
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun dialogPropertiesCompareAllPublicFields() {
+        val baseline = DialogProperties()
+
+        assertNotEquals(baseline, DialogProperties(dismissOnBackPress = false))
+        assertNotEquals(baseline, DialogProperties(dismissOnClickOutside = false))
+        assertNotEquals(baseline, DialogProperties(usePlatformDefaultWidth = false))
     }
 }

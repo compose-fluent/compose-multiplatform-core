@@ -181,6 +181,7 @@
 - [x] Wire WinUI root XAML drag/drop events into Compose drag-and-drop target dispatch with event-token cleanup on `WinUIComposeView.dispose()`.
 - [x] Align WinUI `PopupProperties` value equality with other Compose platforms and cover all public fields in WinUI JVM tests.
 - [x] Replace the initial WinUI inline `Popup` placeholder with a zero-size popup host layout that applies popup semantics and position-provider placement without depending on skiko rendering layers.
+- [x] Replace the initial WinUI inline `Dialog` placeholder with a zero-size centered dialog host layout, dialog semantics, and `DialogProperties` value equality coverage.
 - [x] Add Windows JVM integration smoke test that shows Compose content with embedded WinUI `Button` and `ToggleSwitch`.
 - [x] Retest shutdown/upcall validation after current kotlin-winrt sync: `KWINRT-013` is treated as fixed upstream, though compose-winui did not identify the exact fixing commit. If `upcallLinker.cpp:66` returns, preserve and analyze `hs_err`, WER, or dump output before reopening it.
 - [x] Extend the Windows JVM integration smoke to a live WinUI `TextBox` after `KWINRT-008` is resolved.
