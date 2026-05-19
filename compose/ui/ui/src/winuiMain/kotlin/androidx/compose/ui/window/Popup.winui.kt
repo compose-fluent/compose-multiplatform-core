@@ -18,8 +18,25 @@ package androidx.compose.ui.window
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.popup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.round
 
 @Immutable
 actual class PopupProperties actual constructor(
@@ -74,7 +91,15 @@ actual fun Popup(
     properties: PopupProperties,
     content: @Composable () -> Unit,
 ) {
-    content()
+    val popupPositionProvider = remember(alignment, offset) {
+        AlignmentOffsetPositionProvider(alignment, offset)
+    }
+    Popup(
+        popupPositionProvider = popupPositionProvider,
+        onDismissRequest = onDismissRequest,
+        properties = properties,
+        content = content,
+    )
 }
 
 @Composable
@@ -84,5 +109,89 @@ actual fun Popup(
     properties: PopupProperties,
     content: @Composable () -> Unit,
 ) {
-    content()
+    WinUIPopupLayout(
+        popupPositionProvider = popupPositionProvider,
+        properties = properties,
+        content = content,
+    )
 }
+
+@Composable
+private fun WinUIPopupLayout(
+    popupPositionProvider: PopupPositionProvider,
+    properties: PopupProperties,
+    content: @Composable () -> Unit,
+) {
+    var parentBoundsInWindow by remember { mutableStateOf(IntRect.Zero) }
+
+    Layout(
+        content = {},
+        modifier = Modifier.onPlaced { coordinates ->
+            val parentCoordinates = coordinates.parentCoordinates ?: return@onPlaced
+            parentBoundsInWindow = IntRect(
+                offset = parentCoordinates.positionInWindow().round(),
+                size = parentCoordinates.size,
+            )
+        },
+    ) { _, _ ->
+        layout(0, 0) {}
+    }
+
+    val currentContent by rememberUpdatedState(content)
+    val containerSize = LocalWindowInfo.current.containerSize
+    val layoutDirection = LocalLayoutDirection.current
+    Layout(
+        content = currentContent,
+        modifier = Modifier.semantics { popup() },
+    ) { measurables, constraints ->
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { measurable ->
+            measurable.measure(looseConstraints)
+        }
+        val contentSize = IntSize(
+            width = placeables.maxOfOrNull { it.width } ?: 0,
+            height = placeables.maxOfOrNull { it.height } ?: 0,
+        )
+        val windowSize = containerSize.takeIf { it != IntSize.Zero }
+            ?: constraints.finiteMaxSizeOr(contentSize)
+        val popupPosition = popupPositionProvider.calculatePosition(
+            anchorBounds = parentBoundsInWindow,
+            windowSize = windowSize,
+            layoutDirection = layoutDirection,
+            popupContentSize = contentSize,
+        ).let { position ->
+            if (properties.clippingEnabled) {
+                position.clipToWindow(contentSize, windowSize)
+            } else {
+                position
+            }
+        }
+        val localPosition = popupPosition - parentBoundsInWindow.topLeft
+
+        layout(0, 0) {
+            placeables.forEach { placeable ->
+                placeable.placeRelative(localPosition)
+            }
+        }
+    }
+}
+
+private fun Constraints.finiteMaxSizeOr(fallback: IntSize): IntSize =
+    IntSize(
+        width = if (hasBoundedWidth) maxWidth else fallback.width,
+        height = if (hasBoundedHeight) maxHeight else fallback.height,
+    )
+
+private fun IntOffset.clipToWindow(contentSize: IntSize, windowSize: IntSize): IntOffset =
+    IntOffset(
+        x = if (contentSize.width < windowSize.width) {
+            x.coerceIn(0, windowSize.width - contentSize.width)
+        } else {
+            0
+        },
+        y = if (contentSize.height < windowSize.height) {
+            y.coerceIn(0, windowSize.height - contentSize.height)
+        } else {
+            0
+        },
+    )
