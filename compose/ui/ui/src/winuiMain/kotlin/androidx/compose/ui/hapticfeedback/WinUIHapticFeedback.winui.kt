@@ -17,5 +17,42 @@
 package androidx.compose.ui.hapticfeedback
 
 internal object WinUIHapticFeedback : HapticFeedback {
-    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
+    private var performer: WinUIHapticFeedbackPerformer = WinUIHapticFeedbackPerformer.NoOp
+    private var lastFeedbackType: HapticFeedbackType? = null
+    private var feedbackCount = 0
+
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+        lastFeedbackType = hapticFeedbackType
+        feedbackCount += 1
+        performer.performHapticFeedback(hapticFeedbackType)
+    }
+
+    internal fun setPerformerForTest(performer: WinUIHapticFeedbackPerformer) {
+        this.performer = performer
+    }
+
+    internal fun resetForTest() {
+        performer = WinUIHapticFeedbackPerformer.NoOp
+        lastFeedbackType = null
+        feedbackCount = 0
+    }
+
+    internal fun stateForTest(): WinUIHapticFeedbackState =
+        WinUIHapticFeedbackState(
+            lastFeedbackType = lastFeedbackType,
+            feedbackCount = feedbackCount,
+        )
 }
+
+internal fun interface WinUIHapticFeedbackPerformer {
+    fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType)
+
+    companion object {
+        val NoOp = WinUIHapticFeedbackPerformer {}
+    }
+}
+
+internal data class WinUIHapticFeedbackState(
+    val lastFeedbackType: HapticFeedbackType?,
+    val feedbackCount: Int,
+)

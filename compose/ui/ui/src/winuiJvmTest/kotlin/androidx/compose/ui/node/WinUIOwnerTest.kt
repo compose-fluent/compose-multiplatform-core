@@ -24,6 +24,8 @@ import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.hapticfeedback.WinUIHapticFeedback
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -95,6 +97,23 @@ class WinUIOwnerTest {
             assertEquals(Offset(3f, 4f), events.lastScrollDelta)
             assertEquals(1, events.rootInvalidated)
         } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun ownerUsesWinUIHapticFeedback() {
+        val owner = createOwner()
+        try {
+            WinUIHapticFeedback.resetForTest()
+
+            owner.hapticFeedBack.performHapticFeedback(HapticFeedbackType.ContextClick)
+
+            val state = WinUIHapticFeedback.stateForTest()
+            assertEquals(HapticFeedbackType.ContextClick, state.lastFeedbackType)
+            assertEquals(1, state.feedbackCount)
+        } finally {
+            WinUIHapticFeedback.resetForTest()
             owner.dispose()
         }
     }
