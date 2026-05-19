@@ -60,7 +60,6 @@ import microsoft.ui.xaml.automation.AutomationProperties
 import microsoft.ui.xaml.automation.peers.AccessibilityView
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.Control
-import microsoft.ui.xaml.controls.UIElementCollection
 import microsoft.ui.xaml.media.RectangleGeometry
 import windows.foundation.Rect
 import windows.foundation.Size
@@ -506,7 +505,12 @@ private class WinUIViewHolder<T : UIElement>(
             return
         }
         val clip = clipGeometry ?: RectangleGeometry().also { clipGeometry = it }
-        clip.rect = Rect(0f, 0f, width.toFloat(), height.toFloat())
+        clip.setValue(
+            checkNotNull(RectangleGeometry.rectProperty) {
+                "WinUI RectangleGeometry.RectProperty is not available."
+            },
+            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+        )
         setClip(group.uiElement, clip)
     }
 
@@ -671,11 +675,6 @@ private fun UIElement.measureUnclippedDesiredSize(): IntSize {
 
 private fun Int.toWinUISize(): Double =
     if (this > 0) toDouble() else Double.NaN
-
-private val Canvas.requiredChildren: UIElementCollection
-    get() = checkNotNull(children) {
-        "WinUI Canvas children collection is not available."
-    }
 
 private val requiredAccessibilityViewProperty
     get() = checkNotNull(AutomationProperties.accessibilityViewProperty) {

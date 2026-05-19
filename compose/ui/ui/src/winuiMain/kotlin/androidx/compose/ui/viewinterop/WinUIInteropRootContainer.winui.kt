@@ -18,7 +18,6 @@ package androidx.compose.ui.viewinterop
 
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.controls.Canvas
-import microsoft.ui.xaml.controls.UIElementCollection
 
 internal class WinUIInteropRootContainer(
     private val scheduleUpdate: (() -> Unit) -> Unit,
@@ -82,9 +81,4 @@ internal class WinUIInteropRootContainer(
             root.requiredChildren.removeAt(index)
         }
     }
-
-    private val Canvas.requiredChildren: UIElementCollection
-        get() = checkNotNull(children) {
-            "WinUI Canvas children collection is not available."
-        }
 }

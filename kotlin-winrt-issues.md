@@ -9,13 +9,13 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-023`.
+- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-023`.
 - **Open upstream/plugin:** none currently tracked from compose-winui.
-- **Open compose-side workarounds:** `KWINRT-004`.
+- **Open compose-side workarounds:** `KWINRT-004`, `KWINRT-008`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
-  `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-008`, `KWINRT-009`,
+  `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`,
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   and `KWINRT-022`.
@@ -56,9 +56,11 @@ baseline, not every retest attempt.
 - **Status:** Open.
 - **Observed in:** `Window.systemBackdrop`.
 - **Symptom:** The generated setter requires non-null `SystemBackdrop`, so
-  compose-winui cannot use it to clear the backdrop.
-- **compose-winui workaround:** `Window.winui.kt` uses the generated setter for
-  non-null backdrops and a narrowly scoped null ABI call for
+  compose-winui cannot use it to clear the backdrop. The current generated
+  non-null setter path is also blocked by the broader interface projection
+  member support gap in `KWINRT-008`.
+- **compose-winui workaround:** `Window.winui.kt` uses the public
+  `IWindow2.SYSTEMBACKDROP_SETTER_SLOT` ABI path for both non-null backdrops and
   `WindowBackdrop.None`. Search for `KWINRT-004`.
 - **Validation:** `runWinUIViewSample` covers `Mica -> DesktopAcrylic -> None`.
 
@@ -95,15 +97,43 @@ baseline, not every retest attempt.
 - **Next evidence needed:** If this reproduces, attach `hs_err`, WER, or dump
   analysis before changing kotlin-winrt.
 
-## KWINRT-008: XamlControlsResources cannot be installed from compose-winui Application
+## KWINRT-008: Generated JVM interface projection members are incomplete for WinUI
 
-- **Status:** Fixed upstream for the compose-winui validation path in
-  `external/kotlin-winrt` `5d35f2f9`.
-- **Observed in:** `Application.resources` and `XamlControlsResources`.
-- **Resolution:** compose-winui no longer needs a repository-local `App.xaml`;
-  kotlin-winrt stages and initializes enough WinUI resources for the sample.
-- **Validation:** `runWinUIViewSample` validates a live `TextBox` in the
-  `Application { Window { ... } }` path.
+- **Status:** Open upstream/runtime.
+- **Observed in:** the real compose-winui `Application { Window { ... } }` path
+  after authored `Application` CCW registration and resource staging.
+- **Current finding:** This is deeper than the earlier
+  `XamlControlsResources`/PRI symptom. Current kotlin-winrt can stage enough
+  WinUI resources for the sample and no longer needs a repository-local
+  `App.xaml`, but the JVM artifact runtime still rejects many generated public
+  interface projection members needed by normal WinUI integration.
+- **Managed evidence:** compose-winui hit
+  `WinRtUnsupportedOperationException: Generated interface projection member
+  ... is not supported by the JVM artifact runtime` for:
+  `IApplication.getResources`, `IWindow.getDispatcherQueue`,
+  `IWindow.getCompositor`, `IWindow.setContent`, `IWindow2.getAppWindow`,
+  `IWindow2.getSystemBackdrop`, `IWindow2.setSystemBackdrop`, and
+  `IRectangleGeometry.setRect`. `Panel.children` also needed a public metadata
+  slot fallback rather than relying on the generated getter.
+- **Projection registration evidence:** several generated interface factories
+  were also missing from the lowercase runtime lookup until compose-winui
+  registered aliases locally, including `microsoft.ui.xaml.IWindow`,
+  `microsoft.ui.xaml.media.IRectangleGeometry`,
+  `microsoft.ui.xaml.controls.IPanel`, and
+  `windows.system.display.IDisplayRequest`.
+- **compose-winui workaround:** `Application.winui.kt` registers required
+  interface aliases for the current graph. `Window.winui.kt` uses public WinUI
+  metadata slots for `Window.Content`, `Window.Compositor`, `Window.AppWindow`,
+  and `Window.SystemBackdrop`; `WinUIPanelChildren.winui.kt` centralizes the
+  public `Panel.Children` slot fallback; `WinUIView.winui.kt` uses dependency
+  property read/write for `RectangleGeometry.Rect`.
+- **Validation boundary:** after these workarounds the sample reaches window
+  creation, content assignment, activation, Compose button content readback, and
+  the keep-screen-on `DisplayRequest` path. The current next blocker is a
+  Compose owner/node lifecycle exception,
+  `ModifierNodeElement cannot return an already attached node from create()`,
+  not a native kotlin-winrt crash. Do not keep retrying this path as a kotlin-winrt
+  validation until the projection runtime gaps above are fixed.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
@@ -265,23 +295,40 @@ baseline, not every retest attempt.
 - **Validation:** `WinUIPointerKeyboardModifiersTest` covers individual flags,
   combined flags, and unknown bits.
 
-## KWINRT-023: WinUI sample startup native failfasts inside Microsoft.UI.Xaml.dll
+## KWINRT-023: WinUI authored Application did not register IApplicationOverrides
 
-- **Status:** Open for evidence; do not treat as `KWINRT-013`.
+- **Status:** Open upstream; compose-winui has a narrow startup registration
+  workaround.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` after the
   sample compiles with current nullable projection shapes.
 - **Native evidence:** WER `Report ID 19ff13e4-47ec-4470-99ac-f97efd5ddbeb`,
   `APPCRASH java.exe`, faulting module `Microsoft.UI.Xaml.dll` 3.1.8.0,
   application event exception `0xc000027b`, WER signature exception
   `80004002` (`E_NOINTERFACE`), fault module signature `TextHash12_489`.
-  A local dump was written to
-  `%LOCALAPPDATA%\CrashDumps\java.exe.35680.dmp`.
-- **Current finding:** The process only printed
-  `compose-winui-sample: application starting`, so it native-failfasted before
-  the sample reached `ComposeWinUiSmokeApp.launch` / lifecycle smokes. No
-  `hs_err_pid*.log` was produced, and this environment currently has no
-  `cdb.exe`/WinDbg available to extract the stowed-exception stack.
-- **Next evidence needed:** Analyze the dump with Windows debugging tools and
-  identify whether the `E_NOINTERFACE` comes from resource/bootstrap,
-  `Application.start`, XAML metadata/provider lookup, or a generated interface
-  projection before changing compose-winui behavior or reopening an older issue.
+  Initial mini dump was `%LOCALAPPDATA%\CrashDumps\java.exe.35680.dmp`.
+- **WinDbg finding:** Running the sample under
+  `WinDbg_1.2603.20001.0_x64__8wekyb3d8bbwe\amd64\cdb.exe` and ignoring
+  recoverable first-chance JVM AVs showed the second-chance failfast in
+  `Microsoft_UI_Xaml!FailFastWithStowedExceptions`, called from
+  `DirectUI::FrameworkApplication::StartDesktop` /
+  `DirectUI::FrameworkApplicationFactory::Start`. `!analyze -v` reported:
+  `Managed COM object does not implement interface
+  'A33E81EF-C665-503B-8827-D27EF1720A06'`, which is
+  `Microsoft.UI.Xaml.IApplicationOverrides`.
+- **Current finding:** kotlin-winrt generated
+  `WinRT_WinUIXamlApplication_TypeDetails` with the correct
+  `IApplicationOverrides` CCW definition, but compose-winui did not register
+  that generated authoring metadata before calling `Application.start`. WinUI
+  therefore received a managed COM object that only answered the fallback
+  interfaces and failed when it queried `IApplicationOverrides`.
+- **compose-winui workaround:** `Application.winui.kt` registers the
+  `WinUIXamlApplication` `IApplicationOverrides` CCW definition before
+  `XamlApplication.start`, matching the generated authoring metadata shape but
+  keeping the call source-visible to `compileKotlinWinuiJvm`. Remove this once
+  kotlin-winrt reliably auto-registers generated authoring type details for
+  consuming modules.
+- **Follow-up evidence:** After this registration, WinUI successfully invokes
+  `IApplicationOverrides.onLaunched`; the next failfast is
+  `STOWED_EXCEPTION_c000027b` with `Microsoft.UI.Xaml.dll!FailFastWithStowedExceptions`
+  and `HRESULT 0x80004001 (E_NOTIMPL)` from the managed
+  `Application.resources` projection described in `KWINRT-008`.

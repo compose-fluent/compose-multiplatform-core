@@ -26,28 +26,124 @@ import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
+import io.github.composefluent.winrt.runtime.ComAbiValueKind
+import io.github.composefluent.winrt.runtime.ComMethodSignature
+import io.github.composefluent.winrt.runtime.ComWrappersSupport
+import io.github.composefluent.winrt.runtime.Guid
+import io.github.composefluent.winrt.runtime.IID
+import io.github.composefluent.winrt.runtime.IInspectableReference
+import io.github.composefluent.winrt.runtime.KnownHResults
+import io.github.composefluent.winrt.runtime.PlatformAbi
+import io.github.composefluent.winrt.runtime.RawAddress
 import io.github.composefluent.winrt.runtime.RuntimeScope
+import io.github.composefluent.winrt.runtime.WinRtCcwDefinition
+import io.github.composefluent.winrt.runtime.WinRtInspectableInterfaceDefinition
+import io.github.composefluent.winrt.runtime.WinRtInspectableMethodDefinition
+import io.github.composefluent.winrt.runtime.WinRtTypeHandle
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.xaml.IApplication
+import microsoft.ui.xaml.ILaunchActivatedEventArgs
+import microsoft.ui.xaml.IWindow
+import microsoft.ui.xaml.IWindow2
 import microsoft.ui.xaml.LaunchActivatedEventArgs
-import microsoft.ui.xaml.ResourceDictionary
 import microsoft.ui.xaml.Application as XamlApplication
-import microsoft.ui.xaml.controls.XamlControlsResources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import windows.system.display.IDisplayRequest
 
 fun Application(
     content: @Composable ApplicationScope.() -> Unit,
 ) {
     WinRtWindowsAppSdkBootstrap.initialize().use {
         RuntimeScope.initializeSingleThreaded().use {
+            // KWINRT-023: register generated authored interfaces before Xaml starts.
+            registerWinUIXamlApplicationTypeDetails()
+            registerWinUIProjectionNameAliases()
             XamlApplication.start {
                 WinUIXamlApplication(content)
             }
         }
+    }
+}
+
+private fun registerWinUIXamlApplicationTypeDetails() {
+    ComWrappersSupport.registerAuthoringTypeDetailsFactory(
+        WinUIXamlApplication::class,
+        ::createWinUIXamlApplicationCcwDefinition,
+    )
+}
+
+private fun createWinUIXamlApplicationCcwDefinition(value: Any): WinRtCcwDefinition =
+    WinRtCcwDefinition(
+        interfaceDefinitions = listOf(
+            WinRtInspectableInterfaceDefinition(
+                interfaceId = WinUIXamlApplicationIApplicationOverridesId,
+                methods = listOf(
+                    WinRtInspectableMethodDefinition(
+                        ComMethodSignature.of(ComAbiValueKind.Pointer),
+                    ) { rawArgs ->
+                        val args = LaunchActivatedEventArgs.Metadata.wrap(
+                            IInspectableReference(
+                                PlatformAbi.toRawComPtr(rawArgs[0] as RawAddress),
+                                IID.IInspectable,
+                                preventReleaseOnDispose = true,
+                            ),
+                        )
+                        (value as WinUIXamlApplication).dispatchLaunch(args)
+                        KnownHResults.S_OK.value
+                    },
+                ),
+            ),
+        ),
+        defaultInterfaceId = WinUIXamlApplicationIApplicationOverridesId,
+        runtimeClassName = "androidx.compose.ui.window.WinUIXamlApplication",
+    )
+
+private val WinUIXamlApplicationIApplicationOverridesId =
+    Guid("A33E81EF-C665-503B-8827-D27EF1720A06")
+
+private fun registerWinUIProjectionNameAliases() {
+    registerWinUIProjectionNameAlias(
+        kotlinTypeName = IApplication.Metadata.TYPE_HANDLE.projectedTypeName,
+        winRtTypeName = IApplication.Metadata.TYPE_NAME,
+        iid = IApplication.Metadata.IID,
+    )
+    registerWinUIProjectionNameAlias(
+        kotlinTypeName = ILaunchActivatedEventArgs.Metadata.TYPE_HANDLE.projectedTypeName,
+        winRtTypeName = ILaunchActivatedEventArgs.Metadata.TYPE_NAME,
+        iid = ILaunchActivatedEventArgs.Metadata.IID,
+    )
+    registerWinUIProjectionNameAlias(
+        kotlinTypeName = IWindow.Metadata.TYPE_HANDLE.projectedTypeName,
+        winRtTypeName = IWindow.Metadata.TYPE_NAME,
+        iid = IWindow.Metadata.IID,
+    )
+    registerWinUIProjectionNameAlias(
+        kotlinTypeName = IWindow2.Metadata.TYPE_HANDLE.projectedTypeName,
+        winRtTypeName = IWindow2.Metadata.TYPE_NAME,
+        iid = IWindow2.Metadata.IID,
+    )
+    registerWinUIProjectionNameAlias(
+        kotlinTypeName = IDisplayRequest.Metadata.TYPE_HANDLE.projectedTypeName,
+        winRtTypeName = IDisplayRequest.Metadata.TYPE_NAME,
+        iid = IDisplayRequest.Metadata.IID,
+    )
+}
+
+private fun registerWinUIProjectionNameAlias(
+    kotlinTypeName: String,
+    winRtTypeName: String,
+    iid: Guid,
+) {
+    ComWrappersSupport.registerInterfaceProjectionFactory(kotlinTypeName) { instance ->
+        ComWrappersSupport.wrapGeneratedInterfaceProjection(
+            WinRtTypeHandle(winRtTypeName, iid),
+            instance,
+        )
     }
 }
 
@@ -56,8 +152,11 @@ class WinUIXamlApplication internal constructor(
 ) : XamlApplication() {
     private var runtime: WinUIApplicationRuntime? = null
 
+    internal fun dispatchLaunch(args: LaunchActivatedEventArgs) {
+        onLaunched(args)
+    }
+
     override fun onLaunched(args: LaunchActivatedEventArgs) {
-        installXamlControlsResources()
         runtime = WinUIApplicationRuntime(
             application = this,
             dispatcherQueue = DispatcherQueue.getForCurrentThread(),
@@ -66,15 +165,6 @@ class WinUIXamlApplication internal constructor(
         }
     }
 }
-
-private fun XamlApplication.installXamlControlsResources() {
-    checkNotNull(resources) {
-        "WinUI Application resources are not available."
-    }.mergedDictionaries.add(loadXamlControlsResources())
-}
-
-private fun loadXamlControlsResources(): ResourceDictionary =
-    XamlControlsResources()
 
 @Stable
 interface ApplicationScope {
