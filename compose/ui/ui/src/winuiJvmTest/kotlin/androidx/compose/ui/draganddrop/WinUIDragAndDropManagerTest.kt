@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.ModifierNodeElement
@@ -120,10 +121,116 @@ class WinUIDragAndDropManagerTest {
             owner.dispose()
         }
     }
+
+    @Test
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun dispatchesDragSessionEventsToInterestedTarget() {
+        val target = TestDragAndDropTarget()
+        val owner = createOwner()
+        try {
+            val targetNode = DragAndDropNode(
+                onDropTargetValidate = { target }
+            )
+            val child = LayoutNode().also {
+                it.modifier = TargetDragAndDropElement(targetNode)
+                it.measurePolicy = fixedMeasurePolicy(100, 100)
+            }
+            owner.root.insertAt(0, child)
+            owner.setWindowContainerSize(IntSize(200, 200))
+            owner.measureAndLayout()
+
+            val startEvent = DragAndDropEvent(nativeEvent = "start")
+            val moveEvent = DragAndDropEvent(
+                nativeEvent = "move",
+                positionInRootImpl = Offset(10f, 10f),
+            )
+            val changedEvent = DragAndDropEvent(nativeEvent = "changed")
+            val dropEvent = DragAndDropEvent(nativeEvent = "drop")
+            val endEvent = DragAndDropEvent(nativeEvent = "end")
+
+            assertTrue(WinUIDragAndDropManager.onDragStarted(startEvent))
+            assertTrue(WinUIDragAndDropManager.isInterestedTarget(targetNode))
+
+            WinUIDragAndDropManager.onDragMoved(moveEvent)
+            WinUIDragAndDropManager.onDragChanged(changedEvent)
+
+            assertTrue(WinUIDragAndDropManager.onDrop(dropEvent))
+
+            WinUIDragAndDropManager.onDragEnded(endEvent)
+
+            assertEquals(
+                listOf("started", "entered", "moved", "changed", "drop", "ended"),
+                target.events,
+            )
+            assertFalse(WinUIDragAndDropManager.isInterestedTarget(target))
+            assertFalse(WinUIDragAndDropManager.isInterestedTarget(targetNode))
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun dragExitDispatchesExitedToCurrentTarget() {
+        val target = TestDragAndDropTarget()
+        val owner = createOwner()
+        try {
+            val child = LayoutNode().also {
+                it.modifier = TargetDragAndDropElement(
+                    DragAndDropNode(
+                        onDropTargetValidate = { target }
+                    )
+                )
+                it.measurePolicy = fixedMeasurePolicy(100, 100)
+            }
+            owner.root.insertAt(0, child)
+            owner.setWindowContainerSize(IntSize(200, 200))
+            owner.measureAndLayout()
+
+            assertTrue(WinUIDragAndDropManager.onDragStarted(DragAndDropEvent()))
+            WinUIDragAndDropManager.onDragMoved(
+                DragAndDropEvent(positionInRootImpl = Offset(10f, 10f))
+            )
+            WinUIDragAndDropManager.onDragExited(DragAndDropEvent())
+
+            assertEquals(listOf("started", "entered", "moved", "exited"), target.events)
+        } finally {
+            owner.dispose()
+        }
+    }
 }
 
 private class TestDragAndDropTarget : DragAndDropTarget {
-    override fun onDrop(event: DragAndDropEvent): Boolean = true
+    val events = mutableListOf<String>()
+
+    override fun onStarted(event: DragAndDropEvent) {
+        events += "started"
+    }
+
+    override fun onEntered(event: DragAndDropEvent) {
+        events += "entered"
+    }
+
+    override fun onMoved(event: DragAndDropEvent) {
+        events += "moved"
+    }
+
+    override fun onChanged(event: DragAndDropEvent) {
+        events += "changed"
+    }
+
+    override fun onExited(event: DragAndDropEvent) {
+        events += "exited"
+    }
+
+    override fun onDrop(event: DragAndDropEvent): Boolean {
+        events += "drop"
+        return true
+    }
+
+    override fun onEnded(event: DragAndDropEvent) {
+        events += "ended"
+    }
 }
 
 private class SourceDragAndDropElement(
@@ -135,6 +242,22 @@ private class SourceDragAndDropElement(
 
     override fun InspectorInfo.inspectableProperties() {
         name = "SourceDragAndDropNode"
+    }
+
+    override fun equals(other: Any?): Boolean = other === this
+
+    override fun hashCode(): Int = node.hashCode()
+}
+
+private class TargetDragAndDropElement(
+    private val node: DragAndDropNode,
+) : ModifierNodeElement<DragAndDropNode>() {
+    override fun create(): DragAndDropNode = node
+
+    override fun update(node: DragAndDropNode) = Unit
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "TargetDragAndDropNode"
     }
 
     override fun equals(other: Any?): Boolean = other === this
@@ -164,4 +287,8 @@ private object TestPlatformFocusOwner : PlatformFocusOwner {
     override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
 
     override fun getEmbeddedViewFocusRect(): Rect? = null
+}
+
+private fun fixedMeasurePolicy(width: Int, height: Int) = MeasurePolicy { _, _ ->
+    layout(width, height) {}
 }

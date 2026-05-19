@@ -61,6 +61,31 @@ internal object WinUIDragAndDropManager : DragAndDropManager {
     override fun isInterestedTarget(target: DragAndDropTarget): Boolean =
         interestedTargets.contains(target)
 
+    internal fun onDragStarted(event: DragAndDropEvent): Boolean {
+        val accepted = rootDragAndDropNode.acceptDragAndDropTransfer(event)
+        interestedTargets.forEach { it.onStarted(event) }
+        return accepted
+    }
+
+    internal fun onDragEntered(event: DragAndDropEvent) {
+        rootDragAndDropNode.onEntered(event)
+    }
+
+    internal fun onDragMoved(event: DragAndDropEvent) {
+        rootDragAndDropNode.onMoved(event)
+    }
+
+    internal fun onDragChanged(event: DragAndDropEvent) {
+        rootDragAndDropNode.onChanged(event)
+    }
+
+    internal fun onDragExited(event: DragAndDropEvent) {
+        rootDragAndDropNode.onExited(event)
+    }
+
+    internal fun onDrop(event: DragAndDropEvent): Boolean =
+        rootDragAndDropNode.onDrop(event)
+
     internal fun onDragEnded(event: DragAndDropEvent) {
         rootDragAndDropNode.onEnded(event)
         interestedTargets.clear()
