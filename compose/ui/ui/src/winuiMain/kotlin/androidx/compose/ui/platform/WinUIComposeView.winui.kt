@@ -24,6 +24,7 @@ import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
+import androidx.compose.runtime.retain.LocalRetainedValuesStoreProvider
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.WinUIPlatformFocusOwner
@@ -139,14 +140,15 @@ class WinUIComposeView internal constructor(
                 LocalSaveableStateRegistry provides registry,
                 LocalHostDefaultProvider provides hostDefaultProvider,
             ) {
-                ProvideCommonCompositionLocals(
-                    owner = owner,
-                    uriHandler = createWinUIUriHandler(),
-                    content = content,
-                )
+                LocalRetainedValuesStoreProvider(retainedValuesStore) {
+                    ProvideCommonCompositionLocals(
+                        owner = owner,
+                        uriHandler = createWinUIUriHandler(),
+                        content = content,
+                    )
+                }
             }
         }
-        retainedValuesStore.stopRetainingExitedValues()
         syncRootContent()
     }
 
@@ -155,7 +157,6 @@ class WinUIComposeView internal constructor(
         if (currentComposition != null) {
             saveableState = saveableStateRegistry?.performSave()
             saveableStateRegistry = null
-            retainedValuesStore.startRetainingExitedValues()
             currentComposition.dispose()
         }
         composition = null

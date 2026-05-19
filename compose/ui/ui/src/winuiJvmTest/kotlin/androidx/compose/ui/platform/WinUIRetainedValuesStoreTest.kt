@@ -16,17 +16,26 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.runtime.retain.ManagedRetainedValuesStore
-import androidx.compose.runtime.retain.RetainedValuesStore
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-internal class WinUIRetainedValuesStore(
-    private val delegate: ManagedRetainedValuesStore = ManagedRetainedValuesStore(),
-) : RetainedValuesStore by delegate {
+class WinUIRetainedValuesStoreTest {
+    @Test
+    fun contentLifecycleDelegatesToManagedStore() {
+        val store = WinUIRetainedValuesStore()
 
-    val isRetainingExitedValues: Boolean
-        get() = delegate.isRetainingExitedValues
+        assertTrue(store.isRetainingExitedValues)
 
-    fun dispose() {
-        delegate.dispose()
+        store.onContentEnteredComposition()
+        assertFalse(store.isRetainingExitedValues)
+
+        store.onContentExitComposition()
+        assertTrue(store.isRetainingExitedValues)
+
+        store.onContentEnteredComposition()
+        assertFalse(store.isRetainingExitedValues)
+
+        store.dispose()
     }
 }

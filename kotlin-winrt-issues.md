@@ -9,7 +9,7 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** none currently tracked from compose-winui.
+- **Open upstream/runtime:** `KWINRT-023`.
 - **Open upstream/plugin:** none currently tracked from compose-winui.
 - **Open compose-side workarounds:** `KWINRT-004`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
@@ -264,3 +264,24 @@ baseline, not every retest attempt.
   removed manual modifier decoding.
 - **Validation:** `WinUIPointerKeyboardModifiersTest` covers individual flags,
   combined flags, and unknown bits.
+
+## KWINRT-023: WinUI sample startup native failfasts inside Microsoft.UI.Xaml.dll
+
+- **Status:** Open for evidence; do not treat as `KWINRT-013`.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` after the
+  sample compiles with current nullable projection shapes.
+- **Native evidence:** WER `Report ID 19ff13e4-47ec-4470-99ac-f97efd5ddbeb`,
+  `APPCRASH java.exe`, faulting module `Microsoft.UI.Xaml.dll` 3.1.8.0,
+  application event exception `0xc000027b`, WER signature exception
+  `80004002` (`E_NOINTERFACE`), fault module signature `TextHash12_489`.
+  A local dump was written to
+  `%LOCALAPPDATA%\CrashDumps\java.exe.35680.dmp`.
+- **Current finding:** The process only printed
+  `compose-winui-sample: application starting`, so it native-failfasted before
+  the sample reached `ComposeWinUiSmokeApp.launch` / lifecycle smokes. No
+  `hs_err_pid*.log` was produced, and this environment currently has no
+  `cdb.exe`/WinDbg available to extract the stowed-exception stack.
+- **Next evidence needed:** Analyze the dump with Windows debugging tools and
+  identify whether the `E_NOINTERFACE` comes from resource/bootstrap,
+  `Application.start`, XAML metadata/provider lookup, or a generated interface
+  projection before changing compose-winui behavior or reopening an older issue.
