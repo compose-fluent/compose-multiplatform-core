@@ -21,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import microsoft.ui.xaml.input.FocusNavigationDirection
 
 class WinUIPlatformFocusOwnerTest {
     @Test
@@ -33,6 +34,7 @@ class WinUIPlatformFocusOwnerTest {
                 true
             },
             clearNativeFocus = {},
+            moveNativeFocus = { false },
         )
         val rejectedOwner = WinUIPlatformFocusOwner(
             requestNativeFocus = {
@@ -40,6 +42,7 @@ class WinUIPlatformFocusOwnerTest {
                 false
             },
             clearNativeFocus = {},
+            moveNativeFocus = { false },
         )
 
         assertTrue(acceptedOwner.requestOwnerFocus(FocusDirection.Next, null))
@@ -53,6 +56,7 @@ class WinUIPlatformFocusOwnerTest {
         val owner = WinUIPlatformFocusOwner(
             requestNativeFocus = { error("native focus failed") },
             clearNativeFocus = {},
+            moveNativeFocus = { false },
         )
 
         assertFalse(owner.requestOwnerFocus(FocusDirection.Next, null))
@@ -64,10 +68,12 @@ class WinUIPlatformFocusOwnerTest {
         val owner = WinUIPlatformFocusOwner(
             requestNativeFocus = { true },
             clearNativeFocus = { clearRequests += 1 },
+            moveNativeFocus = { false },
         )
         val failingOwner = WinUIPlatformFocusOwner(
             requestNativeFocus = { true },
             clearNativeFocus = { error("native clear failed") },
+            moveNativeFocus = { false },
         )
 
         owner.clearOwnerFocus()
@@ -77,13 +83,79 @@ class WinUIPlatformFocusOwnerTest {
     }
 
     @Test
-    fun embeddedFocusAndChildFocusMovementAreDeferred() {
+    fun moveFocusInChildrenDelegatesSupportedDirectionsToWinUI() {
+        val requestedDirections = mutableListOf<FocusNavigationDirection>()
         val owner = WinUIPlatformFocusOwner(
             requestNativeFocus = { true },
             clearNativeFocus = {},
+            moveNativeFocus = {
+                requestedDirections += it
+                true
+            },
+        )
+
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Next))
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Previous))
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Up))
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Down))
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Left))
+        assertTrue(owner.moveFocusInChildren(FocusDirection.Right))
+
+        assertEquals(
+            listOf(
+                FocusNavigationDirection.Next,
+                FocusNavigationDirection.Previous,
+                FocusNavigationDirection.Up,
+                FocusNavigationDirection.Down,
+                FocusNavigationDirection.Left,
+                FocusNavigationDirection.Right,
+            ),
+            requestedDirections,
+        )
+    }
+
+    @Test
+    fun moveFocusInChildrenDoesNotDelegateUnsupportedDirections() {
+        var requestedDirections = 0
+        val owner = WinUIPlatformFocusOwner(
+            requestNativeFocus = { true },
+            clearNativeFocus = {},
+            moveNativeFocus = {
+                requestedDirections += 1
+                true
+            },
+        )
+
+        assertFalse(owner.moveFocusInChildren(FocusDirection.Enter))
+        assertFalse(owner.moveFocusInChildren(FocusDirection.Exit))
+        assertEquals(0, requestedDirections)
+    }
+
+    @Test
+    fun moveFocusInChildrenReturnsFalseWhenWinUIRejectsOrThrows() {
+        val owner = WinUIPlatformFocusOwner(
+            requestNativeFocus = { true },
+            clearNativeFocus = {},
+            moveNativeFocus = { false },
+        )
+        val failingOwner = WinUIPlatformFocusOwner(
+            requestNativeFocus = { true },
+            clearNativeFocus = {},
+            moveNativeFocus = { error("native focus move failed") },
         )
 
         assertFalse(owner.moveFocusInChildren(FocusDirection.Next))
+        assertFalse(failingOwner.moveFocusInChildren(FocusDirection.Next))
+    }
+
+    @Test
+    fun embeddedFocusRectIsDeferred() {
+        val owner = WinUIPlatformFocusOwner(
+            requestNativeFocus = { true },
+            clearNativeFocus = {},
+            moveNativeFocus = { false },
+        )
+
         assertNull(owner.getEmbeddedViewFocusRect())
     }
 }

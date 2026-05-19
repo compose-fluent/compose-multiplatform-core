@@ -19,10 +19,13 @@ package androidx.compose.ui.focus
 import androidx.compose.ui.geometry.Rect
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.input.FocusManager
+import microsoft.ui.xaml.input.FocusNavigationDirection
 
 internal class WinUIPlatformFocusOwner(
     private val requestNativeFocus: () -> Boolean,
     private val clearNativeFocus: () -> Unit,
+    private val moveNativeFocus: (FocusNavigationDirection) -> Boolean,
 ) : PlatformFocusOwner {
     constructor(focusRoot: UIElement) : this(
         requestNativeFocus = {
@@ -34,6 +37,7 @@ internal class WinUIPlatformFocusOwner(
                 focusRoot.focus(FocusState.Unfocused)
             }
         },
+        moveNativeFocus = FocusManager::tryMoveFocus,
     )
 
     override fun requestOwnerFocus(
@@ -48,7 +52,21 @@ internal class WinUIPlatformFocusOwner(
         runCatching { clearNativeFocus() }
     }
 
-    override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
+    override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean =
+        focusDirection.toWinUIFocusNavigationDirection()?.let { direction ->
+            runCatching { moveNativeFocus(direction) }.getOrDefault(false)
+        } ?: false
 
     override fun getEmbeddedViewFocusRect(): Rect? = null
 }
+
+private fun FocusDirection.toWinUIFocusNavigationDirection(): FocusNavigationDirection? =
+    when (this) {
+        FocusDirection.Next -> FocusNavigationDirection.Next
+        FocusDirection.Previous -> FocusNavigationDirection.Previous
+        FocusDirection.Up -> FocusNavigationDirection.Up
+        FocusDirection.Down -> FocusNavigationDirection.Down
+        FocusDirection.Left -> FocusNavigationDirection.Left
+        FocusDirection.Right -> FocusNavigationDirection.Right
+        else -> null
+    }

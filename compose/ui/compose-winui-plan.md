@@ -87,7 +87,7 @@
 - [x] Use an initial Canvas-backed WinUI interop root container so wrapper position and z-order are controlled by Compose tree order instead of Grid layout behavior.
 - [x] Implement a WinUI views handler/container that manages insertion, removal, z-order, clipping, and draw-order synchronization with the Compose tree.
 - [x] Map Compose layout coordinates to WinUI bounds using unclipped bounds for the user element and clipped bounds for the wrapper.
-- [ ] Support focus transfer between Compose focus targets and WinUI controls, including Tab and Shift+Tab traversal.
+- [x] Support focus transfer between Compose focus targets and WinUI controls, including Tab and Shift+Tab traversal.
 - [x] Support basic pointer cooperation so native WinUI controls handle pointer input inside `WinUIView` bounds while Compose receives pointer input outside interop views.
 - [x] Apply `Modifier.pointerHoverIcon(...)` to the WinUI root through a projected root element subclass that can set `UIElement.ProtectedCursor` through normal protected-member access; do not use direct protected-interface slot calls.
 - [x] Support keyboard/native-focus cooperation so embedded WinUI controls handle their own focused keyboard input while Compose keeps predictable key dispatch outside interop views.
