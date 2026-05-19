@@ -28,15 +28,23 @@ import androidx.compose.ui.text.input.TextFieldValue
 
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputSession: WinUITextInputSessionState? = null
+    private var activeInputMethodSession: WinUITextInputMethodSessionState? = null
 
     internal val isInputActive: Boolean
         get() = activeInputSession != null
 
+    internal val isInputMethodActive: Boolean
+        get() = activeInputMethodSession != null
+
     internal val isSoftwareKeyboardVisible: Boolean
-        get() = activeInputSession?.isSoftwareKeyboardVisible == true
+        get() = activeInputSession?.isSoftwareKeyboardVisible == true ||
+            activeInputMethodSession?.isSoftwareKeyboardVisible == true
 
     internal val currentValue: TextFieldValue?
         get() = activeInputSession?.value
+
+    internal val currentInputMethodRequest: PlatformTextInputMethodRequest?
+        get() = activeInputMethodSession?.request
 
     override fun startInput(
         value: TextFieldValue,
@@ -58,10 +66,14 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     override fun showSoftwareKeyboard() {
         activeInputSession = activeInputSession?.copy(isSoftwareKeyboardVisible = true)
+        activeInputMethodSession =
+            activeInputMethodSession?.copy(isSoftwareKeyboardVisible = true)
     }
 
     override fun hideSoftwareKeyboard() {
         activeInputSession = activeInputSession?.copy(isSoftwareKeyboardVisible = false)
+        activeInputMethodSession =
+            activeInputMethodSession?.copy(isSoftwareKeyboardVisible = false)
     }
 
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
@@ -90,6 +102,20 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     internal fun resetForTest() {
         activeInputSession = null
+        activeInputMethodSession = null
+    }
+
+    internal fun startInputMethod(request: PlatformTextInputMethodRequest) {
+        activeInputMethodSession = WinUITextInputMethodSessionState(
+            request = request,
+            isSoftwareKeyboardVisible = true,
+        )
+    }
+
+    internal fun stopInputMethod(request: PlatformTextInputMethodRequest) {
+        if (activeInputMethodSession?.request === request) {
+            activeInputMethodSession = null
+        }
     }
 }
 
@@ -105,4 +131,9 @@ private data class WinUITextInputSessionState(
     val textLayoutResult: TextLayoutResult? = null,
     val innerTextFieldBounds: Rect? = null,
     val decorationBoxBounds: Rect? = null,
+)
+
+private data class WinUITextInputMethodSessionState(
+    val request: PlatformTextInputMethodRequest,
+    val isSoftwareKeyboardVisible: Boolean,
 )

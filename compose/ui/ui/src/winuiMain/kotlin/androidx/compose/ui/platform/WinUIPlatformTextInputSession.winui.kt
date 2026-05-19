@@ -18,16 +18,23 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.SessionMutex
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 internal class WinUIPlatformTextInputSession(
     coroutineScope: CoroutineScope,
 ) : PlatformTextInputSessionScope, CoroutineScope by coroutineScope {
-    private val inputMethodSessionMutex = SessionMutex<Nothing?>()
+    private val inputMethodSessionMutex = SessionMutex<PlatformTextInputMethodRequest>()
 
     override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing =
         inputMethodSessionMutex.withSessionCancellingPrevious(
-            sessionInitializer = { null },
-        ) {
-            awaitWinUiTextInputCancellation()
+            sessionInitializer = { request },
+        ) { activeRequest ->
+            @Suppress("RemoveExplicitTypeArguments")
+            suspendCancellableCoroutine<Nothing> { continuation ->
+                WinUIPlatformTextInputService.startInputMethod(activeRequest)
+                continuation.invokeOnCancellation {
+                    WinUIPlatformTextInputService.stopInputMethod(activeRequest)
+                }
+            }
         }
 }

@@ -18,6 +18,12 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -74,4 +80,59 @@ class WinUIPlatformTextInputServiceTest {
 
         assertFalse(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
     }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun startInputMethodTracksActiveRequestUntilCancelled() = runTest {
+        val session = WinUIPlatformTextInputSession(this)
+        val request = TestPlatformTextInputMethodRequest()
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(request)
+        }
+
+        assertTrue(WinUIPlatformTextInputService.isInputMethodActive)
+        assertTrue(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
+        assertEquals(request, WinUIPlatformTextInputService.currentInputMethodRequest)
+
+        WinUISoftwareKeyboardController.hide()
+
+        assertFalse(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
+
+        job.cancelAndJoin()
+
+        assertFalse(WinUIPlatformTextInputService.isInputMethodActive)
+        assertEquals(null, WinUIPlatformTextInputService.currentInputMethodRequest)
+        assertFalse(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun startInputMethodCancelsPreviousRequestBeforeStartingNext() = runTest {
+        val session = WinUIPlatformTextInputSession(this)
+        val firstRequest = TestPlatformTextInputMethodRequest()
+        val secondRequest = TestPlatformTextInputMethodRequest()
+
+        val first = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(firstRequest)
+        }
+
+        assertEquals(firstRequest, WinUIPlatformTextInputService.currentInputMethodRequest)
+
+        val second = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(secondRequest)
+        }
+        runCurrent()
+
+        assertFalse(first.isActive)
+        assertTrue(second.isActive)
+        assertTrue(WinUIPlatformTextInputService.isInputMethodActive)
+        assertEquals(secondRequest, WinUIPlatformTextInputService.currentInputMethodRequest)
+
+        second.cancelAndJoin()
+
+        assertFalse(WinUIPlatformTextInputService.isInputMethodActive)
+    }
 }
+
+private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodRequest
