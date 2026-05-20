@@ -420,8 +420,8 @@ kotlin {
                 dependencies {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
-                    implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
-                    implementation("io.github.composefluent.winrt:winrt-authoring:0.1.0-SNAPSHOT")
+                    implementation("io.github.compose-fluent:winrt-runtime:0.1.0-SNAPSHOT")
+                    implementation("io.github.compose-fluent:winrt-authoring:0.1.0-SNAPSHOT")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
@@ -484,8 +484,25 @@ tasks.withType(KotlinCompile).configureEach { task ->
 }
 
 if (composeWinUiGradlePluginAvailable) {
+    configurations.configureEach { configuration ->
+        if (configuration.name.toLowerCase(Locale.ROOT).contains("winui")) {
+            configuration.attributes.attribute(
+                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
+                    25
+            )
+        }
+    }
+
+    def generatedWinRtSources = layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin")
     tasks.withType(KotlinCompile).configureEach { task ->
-        if (!task.name.contains("Winui")) return
+        if (!task.name.contains("Winui")) {
+            task.exclude { details ->
+                details.file.toPath().toAbsolutePath().normalize().startsWith(
+                        generatedWinRtSources.get().asFile.toPath().toAbsolutePath().normalize()
+                )
+            }
+            return
+        }
         // WinUI sits below skikoMain in the source-set graph, but it must keep
         // WinUI/XAML actuals where skikoMain uses generic or Win32-backed
         // implementations. Start with a WinUI-first bridge and selectively
@@ -501,8 +518,8 @@ if (composeWinUiGradlePluginAvailable) {
         }
         task.dependsOn("generateWinRtProjections")
         task.compilerOptions {
-            it.jvmTarget.set(JvmTarget.JVM_22)
-            it.freeCompilerArgs.add("-Xjdk-release=22")
+            it.jvmTarget.set(JvmTarget.JVM_25)
+            it.freeCompilerArgs.add("-Xjdk-release=25")
             it.freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
         }
     }

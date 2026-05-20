@@ -119,6 +119,7 @@ internal class WinUIOwner(
     private val coordinateMapper: WinUICoordinateMapper = WinUICoordinateMapper(),
     override val textToolbar: TextToolbar = WinUITextToolbar(),
     override val pointerIconService: PointerIconService = WinUIPointerIconService(),
+    internal val winUIDragAndDropManager: WinUIDragAndDropManager = WinUIDragAndDropManager(),
 ) : Owner, OutOfFrameExecutor, MatrixPositionCalculator {
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
@@ -184,7 +185,7 @@ internal class WinUIOwner(
     override val localeList: LocaleList = LocaleList.current
     override val snapshotObserver = OwnerSnapshotObserver { it.invoke() }
     override val modifierLocalManager: ModifierLocalManager = ModifierLocalManager(this)
-    override val dragAndDropManager: DragAndDropManager = WinUIDragAndDropManager
+    override val dragAndDropManager: DragAndDropManager = winUIDragAndDropManager
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
     private var keepScreenOnCount = 0
     private var sensitiveContentCount = 0

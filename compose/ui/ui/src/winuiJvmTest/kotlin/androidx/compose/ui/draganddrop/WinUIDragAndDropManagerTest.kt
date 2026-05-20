@@ -32,6 +32,7 @@ import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.IntSize
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -40,30 +41,39 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WinUIDragAndDropManagerTest {
+    private lateinit var manager: WinUIDragAndDropManager
+
+    @BeforeTest
+    fun setUp() {
+        manager = WinUIDragAndDropManager()
+    }
+
     @AfterTest
     fun tearDown() {
-        WinUIDragAndDropManager.clearTargetInterestForTest()
-        WinUIDragAndDropManager.setStarterForTest(null)
+        if (::manager.isInitialized) {
+            manager.clearTargetInterestForTest()
+            manager.setStarterForTest(null)
+        }
     }
 
     @Test
     fun exposesRootDragAndDropModifier() {
-        assertNotEquals(Modifier, WinUIDragAndDropManager.modifier)
+        assertNotEquals(Modifier, manager.modifier)
     }
 
     @Test
     fun tracksInterestedTargetsForCurrentSession() {
         val target = TestDragAndDropTarget()
 
-        assertFalse(WinUIDragAndDropManager.isInterestedTarget(target))
+        assertFalse(manager.isInterestedTarget(target))
 
-        WinUIDragAndDropManager.registerTargetInterest(target)
+        manager.registerTargetInterest(target)
 
-        assertTrue(WinUIDragAndDropManager.isInterestedTarget(target))
+        assertTrue(manager.isInterestedTarget(target))
 
-        WinUIDragAndDropManager.clearTargetInterestForTest()
+        manager.clearTargetInterestForTest()
 
-        assertFalse(WinUIDragAndDropManager.isInterestedTarget(target))
+        assertFalse(manager.isInterestedTarget(target))
     }
 
     @Test
@@ -83,7 +93,7 @@ class WinUIDragAndDropManagerTest {
                 )
             }
         )
-        val owner = createOwner()
+        val owner = createOwner(manager)
         try {
             val child = LayoutNode().also {
                 it.modifier = SourceDragAndDropElement(sourceNode)
@@ -93,14 +103,14 @@ class WinUIDragAndDropManagerTest {
             owner.setWindowContainerSize(IntSize(100, 100))
             owner.measureAndLayout()
 
-            assertFalse(WinUIDragAndDropManager.isRequestDragAndDropTransferRequired)
+            assertFalse(manager.isRequestDragAndDropTransferRequired)
 
             sourceNode.requestDragAndDropTransfer(Offset.Unspecified)
 
             assertNull(sourceOffset)
             assertEquals(0, starterCalls)
 
-            WinUIDragAndDropManager.setStarterForTest(
+            manager.setStarterForTest(
                 WinUIDragAndDropStarter { transferData, decorationSize, _ ->
                     starterCalls += 1
                     starterTransferData = transferData
@@ -109,7 +119,7 @@ class WinUIDragAndDropManagerTest {
                 }
             )
 
-            assertTrue(WinUIDragAndDropManager.isRequestDragAndDropTransferRequired)
+            assertTrue(manager.isRequestDragAndDropTransferRequired)
 
             sourceNode.requestDragAndDropTransfer(Offset.Unspecified)
 
@@ -126,7 +136,7 @@ class WinUIDragAndDropManagerTest {
     @OptIn(ExperimentalComposeUiApi::class)
     fun dispatchesDragSessionEventsToInterestedTarget() {
         val target = TestDragAndDropTarget()
-        val owner = createOwner()
+        val owner = createOwner(manager)
         try {
             val targetNode = DragAndDropNode(
                 onDropTargetValidate = { target }
@@ -148,22 +158,22 @@ class WinUIDragAndDropManagerTest {
             val dropEvent = DragAndDropEvent(nativeEvent = "drop")
             val endEvent = DragAndDropEvent(nativeEvent = "end")
 
-            assertTrue(WinUIDragAndDropManager.onDragStarted(startEvent))
-            assertTrue(WinUIDragAndDropManager.isInterestedTarget(targetNode))
+            assertTrue(manager.onDragStarted(startEvent))
+            assertTrue(manager.isInterestedTarget(targetNode))
 
-            WinUIDragAndDropManager.onDragMoved(moveEvent)
-            WinUIDragAndDropManager.onDragChanged(changedEvent)
+            manager.onDragMoved(moveEvent)
+            manager.onDragChanged(changedEvent)
 
-            assertTrue(WinUIDragAndDropManager.onDrop(dropEvent))
+            assertTrue(manager.onDrop(dropEvent))
 
-            WinUIDragAndDropManager.onDragEnded(endEvent)
+            manager.onDragEnded(endEvent)
 
             assertEquals(
                 listOf("started", "entered", "moved", "changed", "drop", "ended"),
                 target.events,
             )
-            assertFalse(WinUIDragAndDropManager.isInterestedTarget(target))
-            assertFalse(WinUIDragAndDropManager.isInterestedTarget(targetNode))
+            assertFalse(manager.isInterestedTarget(target))
+            assertFalse(manager.isInterestedTarget(targetNode))
         } finally {
             owner.dispose()
         }
@@ -173,7 +183,7 @@ class WinUIDragAndDropManagerTest {
     @OptIn(ExperimentalComposeUiApi::class)
     fun dragExitDispatchesExitedToCurrentTarget() {
         val target = TestDragAndDropTarget()
-        val owner = createOwner()
+        val owner = createOwner(manager)
         try {
             val child = LayoutNode().also {
                 it.modifier = TargetDragAndDropElement(
@@ -187,11 +197,11 @@ class WinUIDragAndDropManagerTest {
             owner.setWindowContainerSize(IntSize(200, 200))
             owner.measureAndLayout()
 
-            assertTrue(WinUIDragAndDropManager.onDragStarted(DragAndDropEvent()))
-            WinUIDragAndDropManager.onDragMoved(
+            assertTrue(manager.onDragStarted(DragAndDropEvent()))
+            manager.onDragMoved(
                 DragAndDropEvent(positionInRootImpl = Offset(10f, 10f))
             )
-            WinUIDragAndDropManager.onDragExited(DragAndDropEvent())
+            manager.onDragExited(DragAndDropEvent())
 
             assertEquals(listOf("started", "entered", "moved", "exited"), target.events)
         } finally {
@@ -265,7 +275,7 @@ private class TargetDragAndDropElement(
     override fun hashCode(): Int = node.hashCode()
 }
 
-private fun createOwner(): WinUIOwner {
+private fun createOwner(manager: WinUIDragAndDropManager): WinUIOwner {
     val root = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
     }
@@ -273,6 +283,7 @@ private fun createOwner(): WinUIOwner {
         root = root,
         platformFocusOwner = TestPlatformFocusOwner,
         retainedValuesStore = ForgetfulRetainedValuesStore,
+        winUIDragAndDropManager = manager,
     )
 }
 

@@ -31,7 +31,7 @@ dependencies {
     implementation(project(":compose:ui:ui"))
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
-    implementation("io.github.composefluent.winrt:winrt-runtime:0.1.0-SNAPSHOT")
+    implementation("io.github.compose-fluent:winrt-runtime:0.1.0-SNAPSHOT")
 }
 
 configurations {
@@ -65,14 +65,14 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
     }
-    sourceCompatibility = JavaVersion.VERSION_22
-    targetCompatibility = JavaVersion.VERSION_22
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 tasks.withType(JavaCompile).configureEach {
-    sourceCompatibility = JavaVersion.VERSION_22.toString()
-    targetCompatibility = JavaVersion.VERSION_22.toString()
-    options.release.set(22)
+    sourceCompatibility = JavaVersion.VERSION_25.toString()
+    targetCompatibility = JavaVersion.VERSION_25.toString()
+    options.release.set(25)
 }
 
 tasks.named("generateWinRtProjections").configure {
@@ -82,8 +82,8 @@ tasks.named("generateWinRtProjections").configure {
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_22)
-        freeCompilerArgs.add("-Xjdk-release=22")
+        jvmTarget.set(JvmTarget.JVM_25)
+        freeCompilerArgs.add("-Xjdk-release=25")
         freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
     }
 }

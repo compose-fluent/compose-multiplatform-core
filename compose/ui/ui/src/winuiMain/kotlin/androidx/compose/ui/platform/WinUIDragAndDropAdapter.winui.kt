@@ -28,6 +28,7 @@ import microsoft.ui.xaml.UIElement
 
 internal class WinUIDragAndDropAdapter(
     private val root: UIElement,
+    private val dragAndDropManager: WinUIDragAndDropManager,
 ) {
     private var isDisposed = false
     private var isDragSessionActive = false
@@ -49,7 +50,7 @@ internal class WinUIDragAndDropAdapter(
             runCatching { registration.event.remove(registration.token) }
         }
         if (isDragSessionActive) {
-            WinUIDragAndDropManager.onDragEnded(DragAndDropEvent())
+            dragAndDropManager.onDragEnded(DragAndDropEvent())
             isDragSessionActive = false
         }
         root.allowDrop = false
@@ -59,7 +60,7 @@ internal class WinUIDragAndDropAdapter(
     private fun handleDragEnter(args: DragEventArgs): Boolean {
         val event = args.toComposeDragAndDropEvent()
         val accepted = ensureDragSessionStarted(event)
-        WinUIDragAndDropManager.onDragEntered(event)
+        dragAndDropManager.onDragEntered(event)
         return accepted
     }
 
@@ -67,7 +68,7 @@ internal class WinUIDragAndDropAdapter(
     private fun handleDragOver(args: DragEventArgs): Boolean {
         val event = args.toComposeDragAndDropEvent()
         val accepted = ensureDragSessionStarted(event)
-        WinUIDragAndDropManager.onDragMoved(event)
+        dragAndDropManager.onDragMoved(event)
         return accepted
     }
 
@@ -75,8 +76,8 @@ internal class WinUIDragAndDropAdapter(
     private fun handleDragLeave(args: DragEventArgs): Boolean {
         val event = args.toComposeDragAndDropEvent()
         if (isDragSessionActive) {
-            WinUIDragAndDropManager.onDragExited(event)
-            WinUIDragAndDropManager.onDragEnded(event)
+            dragAndDropManager.onDragExited(event)
+            dragAndDropManager.onDragEnded(event)
             isDragSessionActive = false
         }
         return false
@@ -86,15 +87,15 @@ internal class WinUIDragAndDropAdapter(
     private fun handleDrop(args: DragEventArgs): Boolean {
         val event = args.toComposeDragAndDropEvent()
         ensureDragSessionStarted(event)
-        val handled = WinUIDragAndDropManager.onDrop(event)
-        WinUIDragAndDropManager.onDragEnded(event)
+        val handled = dragAndDropManager.onDrop(event)
+        dragAndDropManager.onDragEnded(event)
         isDragSessionActive = false
         return handled
     }
 
     private fun ensureDragSessionStarted(event: DragAndDropEvent): Boolean {
         if (isDragSessionActive) return true
-        isDragSessionActive = WinUIDragAndDropManager.onDragStarted(event)
+        isDragSessionActive = dragAndDropManager.onDragStarted(event)
         return isDragSessionActive
     }
 

@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.InspectorInfo
 
-internal object WinUIDragAndDropManager : DragAndDropManager {
+internal class WinUIDragAndDropManager : DragAndDropManager {
     private val rootDragAndDropNode = DragAndDropNode()
     private val interestedTargets = mutableSetOf<DragAndDropTarget>()
     private var starter: WinUIDragAndDropStarter? = null

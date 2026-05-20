@@ -116,7 +116,7 @@ class WinUIComposeView internal constructor(
     private var isDisposed = false
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
     private val pointerInputAdapter = WinUIPointerInputAdapter(root, owner)
-    private val dragAndDropAdapter = WinUIDragAndDropAdapter(root)
+    private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner.winUIDragAndDropManager)
 
     fun setContent(content: @Composable () -> Unit) {
         check(!isDisposed) {

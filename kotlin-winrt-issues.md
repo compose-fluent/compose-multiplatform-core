@@ -9,7 +9,7 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-023`.
+- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-023`, `KWINRT-024`.
 - **Open upstream/plugin:** none currently tracked from compose-winui.
 - **Open compose-side workarounds:** `KWINRT-004`, `KWINRT-008`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
@@ -127,13 +127,10 @@ baseline, not every retest attempt.
   and `Window.SystemBackdrop`; `WinUIPanelChildren.winui.kt` centralizes the
   public `Panel.Children` slot fallback; `WinUIView.winui.kt` uses dependency
   property read/write for `RectangleGeometry.Rect`.
-- **Validation boundary:** after these workarounds the sample reaches window
-  creation, content assignment, activation, Compose button content readback, and
-  the keep-screen-on `DisplayRequest` path. The current next blocker is a
-  Compose owner/node lifecycle exception,
-  `ModifierNodeElement cannot return an already attached node from create()`,
-  not a native kotlin-winrt crash. Do not keep retrying this path as a kotlin-winrt
-  validation until the projection runtime gaps above are fixed.
+- **Validation boundary:** after these workarounds the sample reaches the WinUI
+  window path, Compose content updates, owner/input smoke paths, and text input
+  session cancellation. The current native crash is tracked separately as
+  `KWINRT-024`; it is not another unsupported generated interface member.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
@@ -267,10 +264,10 @@ baseline, not every retest attempt.
   classloaders and uses direct interface projection registry tokens.
   compose-winui removed the keep-screen-on ABI fallback and now calls generated
   `DisplayRequest.requestActive()` / `requestRelease()` directly.
-- **Validation:** `compileKotlinWinuiJvm` passes with the generated
-  `DisplayRequest` path. The sample run was blocked by a Gradle daemon
-  native-memory failure before application startup, not by projection
-  registration.
+- **Validation:** with `external/kotlin-winrt` `1bd45755`,
+  `compileKotlinWinuiJvm` passes and `runWinUIViewSample` reaches the generated
+  `DisplayRequest.requestActive()` / `requestRelease()` path without projection
+  registration failures.
 
 ## KWINRT-021: UIElement.ProtectedCursor requires a subclass access path
 
@@ -332,3 +329,28 @@ baseline, not every retest attempt.
   `STOWED_EXCEPTION_c000027b` with `Microsoft.UI.Xaml.dll!FailFastWithStowedExceptions`
   and `HRESULT 0x80004001 (E_NOTIMPL)` from the managed
   `Application.resources` projection described in `KWINRT-008`.
+
+## KWINRT-024: WinUI authored dependency property metadata crashes during XAML teardown
+
+- **Status:** Open upstream/runtime.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
+  `external/kotlin-winrt` `1bd45755` after the sample passes application startup,
+  Compose content update, owner/input smoke paths, generated event cleanup,
+  saveable/retained state restore, and text input session cancellation.
+- **Symptom:** the sample process exits with `NTSTATUS 0xC0000005` after logging
+  `compose-winui-sample: text input session cancellation`.
+- **Native evidence:** latest dump
+  `%LOCALAPPDATA%\CrashDumps\java.exe.6296.dmp`; WinDbg/cdb `!analyze -v`
+  reports `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`.
+- **Stack evidence:** exception thread is in XAML DLL teardown, not an FFM upcall
+  stub:
+  `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease`,
+  `Microsoft_UI_Xaml!CCustomDependencyProperty::~CCustomDependencyProperty`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::~DynamicMetadataStorage`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::Destroy`,
+  `Microsoft_UI_Xaml!DeinitializeDll`, then `combase!CoUninitialize` /
+  `KERNELBASE!FreeLibraryAndExitThread`.
+- **Current assessment:** this points at authored/custom dependency property
+  metadata lifetime or teardown ordering in the kotlin-winrt authoring/runtime
+  path. Do not treat it as a `KWINRT-013` shutdown/upcall recurrence unless a
+  future dump shows a callback/upcall frame.
