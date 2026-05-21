@@ -334,14 +334,18 @@ baseline, not every retest attempt.
 
 - **Status:** Open upstream/runtime.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
-  `external/kotlin-winrt` `1bd45755` after the sample passes application startup,
-  Compose content update, owner/input smoke paths, generated event cleanup,
-  saveable/retained state restore, and text input session cancellation.
+  `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
+  `b6620807` (`Align internal WinUI authoring metadata`). The sample passes
+  application startup, Compose content update, owner/input smoke paths,
+  generated event cleanup, saveable/retained state restore, and text input
+  session cancellation before crashing.
 - **Symptom:** the sample process exits with `NTSTATUS 0xC0000005` after logging
   `compose-winui-sample: text input session cancellation`.
-- **Native evidence:** latest dump
-  `%LOCALAPPDATA%\CrashDumps\java.exe.6296.dmp`; WinDbg/cdb `!analyze -v`
-  reports `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`.
+- **Native evidence:** latest dump after `b6620807` is
+  `%LOCALAPPDATA%\CrashDumps\java.exe.24580.dmp`; WinDbg/cdb `!analyze -v`
+  reports the same
+  `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`
+  bucket as the earlier `%LOCALAPPDATA%\CrashDumps\java.exe.6296.dmp`.
 - **Stack evidence:** exception thread is in XAML DLL teardown, not an FFM upcall
   stub:
   `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease`,
