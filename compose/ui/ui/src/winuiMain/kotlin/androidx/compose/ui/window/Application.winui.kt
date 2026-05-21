@@ -26,19 +26,9 @@ import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
-import io.github.composefluent.winrt.runtime.ComAbiValueKind
-import io.github.composefluent.winrt.runtime.ComMethodSignature
 import io.github.composefluent.winrt.runtime.ComWrappersSupport
 import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.IID
-import io.github.composefluent.winrt.runtime.IInspectableReference
-import io.github.composefluent.winrt.runtime.KnownHResults
-import io.github.composefluent.winrt.runtime.PlatformAbi
-import io.github.composefluent.winrt.runtime.RawAddress
 import io.github.composefluent.winrt.runtime.RuntimeScope
-import io.github.composefluent.winrt.runtime.WinRtCcwDefinition
-import io.github.composefluent.winrt.runtime.WinRtInspectableInterfaceDefinition
-import io.github.composefluent.winrt.runtime.WinRtInspectableMethodDefinition
 import io.github.composefluent.winrt.runtime.WinRtTypeHandle
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
@@ -60,8 +50,6 @@ fun Application(
 ) {
     WinRtWindowsAppSdkBootstrap.initialize().use {
         RuntimeScope.initializeSingleThreaded().use {
-            // KWINRT-023: register generated authored interfaces before Xaml starts.
-            registerWinUIXamlApplicationTypeDetails()
             registerWinUIProjectionNameAliases()
             XamlApplication.start {
                 WinUIXamlApplication(content)
@@ -69,42 +57,6 @@ fun Application(
         }
     }
 }
-
-private fun registerWinUIXamlApplicationTypeDetails() {
-    ComWrappersSupport.registerAuthoringTypeDetailsFactory(
-        WinUIXamlApplication::class,
-        ::createWinUIXamlApplicationCcwDefinition,
-    )
-}
-
-private fun createWinUIXamlApplicationCcwDefinition(value: Any): WinRtCcwDefinition =
-    WinRtCcwDefinition(
-        interfaceDefinitions = listOf(
-            WinRtInspectableInterfaceDefinition(
-                interfaceId = WinUIXamlApplicationIApplicationOverridesId,
-                methods = listOf(
-                    WinRtInspectableMethodDefinition(
-                        ComMethodSignature.of(ComAbiValueKind.Pointer),
-                    ) { rawArgs ->
-                        val args = LaunchActivatedEventArgs.Metadata.wrap(
-                            IInspectableReference(
-                                PlatformAbi.toRawComPtr(rawArgs[0] as RawAddress),
-                                IID.IInspectable,
-                                preventReleaseOnDispose = true,
-                            ),
-                        )
-                        (value as WinUIXamlApplication).dispatchLaunch(args)
-                        KnownHResults.S_OK.value
-                    },
-                ),
-            ),
-        ),
-        defaultInterfaceId = WinUIXamlApplicationIApplicationOverridesId,
-        runtimeClassName = "androidx.compose.ui.window.WinUIXamlApplication",
-    )
-
-private val WinUIXamlApplicationIApplicationOverridesId =
-    Guid("A33E81EF-C665-503B-8827-D27EF1720A06")
 
 private fun registerWinUIProjectionNameAliases() {
     registerWinUIProjectionNameAlias(

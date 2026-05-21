@@ -194,12 +194,15 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `b6620807`.
+- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `ad2b9df4`.
   `runWinUIViewSample` still reaches the full current smoke path, then exits with
   `NTSTATUS 0xC0000005`; dump analysis points to
   `Microsoft.UI.Xaml.dll` teardown of authored/custom dependency property
   metadata, not an FFM upcall frame. Keep this as the current repository-local
   validation blocker until kotlin-winrt fixes the authoring/runtime lifetime.
+- `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
+  authoring sources into the WinUI JVM target; the hand-written
+  `WinUIXamlApplication` authoring registration workaround has been removed.
 - `KWINRT-008`: Mostly fixed for the compose-winui validation path; `App.xaml`
   is no longer required. Keep removing interface/property workarounds only after
   exact compose graph retests prove the generated projection path works.

@@ -9,7 +9,7 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-023`, `KWINRT-024`.
+- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-024`.
 - **Open upstream/plugin:** none currently tracked from compose-winui.
 - **Open compose-side workarounds:** `KWINRT-004`, `KWINRT-008`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
@@ -18,7 +18,7 @@ baseline, not every retest attempt.
   `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`,
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
-  and `KWINRT-022`.
+  `KWINRT-022`, and `KWINRT-023`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -294,58 +294,43 @@ baseline, not every retest attempt.
 
 ## KWINRT-023: WinUI authored Application did not register IApplicationOverrides
 
-- **Status:** Open upstream; compose-winui has a narrow startup registration
-  workaround.
-- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` after the
-  sample compiles with current nullable projection shapes.
-- **Native evidence:** WER `Report ID 19ff13e4-47ec-4470-99ac-f97efd5ddbeb`,
-  `APPCRASH java.exe`, faulting module `Microsoft.UI.Xaml.dll` 3.1.8.0,
-  application event exception `0xc000027b`, WER signature exception
-  `80004002` (`E_NOINTERFACE`), fault module signature `TextHash12_489`.
-  Initial mini dump was `%LOCALAPPDATA%\CrashDumps\java.exe.35680.dmp`.
-- **WinDbg finding:** Running the sample under
-  `WinDbg_1.2603.20001.0_x64__8wekyb3d8bbwe\amd64\cdb.exe` and ignoring
-  recoverable first-chance JVM AVs showed the second-chance failfast in
-  `Microsoft_UI_Xaml!FailFastWithStowedExceptions`, called from
-  `DirectUI::FrameworkApplication::StartDesktop` /
-  `DirectUI::FrameworkApplicationFactory::Start`. `!analyze -v` reported:
-  `Managed COM object does not implement interface
-  'A33E81EF-C665-503B-8827-D27EF1720A06'`, which is
+- **Status:** Fixed for compose-winui wiring after syncing
+  `external/kotlin-winrt` `ad2b9df4`.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample`, where
+  WinUI failed fast with `E_NOINTERFACE` for
   `Microsoft.UI.Xaml.IApplicationOverrides`.
-- **Current finding:** kotlin-winrt generated
-  `WinRT_WinUIXamlApplication_TypeDetails` with the correct
-  `IApplicationOverrides` CCW definition, but compose-winui did not register
-  that generated authoring metadata before calling `Application.start`. WinUI
-  therefore received a managed COM object that only answered the fallback
-  interfaces and failed when it queried `IApplicationOverrides`.
-- **compose-winui workaround:** `Application.winui.kt` registers the
-  `WinUIXamlApplication` `IApplicationOverrides` CCW definition before
-  `XamlApplication.start`, matching the generated authoring metadata shape but
-  keeping the call source-visible to `compileKotlinWinuiJvm`. Remove this once
-  kotlin-winrt reliably auto-registers generated authoring type details for
-  consuming modules.
-- **Follow-up evidence:** After this registration, WinUI successfully invokes
-  `IApplicationOverrides.onLaunched`; the next failfast is
-  `STOWED_EXCEPTION_c000027b` with `Microsoft.UI.Xaml.dll!FailFastWithStowedExceptions`
-  and `HRESULT 0x80004001 (E_NOTIMPL)` from the managed
-  `Application.resources` projection described in `KWINRT-008`.
+- **Resolution:** compose-winui now compiles kotlin-winrt's
+  `generated/kotlin-winrt-authoring/src/main/kotlin` output into
+  `compileKotlinWinuiJvm`, so the compiler plugin can lower authored
+  construction sites to `WinRTAuthoringTypeDetailsRegistrar.register()`.
+  The earlier hand-written `WinUIXamlApplication` registration workaround was
+  removed.
+- **Validation:** `compileKotlinWinuiJvm` succeeds and bytecode for
+  `WinUIRootContentHost` contains a registrar call before constructing
+  `WinUIRootContentControl`. `runWinUIViewSample` reaches the full current
+  smoke path, including `IApplicationOverrides.onLaunched`, before hitting the
+  separate teardown crash tracked as `KWINRT-024`.
 
 ## KWINRT-024: WinUI authored dependency property metadata crashes during XAML teardown
 
 - **Status:** Open upstream/runtime.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
   `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
-  `b6620807` (`Align internal WinUI authoring metadata`). The sample passes
+  `ad2b9df4` (`Align WinUI composable derived construction`). The sample passes
   application startup, Compose content update, owner/input smoke paths,
   generated event cleanup, saveable/retained state restore, and text input
   session cancellation before crashing.
 - **Symptom:** the sample process exits with `NTSTATUS 0xC0000005` after logging
   `compose-winui-sample: text input session cancellation`.
-- **Native evidence:** latest dump after `b6620807` is
-  `%LOCALAPPDATA%\CrashDumps\java.exe.24580.dmp`; WinDbg/cdb `!analyze -v`
-  reports the same
-  `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`
-  bucket as the earlier `%LOCALAPPDATA%\CrashDumps\java.exe.6296.dmp`.
+- **Native evidence:** latest dumps after `ad2b9df4` are
+  `%LOCALAPPDATA%\CrashDumps\java.exe.46428.dmp` and
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).46428.dmp`. WER reports an initial
+  `APPCRASH` in `Microsoft.UI.Xaml.dll` 3.1.8.0 with exception `0xc0000005` at
+  offset `0x5c5ce`, followed by `BEX64` against
+  `Microsoft.UI.Xaml.dll_unloaded` at offset `0x287490`. Local minidump parsing
+  maps the first exception address to the staged `Microsoft.UI.Xaml.dll`
+  (`0x5c5ce`) and the second to unloaded XAML code, consistent with the earlier
+  teardown bucket.
 - **Stack evidence:** exception thread is in XAML DLL teardown, not an FFM upcall
   stub:
   `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease`,
