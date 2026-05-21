@@ -194,8 +194,21 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- No active kotlin-winrt blocker is currently tracked from compose-winui after syncing `external/kotlin-winrt` `5d35f2f9`.
-- `KWINRT-008`: Fixed for the compose-winui validation path; `App.xaml` is no longer required.
-- `KWINRT-013`: Treated as fixed upstream. The exact fixing commit was not identified from compose-winui; reopen only with fresh native crash evidence and log/dump analysis.
-- `KWINRT-020`: Fixed by the current registry/classloader changes. compose-winui removed the keep-screen-on ABI fallback and now uses generated `DisplayRequest.requestActive()` / `requestRelease()` directly.
-- KMP graph baseline: Keep testing customized source sets, transitive identity, and support artifact merging. Do not regress to a single-module JVM sample as the only kotlin-winrt validation shape.
+- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `b6620807`.
+  `runWinUIViewSample` still reaches the full current smoke path, then exits with
+  `NTSTATUS 0xC0000005`; dump analysis points to
+  `Microsoft.UI.Xaml.dll` teardown of authored/custom dependency property
+  metadata, not an FFM upcall frame. Keep this as the current repository-local
+  validation blocker until kotlin-winrt fixes the authoring/runtime lifetime.
+- `KWINRT-008`: Mostly fixed for the compose-winui validation path; `App.xaml`
+  is no longer required. Keep removing interface/property workarounds only after
+  exact compose graph retests prove the generated projection path works.
+- `KWINRT-013`: Treated as fixed upstream. The exact fixing commit was not
+  identified from compose-winui; reopen only with fresh native crash evidence
+  and log/dump analysis.
+- `KWINRT-020`: Fixed by the current registry/classloader changes. compose-winui
+  removed the keep-screen-on ABI fallback and now uses generated
+  `DisplayRequest.requestActive()` / `requestRelease()` directly.
+- KMP graph baseline: Keep testing customized source sets, transitive identity,
+  and support artifact merging. Do not regress to a single-module JVM sample as
+  the only kotlin-winrt validation shape.
