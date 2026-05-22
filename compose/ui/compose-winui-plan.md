@@ -194,11 +194,11 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `ad2b9df4`.
+- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `402eb4d8`.
   `runWinUIViewSample` still reaches the full current smoke path, then exits with
-  `NTSTATUS 0xC0000005`; dump analysis points to
-  `Microsoft.UI.Xaml.dll` teardown of authored/custom dependency property
-  metadata, not an FFM upcall frame. Keep this as the current repository-local
+  `NTSTATUS 0xC0000005`; latest dump analysis points to a
+  `Microsoft.UI.Xaml.dll` / CoreMessaging UI-thread crash after the final smoke
+  log, not an FFM upcall frame. Keep this as the current repository-local
   validation blocker until kotlin-winrt fixes the authoring/runtime lifetime.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
   authoring sources into the WinUI JVM target; the hand-written

@@ -311,12 +311,12 @@ baseline, not every retest attempt.
   smoke path, including `IApplicationOverrides.onLaunched`, before hitting the
   separate teardown crash tracked as `KWINRT-024`.
 
-## KWINRT-024: WinUI authored dependency property metadata crashes during XAML teardown
+## KWINRT-024: WinUI authored/runtime lifetime crash after full smoke
 
 - **Status:** Open upstream/runtime.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
   `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
-  `ad2b9df4` (`Align WinUI composable derived construction`). The sample passes
+  `402eb4d8` (`Register authored type details from constructors`). The sample passes
   application startup, Compose content update, owner/input smoke paths,
   generated event cleanup, saveable/retained state restore, and text input
   session cancellation before crashing.
@@ -331,6 +331,15 @@ baseline, not every retest attempt.
   maps the first exception address to the staged `Microsoft.UI.Xaml.dll`
   (`0x5c5ce`) and the second to unloaded XAML code, consistent with the earlier
   teardown bucket.
+- **Latest native evidence:** after `402eb4d8`, the latest dump is
+  `%LOCALAPPDATA%\CrashDumps\java.exe.38292.dmp`. WER reports
+  `APPCRASH java.exe`, faulting module `Microsoft.UI.Xaml.dll` 3.1.8.0,
+  exception `0xc0000005`, offset `0x2a62a0`, report id
+  `400906cd-83d1-4eb2-93c8-5af392ba4faa`. Local minidump parsing maps the
+  exception address to the staged XAML DLL at `+0x2a62a0`; the failing access is
+  a read from `0xffffffffffffffff`. The candidate native stack is now a
+  XAML/CoreMessaging/UI-thread path rather than the earlier unloaded-DLL
+  teardown stack.
 - **Stack evidence:** exception thread is in XAML DLL teardown, not an FFM upcall
   stub:
   `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease`,
@@ -340,6 +349,7 @@ baseline, not every retest attempt.
   `Microsoft_UI_Xaml!DeinitializeDll`, then `combase!CoUninitialize` /
   `KERNELBASE!FreeLibraryAndExitThread`.
 - **Current assessment:** this points at authored/custom dependency property
-  metadata lifetime or teardown ordering in the kotlin-winrt authoring/runtime
+  metadata or UI-thread lifetime ordering in the kotlin-winrt authoring/runtime
   path. Do not treat it as a `KWINRT-013` shutdown/upcall recurrence unless a
-  future dump shows a callback/upcall frame.
+  future dump shows a callback/upcall frame; the latest local parse still does
+  not show an FFM upcall stub as the faulting frame.
