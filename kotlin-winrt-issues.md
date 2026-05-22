@@ -316,7 +316,7 @@ baseline, not every retest attempt.
 - **Status:** Open upstream/runtime.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
   `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
-  `402eb4d8` (`Register authored type details from constructors`). The sample passes
+  `32f6af88` (`Remove interface projection proxy fallback`). The sample passes
   application startup, Compose content update, owner/input smoke paths,
   generated event cleanup, saveable/retained state restore, and text input
   session cancellation before crashing.
@@ -331,15 +331,16 @@ baseline, not every retest attempt.
   maps the first exception address to the staged `Microsoft.UI.Xaml.dll`
   (`0x5c5ce`) and the second to unloaded XAML code, consistent with the earlier
   teardown bucket.
-- **Latest native evidence:** after `402eb4d8`, the latest dump is
-  `%LOCALAPPDATA%\CrashDumps\java.exe.38292.dmp`. WER reports
+- **Latest native evidence:** after `32f6af88`, the latest dump is
+  `%LOCALAPPDATA%\CrashDumps\java.exe.50276.dmp`. WER reports
   `APPCRASH java.exe`, faulting module `Microsoft.UI.Xaml.dll` 3.1.8.0,
   exception `0xc0000005`, offset `0x2a62a0`, report id
-  `400906cd-83d1-4eb2-93c8-5af392ba4faa`. Local minidump parsing maps the
+  `e9896c4b-f52f-41bf-9686-d13902d66b7b`. Local minidump parsing maps the
   exception address to the staged XAML DLL at `+0x2a62a0`; the failing access is
   a read from `0xffffffffffffffff`. The candidate native stack is now a
   XAML/CoreMessaging/UI-thread path rather than the earlier unloaded-DLL
-  teardown stack.
+  teardown stack. This matches the post-`402eb4d8` dump
+  `%LOCALAPPDATA%\CrashDumps\java.exe.38292.dmp` except for process/report ids.
 - **Stack evidence:** exception thread is in XAML DLL teardown, not an FFM upcall
   stub:
   `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease`,

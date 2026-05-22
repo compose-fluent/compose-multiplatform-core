@@ -194,7 +194,7 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `402eb4d8`.
+- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `32f6af88`.
   `runWinUIViewSample` still reaches the full current smoke path, then exits with
   `NTSTATUS 0xC0000005`; latest dump analysis points to a
   `Microsoft.UI.Xaml.dll` / CoreMessaging UI-thread crash after the final smoke
