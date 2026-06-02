@@ -57,6 +57,12 @@ def composeWinUiWindowsAppSdkVersion = providers
 def kotlinWinRtVersion = providers
         .gradleProperty("kotlinWinRt.version")
         .orElse("0.1.0-SNAPSHOT")
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
+def composeWinUiSkikoVersion = providers
+        .gradleProperty("composeWinUi.skikoVersion")
+        .orElse(composeWinUiSkikoWinUiVersion)
 
 if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginAvailable) {
     throw new GradleException("compose-winui JVM target requires running Gradle on JDK 22 or newer.")
@@ -424,6 +430,7 @@ kotlin {
                 dependencies {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
+                    implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-authoring:${kotlinWinRtVersion.get()}")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
@@ -441,6 +448,9 @@ kotlin {
             if (composeWinUiJvmTargetEnabled) {
                 winuiJvmMain {
                     dependsOn(winuiMain)
+                    dependencies {
+                        runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
+                    }
                 }
             }
 
@@ -490,11 +500,18 @@ tasks.withType(KotlinCompile).configureEach { task ->
 
 if (composeWinUiGradlePluginAvailable) {
     configurations.configureEach { configuration ->
-        if (configuration.name.toLowerCase(Locale.ROOT).contains("winui")) {
+        def lowerName = configuration.name.toLowerCase(Locale.ROOT)
+        if (lowerName.contains("winui")) {
             configuration.attributes.attribute(
                     org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
                     25
             )
+            configuration.resolutionStrategy.eachDependency { details ->
+                if (details.requested.group == "org.jetbrains.skiko" && details.requested.name == "skiko") {
+                    details.useVersion(composeWinUiSkikoVersion.get())
+                    details.because("compose-winui consumes the skiko-winui snapshot built against this Skiko snapshot.")
+                }
+            }
         }
     }
 

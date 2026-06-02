@@ -28,7 +28,7 @@
 - [ ] Add `winuiMingwMain` as a dependent of `winuiMain` after the mingw target is enabled.
 - [x] Add matching test source sets for shared WinUI behavior and target-specific JVM behavior.
 - [x] Do not make `winuiMain`, `winuiJvmMain`, or `winuiMingwMain` depend on `desktopMain`, AWT, Swing, or `org.jetbrains.skiko.SkiaLayer`.
-- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split once `skiko-winui` exists, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals.
+- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring and a narrow `WinUISkikoRenderHost` adapter compile on 2026-06-02; the adapter still needs to be connected to `WinUIComposeView`.
 - [x] Wire `winuiMain` to the local `kotlin-winrt` runtime without depending on checked-in `winrt-projections`.
 - [x] Apply the local `kotlin-winrt` Gradle plugin for WinUI projection generation when running on JDK 22 or newer.
 - [x] Declare the Windows App SDK NuGet package through the `winRt` DSL instead of directly depending on projection modules.
@@ -215,3 +215,13 @@
 - KMP graph baseline: Keep testing customized source sets, transitive identity,
   and support artifact merging. Do not regress to a single-module JVM sample as
   the only kotlin-winrt validation shape.
+
+## skiko-winui status
+
+- `SKIKO-001`: Closed as coordinate discovery. The current Maven snapshot is
+  `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` plus
+  `io.github.compose-fluent:skiko-winui-windows:0.0.0-SNAPSHOT`, with
+  timestamped build `0.0.0-20260602.094020-1`. compose-winui now compiles
+  against the snapshot and keeps a narrow `WinUISkikoRenderHost` adapter ready
+  for the rendering-host integration step. Details are tracked in
+  `skiko-winui-issues.md`.
