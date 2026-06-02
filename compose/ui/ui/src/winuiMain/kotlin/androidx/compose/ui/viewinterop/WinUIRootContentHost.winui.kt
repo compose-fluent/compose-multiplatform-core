@@ -17,33 +17,24 @@
 package androidx.compose.ui.viewinterop
 
 import microsoft.ui.xaml.UIElement
-import microsoft.ui.xaml.controls.ContentControl
 
 internal class WinUIRootContentHost {
     val root = WinUIRootContentControl()
-    private val emptyContent = ContentControl()
     private var transaction = WinUIInteropMutableTransaction(isInteropActive = false)
     private val interopContainer = WinUIInteropRootContainer(::scheduleUpdate)
-    private var isContainerInstalled = false
+    private var currentInteropContent: List<UIElement> = emptyList()
+
+    init {
+        root.content = interopContainer.root
+    }
+
+    fun setRenderContent(content: UIElement) {
+        interopContainer.setBaseChildren(listOf(content))
+    }
 
     fun setRootContent(content: List<UIElement>) {
-        if (content.isEmpty()) {
-            interopContainer.clear()
-            if (isContainerInstalled) {
-                scheduleUpdate {
-                    root.content = emptyContent
-                }
-            }
-            isContainerInstalled = false
-        } else {
-            if (!isContainerInstalled) {
-                scheduleUpdate {
-                    root.content = interopContainer.root
-                }
-                isContainerInstalled = true
-            }
-            interopContainer.setChildren(content)
-        }
+        currentInteropContent = content
+        interopContainer.setOverlayChildren(content)
         transaction.isInteropActive = content.isNotEmpty()
     }
 
@@ -53,7 +44,7 @@ internal class WinUIRootContentHost {
 
     fun retrieveTransaction(): WinUIInteropTransaction {
         val result = transaction
-        transaction = WinUIInteropMutableTransaction(isInteropActive = isContainerInstalled)
+        transaction = WinUIInteropMutableTransaction(isInteropActive = currentInteropContent.isNotEmpty())
         return result
     }
 }

@@ -23,6 +23,16 @@ import androidx.compose.ui.graphics.colorspace.ColorSpace
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import org.jetbrains.skia.Canvas as SkCanvas
+import org.jetbrains.skia.Paint as SkPaint
+import org.jetbrains.skia.PaintMode as SkPaintMode
+import org.jetbrains.skia.PaintStrokeCap as SkPaintStrokeCap
+import org.jetbrains.skia.PaintStrokeJoin as SkPaintStrokeJoin
+import org.jetbrains.skia.Path as SkPath
+import org.jetbrains.skia.PathBuilder
+import org.jetbrains.skia.PathDirection
+import org.jetbrains.skia.Rect as SkRect
+import org.jetbrains.skia.impl.use
 
 @Deprecated("Use direct reference to platform type instead of typealias")
 actual class NativePaint
@@ -46,6 +56,30 @@ private class WinUIPaint : Paint {
     override var shader: Shader? = null
     override var colorFilter: ColorFilter? = null
     override var pathEffect: PathEffect? = null
+
+    fun asSkiaPaint(): SkPaint = SkPaint().also {
+        it.color = color.copy(alpha = color.alpha * alpha).toArgb()
+        it.isAntiAlias = isAntiAlias
+        it.mode = when (style) {
+            PaintingStyle.Fill -> SkPaintMode.FILL
+            PaintingStyle.Stroke -> SkPaintMode.STROKE
+            else -> SkPaintMode.FILL
+        }
+        it.strokeWidth = strokeWidth
+        it.strokeCap = when (strokeCap) {
+            StrokeCap.Butt -> SkPaintStrokeCap.BUTT
+            StrokeCap.Round -> SkPaintStrokeCap.ROUND
+            StrokeCap.Square -> SkPaintStrokeCap.SQUARE
+            else -> SkPaintStrokeCap.BUTT
+        }
+        it.strokeJoin = when (strokeJoin) {
+            StrokeJoin.Miter -> SkPaintStrokeJoin.MITER
+            StrokeJoin.Round -> SkPaintStrokeJoin.ROUND
+            StrokeJoin.Bevel -> SkPaintStrokeJoin.BEVEL
+            else -> SkPaintStrokeJoin.MITER
+        }
+        it.strokeMiter = strokeMiterLimit
+    }
 }
 
 actual fun BlendMode.isSupported(): Boolean = true
@@ -57,25 +91,68 @@ actual class NativeCanvas
 
 internal actual fun ActualCanvas(image: ImageBitmap): Canvas = WinUICanvas()
 
-private class WinUICanvas : Canvas {
-    override fun save() = Unit
-    override fun restore() = Unit
-    override fun saveLayer(bounds: Rect, paint: Paint) = Unit
-    override fun translate(dx: Float, dy: Float) = Unit
-    override fun scale(sx: Float, sy: Float) = Unit
-    override fun rotate(degrees: Float) = Unit
-    override fun skew(sx: Float, sy: Float) = Unit
+fun SkCanvas.asComposeCanvas(): Canvas = WinUICanvas(this)
+
+private class WinUICanvas(
+    private val skiaCanvas: SkCanvas? = null,
+) : Canvas {
+    override fun save() {
+        skiaCanvas?.save()
+    }
+
+    override fun restore() {
+        skiaCanvas?.restore()
+    }
+
+    override fun saveLayer(bounds: Rect, paint: Paint) {
+        skiaCanvas?.saveLayer(
+            SkRect.makeLTRB(bounds.left, bounds.top, bounds.right, bounds.bottom),
+            paint.asSkiaPaint(),
+        )
+    }
+
+    override fun translate(dx: Float, dy: Float) {
+        skiaCanvas?.translate(dx, dy)
+    }
+
+    override fun scale(sx: Float, sy: Float) {
+        skiaCanvas?.scale(sx, sy)
+    }
+
+    override fun rotate(degrees: Float) {
+        skiaCanvas?.rotate(degrees)
+    }
+
+    override fun skew(sx: Float, sy: Float) {
+        skiaCanvas?.skew(sx, sy)
+    }
+
     override fun concat(matrix: Matrix) = Unit
+
     override fun clipRect(
         left: Float,
         top: Float,
         right: Float,
         bottom: Float,
         clipOp: ClipOp,
-    ) = Unit
-    override fun clipPath(path: Path, clipOp: ClipOp) = Unit
-    override fun drawLine(p1: Offset, p2: Offset, paint: Paint) = Unit
-    override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) = Unit
+    ) {
+        skiaCanvas?.clipRect(SkRect.makeLTRB(left, top, right, bottom))
+    }
+
+    override fun clipPath(path: Path, clipOp: ClipOp) {
+        (path as? WinUIPath)?.skiaPath?.use {
+            skiaCanvas?.clipPath(it)
+        }
+    }
+
+    override fun drawLine(p1: Offset, p2: Offset, paint: Paint) {
+        skiaCanvas?.drawLine(p1.x, p1.y, p2.x, p2.y, paint.asSkiaPaint())
+    }
+
+    override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
+        skiaCanvas?.drawRect(SkRect.makeLTRB(left, top, right, bottom), paint.asSkiaPaint())
+    }
+
     override fun drawRoundRect(
         left: Float,
         top: Float,
@@ -84,9 +161,25 @@ private class WinUICanvas : Canvas {
         radiusX: Float,
         radiusY: Float,
         paint: Paint,
-    ) = Unit
-    override fun drawOval(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) = Unit
-    override fun drawCircle(center: Offset, radius: Float, paint: Paint) = Unit
+    ) {
+        skiaCanvas?.drawRRect(
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            radii = floatArrayOf(radiusX, radiusY),
+            paint = paint.asSkiaPaint(),
+        )
+    }
+
+    override fun drawOval(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
+        skiaCanvas?.drawOval(SkRect.makeLTRB(left, top, right, bottom), paint.asSkiaPaint())
+    }
+
+    override fun drawCircle(center: Offset, radius: Float, paint: Paint) {
+        skiaCanvas?.drawCircle(center.x, center.y, radius, paint.asSkiaPaint())
+    }
+
     override fun drawArc(
         left: Float,
         top: Float,
@@ -96,8 +189,25 @@ private class WinUICanvas : Canvas {
         sweepAngle: Float,
         useCenter: Boolean,
         paint: Paint,
-    ) = Unit
-    override fun drawPath(path: Path, paint: Paint) = Unit
+    ) {
+        skiaCanvas?.drawArc(
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            startAngle = startAngle,
+            sweepAngle = sweepAngle,
+            includeCenter = useCenter,
+            paint = paint.asSkiaPaint(),
+        )
+    }
+
+    override fun drawPath(path: Path, paint: Paint) {
+        (path as? WinUIPath)?.skiaPath?.use {
+            skiaCanvas?.drawPath(it, paint.asSkiaPaint())
+        }
+    }
+
     override fun drawImage(image: ImageBitmap, topLeftOffset: Offset, paint: Paint) = Unit
     override fun drawImageRect(
         image: ImageBitmap,
@@ -112,41 +222,161 @@ private class WinUICanvas : Canvas {
     override fun drawVertices(vertices: Vertices, blendMode: BlendMode, paint: Paint) = Unit
     override fun enableZ() = Unit
     override fun disableZ() = Unit
+
+    private fun Paint.asSkiaPaint(): SkPaint =
+        (this as? WinUIPaint)?.asSkiaPaint() ?: SkPaint()
 }
 
 actual fun Path(): Path = WinUIPath()
 
 private class WinUIPath : Path {
-    override var fillType: PathFillType = PathFillType.NonZero
-    override val isConvex: Boolean = true
-    override val isEmpty: Boolean = true
+    val skiaPath: SkPath
+        get() = pathBuilder.snapshot()
+    private var pathBuilder = PathBuilder()
 
-    override fun moveTo(x: Float, y: Float) = Unit
-    override fun relativeMoveTo(dx: Float, dy: Float) = Unit
-    override fun lineTo(x: Float, y: Float) = Unit
-    override fun relativeLineTo(dx: Float, dy: Float) = Unit
-    override fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float) = Unit
-    override fun relativeQuadraticBezierTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float) = Unit
-    override fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) = Unit
-    override fun relativeCubicTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float, dx3: Float, dy3: Float) = Unit
-    override fun arcTo(rect: Rect, startAngleDegrees: Float, sweepAngleDegrees: Float, forceMoveTo: Boolean) = Unit
+    override var fillType: PathFillType = PathFillType.NonZero
+    override val isConvex: Boolean get() = skiaPath.use { it.isConvex }
+    override val isEmpty: Boolean get() = skiaPath.use { it.isEmpty }
+
+    override fun moveTo(x: Float, y: Float) {
+        pathBuilder.moveTo(x, y)
+    }
+
+    override fun relativeMoveTo(dx: Float, dy: Float) {
+        pathBuilder.rMoveTo(dx, dy)
+    }
+
+    override fun lineTo(x: Float, y: Float) {
+        pathBuilder.lineTo(x, y)
+    }
+
+    override fun relativeLineTo(dx: Float, dy: Float) {
+        pathBuilder.rLineTo(dx, dy)
+    }
+
+    override fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float) {
+        pathBuilder.quadTo(x1, y1, x2, y2)
+    }
+
+    override fun relativeQuadraticBezierTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float) {
+        pathBuilder.rQuadTo(dx1, dy1, dx2, dy2)
+    }
+
+    override fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) {
+        pathBuilder.cubicTo(x1, y1, x2, y2, x3, y3)
+    }
+
+    override fun relativeCubicTo(dx1: Float, dy1: Float, dx2: Float, dy2: Float, dx3: Float, dy3: Float) {
+        pathBuilder.rCubicTo(dx1, dy1, dx2, dy2, dx3, dy3)
+    }
+
+    override fun arcTo(rect: Rect, startAngleDegrees: Float, sweepAngleDegrees: Float, forceMoveTo: Boolean) {
+        pathBuilder.arcTo(
+            rect.left,
+            rect.top,
+            rect.right,
+            rect.bottom,
+            startAngleDegrees,
+            sweepAngleDegrees,
+            forceMoveTo,
+        )
+    }
+
     @Suppress("DEPRECATION")
     override fun addRect(rect: Rect) = addRect(rect, Path.Direction.CounterClockwise)
-    override fun addRect(rect: Rect, direction: Path.Direction) = Unit
+    override fun addRect(rect: Rect, direction: Path.Direction) {
+        pathBuilder.addRect(
+            rect.left,
+            rect.top,
+            rect.right,
+            rect.bottom,
+            direction.toSkiaDirection(),
+        )
+    }
+
     @Suppress("DEPRECATION")
     override fun addOval(oval: Rect) = addOval(oval, Path.Direction.CounterClockwise)
-    override fun addOval(oval: Rect, direction: Path.Direction) = Unit
+    override fun addOval(oval: Rect, direction: Path.Direction) {
+        pathBuilder.addOval(
+            oval.left,
+            oval.top,
+            oval.right,
+            oval.bottom,
+            direction.toSkiaDirection(),
+        )
+    }
+
     @Suppress("DEPRECATION")
     override fun addRoundRect(roundRect: RoundRect) = addRoundRect(roundRect, Path.Direction.CounterClockwise)
-    override fun addRoundRect(roundRect: RoundRect, direction: Path.Direction) = Unit
-    override fun addArcRad(oval: Rect, startAngleRadians: Float, sweepAngleRadians: Float) = Unit
-    override fun addArc(oval: Rect, startAngleDegrees: Float, sweepAngleDegrees: Float) = Unit
-    override fun addPath(path: Path, offset: Offset) = Unit
-    override fun close() = Unit
-    override fun reset() = Unit
+    override fun addRoundRect(roundRect: RoundRect, direction: Path.Direction) {
+        pathBuilder.addRRect(
+            roundRect.left,
+            roundRect.top,
+            roundRect.right,
+            roundRect.bottom,
+            floatArrayOf(
+                roundRect.topLeftCornerRadius.x,
+                roundRect.topLeftCornerRadius.y,
+                roundRect.topRightCornerRadius.x,
+                roundRect.topRightCornerRadius.y,
+                roundRect.bottomRightCornerRadius.x,
+                roundRect.bottomRightCornerRadius.y,
+                roundRect.bottomLeftCornerRadius.x,
+                roundRect.bottomLeftCornerRadius.y,
+            ),
+            direction.toSkiaDirection(),
+        )
+    }
+
+    override fun addArcRad(oval: Rect, startAngleRadians: Float, sweepAngleRadians: Float) {
+        addArc(
+            oval = oval,
+            startAngleDegrees = degrees(startAngleRadians),
+            sweepAngleDegrees = degrees(sweepAngleRadians),
+        )
+    }
+    override fun addArc(oval: Rect, startAngleDegrees: Float, sweepAngleDegrees: Float) {
+        pathBuilder.addArc(
+            oval.left,
+            oval.top,
+            oval.right,
+            oval.bottom,
+            startAngleDegrees,
+            sweepAngleDegrees,
+        )
+    }
+
+    override fun addPath(path: Path, offset: Offset) {
+        (path as? WinUIPath)?.skiaPath?.use {
+            pathBuilder.addPath(it, offset.x, offset.y)
+        }
+    }
+
+    override fun close() {
+        pathBuilder.closePath()
+    }
+
+    override fun reset() {
+        pathBuilder.close()
+        pathBuilder = PathBuilder()
+    }
+
     override fun translate(offset: Offset) = Unit
-    override fun getBounds(): Rect = Rect.Zero
+
+    override fun getBounds(): Rect {
+        val bounds = skiaPath.use { it.bounds }
+        return Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    }
+
     override fun op(path1: Path, path2: Path, operation: PathOperation): Boolean = false
+
+    private fun degrees(radians: Float): Float = radians * 180f / kotlin.math.PI.toFloat()
+
+    private fun Path.Direction.toSkiaDirection(): PathDirection =
+        when (this) {
+            Path.Direction.Clockwise -> PathDirection.CLOCKWISE
+            Path.Direction.CounterClockwise -> PathDirection.COUNTER_CLOCKWISE
+        }
 }
 
 actual fun PathMeasure(): PathMeasure = WinUIPathMeasure()

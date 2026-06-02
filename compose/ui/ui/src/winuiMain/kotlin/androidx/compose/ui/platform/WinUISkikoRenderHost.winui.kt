@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import microsoft.ui.xaml.FrameworkElement
+import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.winui.WinUIFrameScheduler
 import org.jetbrains.skiko.winui.WinUISkiaLayer
@@ -39,6 +40,11 @@ internal class WinUISkikoRenderHost(
 
     fun requestRender(throttledToVsync: Boolean = true) {
         layer.needRender(throttledToVsync)
+    }
+
+    fun setSize(size: IntSize) {
+        component.width = size.width.toDouble()
+        component.height = size.height.toDouble()
     }
 
     fun startFrameScheduler(): WinUIFrameScheduler =

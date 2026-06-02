@@ -23,6 +23,7 @@ internal class WinUIInteropRootContainer(
     private val scheduleUpdate: (() -> Unit) -> Unit,
 ) {
     val root = Canvas()
+    private var baseChildrenCount = 0
     private val children = mutableListOf<UIElement>()
 
     fun setChildren(content: List<UIElement>) {
@@ -41,8 +42,19 @@ internal class WinUIInteropRootContainer(
         }
     }
 
+    fun setOverlayChildren(content: List<UIElement>) {
+        setChildren(children.take(baseChildrenCount) + content)
+    }
+
+    fun setBaseChildren(content: List<UIElement>) {
+        val overlayChildren = children.drop(baseChildrenCount)
+        baseChildrenCount = content.size
+        setChildren(content + overlayChildren)
+    }
+
     fun clear() {
         if (children.isEmpty()) return
+        baseChildrenCount = 0
         children.clear()
         scheduleUpdate {
             root.requiredChildren.clear()

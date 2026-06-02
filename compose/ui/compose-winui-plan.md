@@ -28,7 +28,7 @@
 - [ ] Add `winuiMingwMain` as a dependent of `winuiMain` after the mingw target is enabled.
 - [x] Add matching test source sets for shared WinUI behavior and target-specific JVM behavior.
 - [x] Do not make `winuiMain`, `winuiJvmMain`, or `winuiMingwMain` depend on `desktopMain`, AWT, Swing, or `org.jetbrains.skiko.SkiaLayer`.
-- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring and a narrow `WinUISkikoRenderHost` adapter compile on 2026-06-02; the adapter still needs to be connected to `WinUIComposeView`.
+- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring, a narrow `WinUISkikoRenderHost` adapter, and the first `WinUIComposeView` render-surface connection compile on 2026-06-02. Runtime sample validation is currently blocked by `SKIKO-002`.
 - [x] Wire `winuiMain` to the local `kotlin-winrt` runtime without depending on checked-in `winrt-projections`.
 - [x] Apply the local `kotlin-winrt` Gradle plugin for WinUI projection generation when running on JDK 22 or newer.
 - [x] Declare the Windows App SDK NuGet package through the `winRt` DSL instead of directly depending on projection modules.
@@ -65,13 +65,13 @@
 - [x] Ensure lifecycle, retained values, and saveable state behavior have WinUI equivalents instead of relying on Android `ViewTree*Owner` APIs.
 
 ## WinUI rendering host
-- [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer.
-- [ ] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
+- [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02, but sample runtime validation is blocked by `SKIKO-002`.
+- [x] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
-- [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target.
-- [ ] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work.
-- [ ] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
+- [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; complete validation waits on `SKIKO-002` and fuller graphics actuals.
+- [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work.
+- [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
 ## WinUIView interop
 - [x] Add public `WinUIView` composable API for embedding a WinUI `UIElement` in Compose UI.
@@ -217,6 +217,16 @@
   the only kotlin-winrt validation shape.
 
 ## skiko-winui status
+
+- `SKIKO-002`: Active after connecting `WinUISkikoRenderHost` to
+  `WinUIComposeView`. `runWinUIViewSample` fails while constructing
+  `WinUISkiaLayer` because skiko-winui's internal `UIElementCollection.add`
+  needs WinRT generic-instantiation compiler support in the downstream sample
+  module. Keep the issue in `skiko-winui-issues.md` until the published
+  dependency can carry or avoid that support requirement.
+- `SKIKO-001`: Closed. The Maven snapshot coordinates are
+  `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` plus
+  `io.github.compose-fluent:skiko-winui-windows:0.0.0-SNAPSHOT`.
 
 - `SKIKO-001`: Closed as coordinate discovery. The current Maven snapshot is
   `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` plus

@@ -186,6 +186,9 @@ kotlin {
         sourceSets {
             winuiMain {
                 dependsOn(commonMain)
+                dependencies {
+                    api(libs.skiko)
+                }
             }
 
             winuiTest {

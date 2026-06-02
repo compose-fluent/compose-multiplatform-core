@@ -9,7 +9,7 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/publication:** none.
+- **Open upstream/publication:** `SKIKO-002`.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`.
 
@@ -42,3 +42,31 @@ baseline, not every retest attempt.
   `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
   --no-configure-on-demand`. `runWinUIViewSample` reaches the full current
   smoke path before the known `KWINRT-024` native teardown crash.
+
+## SKIKO-002: skiko-winui generic WinRT support is not usable transitively
+
+- **Status:** Open as of 2026-06-02.
+- **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
+  while constructing `org.jetbrains.skiko.winui.WinUISkiaLayer` from
+  compose-winui.
+- **Failure:** `runWinUIViewSample` starts the WinUI application and then fails
+  during `WinUISkiaHostPanel` construction with:
+  `NoSuchMethodError: androidx.compose.ui.winui.samples.WinUIViewSampleKt.kotlinWinRtGenericTypeInstantiationInitializeBySourceType(String)`.
+- **Trigger path:** `WinUISkiaHostPanel` adds a `WinUISkiaSwapChainPanel` to a
+  projected `UIElementCollection`; that calls
+  `WinRTGenericTypeInstantiations.initializeBySourceType(...)`. The runtime
+  tries to dispatch to a compiler-plugin helper in the final sample module
+  rather than resolving support that was published with the skiko-winui
+  dependency.
+- **Impact:** compose-winui can compile against and instantiate the
+  `WinUISkiaLayer` API shape, but the repository-local sample cannot validate
+  the rendering path until skiko-winui/kotlin-winrt generic-instantiation
+  support is consumable across Maven dependencies.
+- **Compose-side action:** no workaround is installed yet. Avoid adding an
+  app-local fake helper for production code; the fix should make the published
+  skiko-winui projection support visible to downstream apps or avoid requiring
+  downstream compiler support for skiko-winui internal collection operations.
+- **Validation baseline:** `:compose:ui:ui:compileKotlinWinuiJvm` passes with
+  `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
+  --no-configure-on-demand`; `:compose:ui:ui:winui-samples:runWinUIViewSample`
+  fails before the previous `KWINRT-024` teardown point.

@@ -26,8 +26,9 @@ import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.runtime.retain.LocalRetainedValuesStoreProvider
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.WinUIPlatformFocusOwner
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -53,6 +54,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.jetbrains.skia.Canvas
+import org.jetbrains.skiko.SkikoRenderDelegate
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -62,6 +65,7 @@ import kotlinx.coroutines.launch
  */
 class WinUIComposeView internal constructor(
     private val rootContentControl: WinUIRootContentControl,
+    private val setRenderContent: (UIElement) -> Unit,
     private val setRootContent: (List<UIElement>) -> Unit,
     private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
@@ -89,13 +93,24 @@ class WinUIComposeView internal constructor(
     private val displayRequestController = WinUIDisplayRequestController()
     private val pointerCursorAdapter = WinUIPointerCursorAdapter(rootContentControl)
     private val pointerIconService = WinUIPointerIconService(pointerCursorAdapter::setIcon)
+    private val renderHost = WinUISkikoRenderHost(
+        object : SkikoRenderDelegate {
+            override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
+                render(canvas)
+            }
+        }
+    )
+    init {
+        setRenderContent(renderHost.component)
+    }
+
     internal val owner = WinUIOwner(
         root = rootNode,
         platformFocusOwner = WinUIPlatformFocusOwner(root),
         retainedValuesStore = retainedValuesStore,
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
-        onRootInvalidated = ::scheduleRootContentSync,
+        onRootInvalidated = ::invalidateRootLayer,
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
@@ -149,7 +164,9 @@ class WinUIComposeView internal constructor(
                 }
             }
         }
+        renderHost.startFrameScheduler()
         syncRootContent()
+        requestRender()
     }
 
     fun disposeComposition() {
@@ -170,6 +187,7 @@ class WinUIComposeView internal constructor(
         updateRootContent(emptyList())
         rootNode.removeAll()
         displayRequestController.setKeepScreenOn(false)
+        requestRender()
     }
 
     fun dispose() {
@@ -183,6 +201,7 @@ class WinUIComposeView internal constructor(
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
+        renderHost.close()
     }
 
     internal fun setWindowFocused(isWindowFocused: Boolean) {
@@ -191,6 +210,8 @@ class WinUIComposeView internal constructor(
 
     internal fun setWindowContainerSize(size: IntSize) {
         owner.setWindowContainerSize(size)
+        renderHost.setSize(size)
+        requestRender()
     }
 
     private fun createComposition(): Composition {
@@ -218,6 +239,24 @@ class WinUIComposeView internal constructor(
         updateRootContent(rootNode.collectWinUIInteropRoots())
         owner.measureAndLayout(sendPointerUpdate = false)
         updateRootContent(rootNode.collectWinUIInteropRoots())
+        requestRender()
+    }
+
+    private fun render(canvas: Canvas) {
+        if (isDisposed) return
+        owner.measureAndLayout(sendPointerUpdate = false)
+        rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+    }
+
+    private fun invalidateRootLayer() {
+        scheduleRootContentSync()
+        requestRender()
+    }
+
+    private fun requestRender() {
+        if (!isDisposed) {
+            renderHost.requestRender()
+        }
     }
 
     private fun scheduleRootContentSync() {
@@ -256,6 +295,7 @@ class WinUIComposeView internal constructor(
 
     private constructor(host: WinUIRootContentHost) : this(
         host.root,
+        host::setRenderContent,
         host::setRootContent,
         host::retrieveTransaction,
     )
@@ -265,6 +305,7 @@ class WinUIComposeView internal constructor(
         onSensitiveContentChanged: (Boolean) -> Unit,
     ) : this(
         host.root,
+        host::setRenderContent,
         host::setRootContent,
         host::retrieveTransaction,
         onSensitiveContentChanged,
