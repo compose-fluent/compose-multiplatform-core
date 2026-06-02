@@ -21,21 +21,12 @@ import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.unit.IntSize
-import io.github.composefluent.winrt.runtime.BooleanMarshaller
-import io.github.composefluent.winrt.runtime.ComVtableInvoker
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.HResult
-import io.github.composefluent.winrt.runtime.IID
-import io.github.composefluent.winrt.runtime.IUnknownReference
-import io.github.composefluent.winrt.runtime.PlatformAbi
 import microsoft.ui.composition.Compositor
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.windowing.AppWindow
 import microsoft.ui.windowing.AppWindowChangedEventArgs
 import microsoft.ui.windowing.AppWindowClosingEventArgs
-import microsoft.ui.xaml.IWindow
-import microsoft.ui.xaml.IWindow2
 import microsoft.ui.xaml.WindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivationState
 import microsoft.ui.xaml.media.DesktopAcrylicBackdrop
@@ -289,93 +280,25 @@ private class WinUIWindowNode(
 }
 
 private fun XamlWindow.requiredCompositor(): Compositor =
-    requiredWindowObject(
-        interfaceId = IWindow.Metadata.IID,
-        slot = XamlWindow.Metadata.COMPOSITOR_GETTER_SLOT,
-        operation = "Window.Compositor get",
-        wrap = Compositor.Metadata::wrap,
-    )
+    checkNotNull(compositor) {
+        "Window.Compositor returned null."
+    }
 
 private fun XamlWindow.requiredAppWindow(): AppWindow =
-    requiredWindowObject(
-        interfaceId = IWindow2.Metadata.IID,
-        slot = XamlWindow.Metadata.APPWINDOW_GETTER_SLOT,
-        operation = "Window.AppWindow get",
-        wrap = AppWindow.Metadata::wrap,
-    )
-
-private fun <T> XamlWindow.requiredWindowObject(
-    interfaceId: Guid,
-    slot: Int,
-    operation: String,
-    wrap: (IUnknownReference) -> T,
-): T {
-    // KWINRT-008: object-returning Window interface getters are public, but the
-    // generated JVM projection currently marks them unsupported.
-    nativeObject.queryInterface(interfaceId).getOrThrow().use { windowInterface ->
-        PlatformAbi.confinedScope().use { scope ->
-            val result = PlatformAbi.allocatePointerSlot(scope)
-            HResult(
-                ComVtableInvoker.invokeArgs(
-                    instance = windowInterface.pointer,
-                    slot = slot,
-                    arg0 = result,
-                ),
-            ).requireSuccess(operation)
-            val pointer = PlatformAbi.readPointer(result)
-            check(!PlatformAbi.isNull(pointer)) {
-                "$operation returned null."
-            }
-            return wrap(
-                IUnknownReference(
-                    PlatformAbi.toRawComPtr(pointer),
-                    IID.IUnknown,
-                    preventReleaseOnDispose = false,
-                ),
-            )
-        }
+    checkNotNull(appWindow) {
+        "Window.AppWindow returned null."
     }
-}
 
 internal expect fun setWindowCaptureProtection(window: XamlWindow, isProtected: Boolean): Boolean
 
 private fun setWindowContent(window: XamlWindow, content: microsoft.ui.xaml.UIElement) {
-    // KWINRT-008: generated Window.content cannot currently marshal an object
-    // parameter through the JVM interface projection.
-    window.nativeObject.queryInterface(IWindow.Metadata.IID).getOrThrow().use { windowInterface ->
-        HResult(
-            ComVtableInvoker.invokeArgs(
-                instance = windowInterface.pointer,
-                slot = XamlWindow.Metadata.CONTENT_SETTER_SLOT,
-                arg0 = content.nativeObject.pointer,
-            ),
-        ).requireSuccess("Window.Content set")
-    }
+    window.content = content
 }
 
 private fun setWindowSystemBackdrop(window: XamlWindow, systemBackdrop: SystemBackdrop) {
-    // KWINRT-008: generated Window.systemBackdrop cannot currently marshal an
-    // object parameter through the JVM interface projection.
-    window.nativeObject.queryInterface(IWindow2.Metadata.IID).getOrThrow().use { windowInterface ->
-        HResult(
-            ComVtableInvoker.invokeArgs(
-                instance = windowInterface.pointer,
-                slot = IWindow2.Metadata.SYSTEMBACKDROP_SETTER_SLOT,
-                arg0 = systemBackdrop.nativeObject.pointer,
-            ),
-        ).requireSuccess("Window.SystemBackdrop set")
-    }
+    window.systemBackdrop = systemBackdrop
 }
 
 private fun clearWindowSystemBackdrop(window: XamlWindow) {
-    // KWINRT-004: generated Window.systemBackdrop cannot currently be set to null.
-    window.nativeObject.queryInterface(IWindow2.Metadata.IID).getOrThrow().use { windowInterface ->
-        HResult(
-            ComVtableInvoker.invokeArgs(
-                instance = windowInterface.pointer,
-                slot = IWindow2.Metadata.SYSTEMBACKDROP_SETTER_SLOT,
-                arg0 = PlatformAbi.nullPointer,
-            ),
-        ).requireSuccess("Window.SystemBackdrop clear")
-    }
+    window.systemBackdrop = null
 }

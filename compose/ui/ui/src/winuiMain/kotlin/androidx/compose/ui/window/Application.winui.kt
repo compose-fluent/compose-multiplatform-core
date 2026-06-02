@@ -26,16 +26,9 @@ import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
-import io.github.composefluent.winrt.runtime.ComWrappersSupport
-import io.github.composefluent.winrt.runtime.Guid
 import io.github.composefluent.winrt.runtime.RuntimeScope
-import io.github.composefluent.winrt.runtime.WinRtTypeHandle
 import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
-import microsoft.ui.xaml.IApplication
-import microsoft.ui.xaml.ILaunchActivatedEventArgs
-import microsoft.ui.xaml.IWindow
-import microsoft.ui.xaml.IWindow2
 import microsoft.ui.xaml.LaunchActivatedEventArgs
 import microsoft.ui.xaml.Application as XamlApplication
 import kotlinx.coroutines.CoroutineScope
@@ -43,14 +36,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import windows.system.display.IDisplayRequest
 
 fun Application(
     content: @Composable ApplicationScope.() -> Unit,
 ) {
     WinRtWindowsAppSdkBootstrap.initialize().use {
         RuntimeScope.initializeSingleThreaded().use {
-            registerWinUIProjectionNameAliases()
             XamlApplication.start {
                 WinUIXamlApplication(content)
             }
@@ -58,50 +49,11 @@ fun Application(
     }
 }
 
-private fun registerWinUIProjectionNameAliases() {
-    registerWinUIProjectionNameAlias(
-        kotlinTypeName = IApplication.Metadata.TYPE_HANDLE.projectedTypeName,
-        winRtTypeName = IApplication.Metadata.TYPE_NAME,
-        iid = IApplication.Metadata.IID,
-    )
-    registerWinUIProjectionNameAlias(
-        kotlinTypeName = ILaunchActivatedEventArgs.Metadata.TYPE_HANDLE.projectedTypeName,
-        winRtTypeName = ILaunchActivatedEventArgs.Metadata.TYPE_NAME,
-        iid = ILaunchActivatedEventArgs.Metadata.IID,
-    )
-    registerWinUIProjectionNameAlias(
-        kotlinTypeName = IWindow.Metadata.TYPE_HANDLE.projectedTypeName,
-        winRtTypeName = IWindow.Metadata.TYPE_NAME,
-        iid = IWindow.Metadata.IID,
-    )
-    registerWinUIProjectionNameAlias(
-        kotlinTypeName = IWindow2.Metadata.TYPE_HANDLE.projectedTypeName,
-        winRtTypeName = IWindow2.Metadata.TYPE_NAME,
-        iid = IWindow2.Metadata.IID,
-    )
-    registerWinUIProjectionNameAlias(
-        kotlinTypeName = IDisplayRequest.Metadata.TYPE_HANDLE.projectedTypeName,
-        winRtTypeName = IDisplayRequest.Metadata.TYPE_NAME,
-        iid = IDisplayRequest.Metadata.IID,
-    )
-}
-
-private fun registerWinUIProjectionNameAlias(
-    kotlinTypeName: String,
-    winRtTypeName: String,
-    iid: Guid,
-) {
-    ComWrappersSupport.registerInterfaceProjectionFactory(kotlinTypeName) { instance ->
-        ComWrappersSupport.wrapGeneratedInterfaceProjection(
-            WinRtTypeHandle(winRtTypeName, iid),
-            instance,
-        )
-    }
-}
-
 class WinUIXamlApplication internal constructor(
     private val content: @Composable ApplicationScope.() -> Unit,
 ) : XamlApplication() {
+    constructor() : this({})
+
     private var runtime: WinUIApplicationRuntime? = null
 
     internal fun dispatchLaunch(args: LaunchActivatedEventArgs) {

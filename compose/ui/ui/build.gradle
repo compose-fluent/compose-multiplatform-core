@@ -22,6 +22,7 @@
  */
 
 import androidx.build.SoftwareType
+import androidx.build.KotlinTarget
 import androidx.build.PlatformIdentifier
 import androidx.build.ProjectLayoutType
 import org.jetbrains.androidx.build.UpdateTranslationsTask
@@ -53,6 +54,9 @@ def composeWinUiWindowsAppSdkVersion = providers
         .gradleProperty("composeWinUi.windowsAppSdkVersion")
         .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
         .orElse("1.8.260416003")
+def kotlinWinRtVersion = providers
+        .gradleProperty("kotlinWinRt.version")
+        .orElse("0.1.0-SNAPSHOT")
 
 if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginAvailable) {
     throw new GradleException("compose-winui JVM target requires running Gradle on JDK 22 or newer.")
@@ -420,8 +424,8 @@ kotlin {
                 dependencies {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
-                    implementation("io.github.compose-fluent:winrt-runtime:0.1.0-SNAPSHOT")
-                    implementation("io.github.compose-fluent:winrt-authoring:0.1.0-SNAPSHOT")
+                    implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
+                    implementation("io.github.compose-fluent:winrt-authoring:${kotlinWinRtVersion.get()}")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
@@ -460,6 +464,7 @@ androidx {
     type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
     inceptionYear = "2019"
     description = "Compose UI primitives. This library contains the primitives that form the Compose UI Toolkit, such as drawing, measurement and layout."
+    kotlinTarget = KotlinTarget.KOTLIN_2_3
     legacyDisableKotlinStrictApiMode = true
     samples(project(":compose:ui:ui:ui-samples"))
     addGoldenImageAssets()
@@ -529,6 +534,32 @@ if (composeWinUiGradlePluginAvailable) {
     tasks.named("generateWinRtProjections").configure {
         sourceRoots.setFrom(project.file("src/winuiMain/kotlin"))
         authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
+    }
+
+    tasks.matching { it.name == "validateCompileKotlinWinuiJvmWinRtAuthoredCandidates" }.configureEach {
+        doFirst {
+            def scannerDir = scannerAuthoringTypeDetails.singleFile
+            def compilerDir = compilerAuthoringTypeDetails.singleFile
+            if (!scannerDir.isDirectory() || !compilerDir.isDirectory()) return
+
+            scannerDir.eachFileRecurse(groovy.io.FileType.FILES) { scannerFile ->
+                if (!scannerFile.name.endsWith("_TypeDetails.kt")) return
+
+                def relativePath = scannerDir.toPath().relativize(scannerFile.toPath()).toString()
+                def compilerFile = new File(compilerDir, relativePath)
+                if (!compilerFile.isFile()) return
+
+                def scannerText = scannerFile.getText("UTF-8")
+                def compilerText = compilerFile.getText("UTF-8")
+                if (scannerText == compilerText) return
+
+                // KWINRT-025: current snapshot scanner and compiler generators can
+                // emit semantically identical TypeDetails with different wrapping.
+                if (scannerText.replaceAll("\\s+", "") == compilerText.replaceAll("\\s+", "")) {
+                    compilerFile.setText(scannerText, "UTF-8")
+                }
+            }
+        }
     }
 }
 

@@ -9,16 +9,16 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-008`, `KWINRT-024`.
-- **Open upstream/plugin:** none currently tracked from compose-winui.
-- **Open compose-side workarounds:** `KWINRT-004`, `KWINRT-008`.
+- **Open upstream/runtime:** `KWINRT-024`.
+- **Open upstream/plugin:** `KWINRT-025`.
+- **Open compose-side workarounds:** `KWINRT-025`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
   `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`,
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
-  `KWINRT-022`, and `KWINRT-023`.
+  `KWINRT-022`, `KWINRT-023`, `KWINRT-004`, and `KWINRT-008`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -53,16 +53,13 @@ baseline, not every retest attempt.
 
 ## KWINRT-004: Nullable XAML runtime-class properties are generated as non-null setters
 
-- **Status:** Open.
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-02.
 - **Observed in:** `Window.systemBackdrop`.
-- **Symptom:** The generated setter requires non-null `SystemBackdrop`, so
-  compose-winui cannot use it to clear the backdrop. The current generated
-  non-null setter path is also blocked by the broader interface projection
-  member support gap in `KWINRT-008`.
-- **compose-winui workaround:** `Window.winui.kt` uses the public
-  `IWindow2.SYSTEMBACKDROP_SETTER_SLOT` ABI path for both non-null backdrops and
-  `WindowBackdrop.None`. Search for `KWINRT-004`.
-- **Validation:** `runWinUIViewSample` covers `Mica -> DesktopAcrylic -> None`.
+- **Resolution:** compose-winui removed the manual
+  `IWindow2.SYSTEMBACKDROP_SETTER_SLOT` ABI path and now uses the generated
+  nullable `Window.systemBackdrop` setter for both setting and clearing.
+- **Validation:** `compileKotlinWinuiJvm` passes with the Maven snapshot.
 
 ## KWINRT-005: Windows.System.Launcher projection pulls invalid Package wrappers
 
@@ -99,13 +96,14 @@ baseline, not every retest attempt.
 
 ## KWINRT-008: Generated JVM interface projection members are incomplete for WinUI
 
-- **Status:** Open upstream/runtime.
+- **Status:** Fixed for the compose-winui integration surface in kotlin-winrt
+  Maven snapshot `0.1.0-SNAPSHOT` as of 2026-06-02.
 - **Observed in:** the real compose-winui `Application { Window { ... } }` path
   after authored `Application` CCW registration and resource staging.
-- **Current finding:** This is deeper than the earlier
-  `XamlControlsResources`/PRI symptom. Current kotlin-winrt can stage enough
-  WinUI resources for the sample and no longer needs a repository-local
-  `App.xaml`, but the JVM artifact runtime still rejects many generated public
+- **Earlier finding:** This was deeper than the earlier
+  `XamlControlsResources`/PRI symptom. Previous kotlin-winrt builds could stage
+  enough WinUI resources for the sample and no longer needed a repository-local
+  `App.xaml`, but the JVM artifact runtime rejected many generated public
   interface projection members needed by normal WinUI integration.
 - **Managed evidence:** compose-winui hit
   `WinRtUnsupportedOperationException: Generated interface projection member
@@ -121,16 +119,11 @@ baseline, not every retest attempt.
   `microsoft.ui.xaml.media.IRectangleGeometry`,
   `microsoft.ui.xaml.controls.IPanel`, and
   `windows.system.display.IDisplayRequest`.
-- **compose-winui workaround:** `Application.winui.kt` registers required
-  interface aliases for the current graph. `Window.winui.kt` uses public WinUI
-  metadata slots for `Window.Content`, `Window.Compositor`, `Window.AppWindow`,
-  and `Window.SystemBackdrop`; `WinUIPanelChildren.winui.kt` centralizes the
-  public `Panel.Children` slot fallback; `WinUIView.winui.kt` uses dependency
-  property read/write for `RectangleGeometry.Rect`.
-- **Validation boundary:** after these workarounds the sample reaches the WinUI
-  window path, Compose content updates, owner/input smoke paths, and text input
-  session cancellation. The current native crash is tracked separately as
-  `KWINRT-024`; it is not another unsupported generated interface member.
+- **Resolution:** compose-winui removed the local interface alias registration
+  and the ABI slot fallbacks for `Window.Content`, `Window.Compositor`,
+  `Window.AppWindow`, `Window.SystemBackdrop`, and `Panel.Children`. These paths
+  now use generated projection members.
+- **Validation:** `compileKotlinWinuiJvm` passes with the Maven snapshot.
 
 ## KWINRT-009: Collection-returned XAML base wrappers cannot be rewrapped publicly
 
@@ -354,3 +347,27 @@ baseline, not every retest attempt.
   path. Do not treat it as a `KWINRT-013` shutdown/upcall recurrence unless a
   future dump shows a callback/upcall frame; the latest local parse still does
   not show an FFM upcall stub as the faulting frame.
+- **Maven snapshot validation:** with kotlin-winrt `0.1.0-SNAPSHOT` from Maven
+  snapshots on 2026-06-02, `runWinUIViewSample` again reaches
+  `compose-winui-sample: text input session cancellation` and exits with
+  `NTSTATUS 0xC0000005`. No newer `java.exe*.dmp` was present in
+  `%LOCALAPPDATA%\CrashDumps` after this run.
+
+## KWINRT-025: Authored TypeDetails validation compares formatting differences
+
+- **Status:** Open upstream/plugin in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-02.
+- **Observed in:** `validateCompileKotlinWinuiJvmWinRtAuthoredCandidates` after
+  clean regeneration with `--no-build-cache --rerun-tasks`.
+- **Symptom:** scanner and compiler IR authored TypeDetails handoff files are
+  reported as changed for
+  `WinRT_WinUIRootContentControl_TypeDetails.kt` and
+  `WinRT_WinUIXamlApplication_TypeDetails.kt`, even though the generated files
+  differ only by KotlinPoet line wrapping/formatting.
+- **compose-winui workaround:** `compose/ui/ui/build.gradle` normalizes this
+  handoff immediately before validation by copying the scanner TypeDetails text
+  to the matching compiler file only when the two files are equal after
+  whitespace removal. Semantic mismatches still fail validation.
+- **Validation:** reproduced after clearing `out/compose-multiplatform-core`
+  module build directories and rerunning the sample with `--no-build-cache
+  --rerun-tasks`.

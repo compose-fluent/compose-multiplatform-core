@@ -94,7 +94,7 @@
 - [ ] Defer full nested scroll parity until after basic AndroidView-equivalent lifecycle, layout, focus, and input behavior is stable.
 
 ## kotlin-winrt dependencies
-- [x] Use local `E:\Documents\AndroidStudioProjects\kotlin-winrt` as the development dependency source for WinRT runtime and generated WinUI projections.
+- [x] Consume `kotlin-winrt` from Maven Central snapshots for WinRT runtime, authoring, generated projection support, and the Gradle projection plugin.
 - [ ] Verify `kotlin-winrt` full projection generation includes required WinUI types: `Application`, `Window`, `UIElement`, `FrameworkElement`, `Panel`, `Grid`, `Canvas`, `ContentControl`, `XamlControlsResources`, DispatcherQueue, focus/input event types, and required collection types.
 - [ ] Reuse `kotlin-winrt` Windows App SDK bootstrap and resource manager support for unpackaged WinUI applications.
 - [ ] Reuse `kotlin-winrt` COM reference management, event-token management, activation factory lookup, and XAML metadata provider support, including generated WinUI event sources after `KWINRT-016` is resolved.

@@ -16,12 +16,26 @@ pluginManagement {
             maven {
                 url = "https://plugins.gradle.org/m2/"
             }
+            maven {
+                name = "mavenCentralSnapshots"
+                url = "https://central.sonatype.com/repository/maven-snapshots/"
+                mavenContent {
+                    snapshotsOnly()
+                }
+            }
         }
     }
-    includeBuild("androidx-settings-plugins")
-    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)) {
-        includeBuild("external/kotlin-winrt/winrt-gradle-plugin")
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "io.github.composefluent.winrt") {
+                useModule("io.github.compose-fluent:winrt-gradle-plugin:${requested.version ?: "0.1.0-SNAPSHOT"}")
+            }
+        }
     }
+    plugins {
+        id("io.github.composefluent.winrt") version "0.1.0-SNAPSHOT"
+    }
+    includeBuild("androidx-settings-plugins")
 }
 
 buildscript {
@@ -562,13 +576,13 @@ includeProject(":internal-testutils-xctest", "testutils/testutils-xctest")
 // Workaround for b/203825166
 includeBuild("placeholder")
 
-// Local compose-winui dependency source. Keep this as a submodule/composite build until
-// kotlin-winrt is stable enough to consume as a normal Gradle dependency. kotlin-winrt's build
-// requires running Gradle on JDK 22+, so keep it out of the build graph on older JVMs.
+// Optional local compose-winui dependency source for kotlin-winrt development.
+// The default path consumes kotlin-winrt artifacts from Maven snapshots.
 def runningJavaVersion = JavaVersion.current()
-if (runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
+if (settings.providers.gradleProperty("kotlinWinRt.useLocalComposite").map { it.toBoolean() }.orElse(false).get()
+        && runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
     includeBuild("external/kotlin-winrt")
-} else {
+} else if (!runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
     logger.lifecycle("Skipping external/kotlin-winrt included build: JDK 22+ is required, current JVM is ${runningJavaVersion}.")
 }
 
