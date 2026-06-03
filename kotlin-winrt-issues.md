@@ -558,6 +558,15 @@ baseline, not every retest attempt.
   through `ntdll!RtlpFlsDataCleanup` / `ntdll!LdrShutdownThread`. This confirms
   the latest reproduced failure is still teardown/lifetime related and not a
   managed exception or a Skiko render failure.
+- **2026-06-03 Skiko cache-clear retest:** after clearing the targeted
+  `io.github.compose-fluent` Skiko snapshot Gradle cache, Gradle attempted to
+  redownload `skiko-winui` `0.0.0-20260603.075139-3`; external Gradle TLS
+  handshakes blocked that direct download, so the same timestamped
+  `skiko-winui` / `skiko-winui-windows` jars were fetched with PowerShell and
+  installed into Maven local. The full sample still reached
+  `compose-winui-sample: text input session cancellation` and exited with
+  `NTSTATUS 0xC0000005`. No newer WER dump was produced after this run, so the
+  latest native evidence remains the paired `java.exe.41020.dmp` dumps above.
 - **2026-06-03 17:06 +08 kt-winrt fix-claim retest:** direct Sonatype snapshot
   metadata still reports `winrt-runtime`, `winrt-runtime-jvm`,
   `winrt-authoring`, and `winrt-compiler-plugin`
