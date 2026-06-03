@@ -219,6 +219,9 @@
   delegate with a narrow recorder and validating the focused
   `runWinUISkikoSample` path records non-empty Compose draw bounds after an
   attached render.
+- [x] Add focused WinUI JVM unit coverage for the draw-bounds recorder:
+  non-empty draws update bounds, empty subsequent renders report zero bounds,
+  and a closed recorder still forwards rendering without updating diagnostics.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
