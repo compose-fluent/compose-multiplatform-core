@@ -42,7 +42,8 @@ baseline, not every retest attempt.
 - **Validation:** `:compose:ui:ui:compileKotlinWinuiJvm` passes with
   `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
   --no-configure-on-demand`. `runWinUIViewSample` reaches the full current
-  smoke path before the known `KWINRT-024` native teardown crash.
+  smoke path. The known `KWINRT-024` native teardown crash is deferred as
+  non-blocking and is not treated as a skiko-winui integration failure.
 
 ## SKIKO-002: skiko-winui generic WinRT support is not usable transitively
 
@@ -86,5 +87,5 @@ baseline, not every retest attempt.
   `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
   --no-configure-on-demand`. `:compose:ui:ui:winui-samples:runWinUIViewSample`
   reaches the full current smoke path, including `text input session
-  cancellation`, and then fails only at the known `KWINRT-024` native teardown
-  crash with `NTSTATUS 0xC0000005`.
+  cancellation`. The later known `KWINRT-024` native process-exit crash is
+  tracked separately as non-blocking.

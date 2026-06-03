@@ -28,7 +28,7 @@
 - [ ] Add `winuiMingwMain` as a dependent of `winuiMain` after the mingw target is enabled.
 - [x] Add matching test source sets for shared WinUI behavior and target-specific JVM behavior.
 - [x] Do not make `winuiMain`, `winuiJvmMain`, or `winuiMingwMain` depend on `desktopMain`, AWT, Swing, or `org.jetbrains.skiko.SkiaLayer`.
-- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring, a narrow `WinUISkikoRenderHost` adapter, and the first `WinUIComposeView` render-surface connection compile on 2026-06-02. `SKIKO-002` and `SKIKO-003` are fixed as of 2026-06-03; runtime sample validation now reaches the full smoke path before the known `KWINRT-024` native teardown crash.
+- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring, a narrow `WinUISkikoRenderHost` adapter, and the first `WinUIComposeView` render-surface connection compile on 2026-06-02. `SKIKO-002` and `SKIKO-003` are fixed as of 2026-06-03; runtime sample validation reaches the full current smoke path. The remaining `KWINRT-024` native process-exit crash is deferred and is not a current skiko-winui integration blocker.
 - [x] Wire `winuiMain` to the local `kotlin-winrt` runtime without depending on checked-in `winrt-projections`.
 - [x] Apply the local `kotlin-winrt` Gradle plugin for WinUI projection generation when running on JDK 22 or newer.
 - [x] Declare the Windows App SDK NuGet package through the `winRt` DSL instead of directly depending on projection modules.
@@ -65,11 +65,11 @@
 - [x] Ensure lifecycle, retained values, and saveable state behavior have WinUI equivalents instead of relying on Android `ViewTree*Owner` APIs.
 
 ## WinUI rendering host
-- [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes, then fails at the known `KWINRT-024` native teardown crash.
+- [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes; the known `KWINRT-024` native teardown crash is tracked separately as non-blocking.
 - [x] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
-- [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; complete validation waits on fuller graphics actuals and the existing `KWINRT-024` teardown blocker.
+- [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
 - [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work.
 - [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
@@ -194,12 +194,12 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Active after syncing `external/kotlin-winrt` `6b1ce387`.
+- `KWINRT-024`: Deferred / non-blocking after the 2026-06-03 retest.
   `runWinUIViewSample` still reaches the full current smoke path, then exits with
-  `NTSTATUS 0xC0000005`; latest dump analysis points to a
-  `Microsoft.UI.Xaml.dll` / CoreMessaging UI-thread crash after the final smoke
-  log, not an FFM upcall frame. Keep this as the current repository-local
-  validation blocker until kotlin-winrt fixes the authoring/runtime lifetime.
+  `NTSTATUS 0xC0000005`; latest dump analysis points to XAML dynamic metadata /
+  unloaded-XAML teardown after the final smoke log, not an FFM upcall frame.
+  Do not block current skiko-winui integration or follow-on compose-winui work
+  on this issue.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
   authoring sources into the WinUI JVM target; the hand-written
   `WinUIXamlApplication` authoring registration workaround has been removed.
@@ -224,7 +224,8 @@
   separately from the Skiko render base child. With JDK 25,
   `:compose:ui:ui:compileKotlinWinuiJvm` passes and
   `:compose:ui:ui:winui-samples:runWinUIViewSample` reaches the full current
-  smoke path before the known `KWINRT-024` native teardown crash.
+  smoke path. The known `KWINRT-024` native teardown crash is deferred as
+  non-blocking.
 - `SKIKO-002`: Closed in the 2026-06-03 Maven snapshots. The published
   skiko-winui and kotlin-winrt snapshots carry the generic WinRT support needed
   by `WinUISkiaLayer`; the sample no longer fails with the generic-support

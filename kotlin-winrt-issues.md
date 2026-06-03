@@ -9,7 +9,8 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-024`.
+- **Open upstream/runtime:** none treated as blocking for current compose-winui
+  work.
 - **Open upstream/plugin:** `KWINRT-025`.
 - **Open compose-side workarounds:** `KWINRT-025`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
@@ -306,7 +307,7 @@ baseline, not every retest attempt.
 
 ## KWINRT-024: WinUI authored/runtime lifetime crash after full smoke
 
-- **Status:** Open upstream/runtime.
+- **Status:** Deferred / non-blocking for current compose-winui work.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
   `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
   `6b1ce387` (`Remove stale interface support merging`). The sample passes
@@ -396,6 +397,32 @@ baseline, not every retest attempt.
   `NTSTATUS 0xC0000005`. This rules out the compose-winui root content control
   authored subclass as the sole trigger; the remaining authored XAML type in
   that diagnostic path is `WinUIXamlApplication`.
+- **2026-06-03 upstream control validation:** local `external/kotlin-winrt` at
+  `6b1ce387` runs
+  `:winrt-samples:winui-kmp-app:runWinuiKmpSample` to
+  `winui-kmp-app: finished` and exits successfully. That sample covers authored
+  controls, a custom dependency property, callbacks, unload, and WinUI teardown,
+  so this crash is not reproduced by kotlin-winrt's own control sample.
+- **2026-06-03 Maven snapshot retest:** Maven snapshot metadata and Gradle
+  dependency insight still resolve compose-winui to `skiko-winui`
+  `0.0.0-20260603.023842-2`, `skiko-winui-windows`
+  `0.0.0-20260603.023842-2`, `winrt-runtime` /
+  `winrt-runtime-jvm` / `winrt-authoring` `0.1.0-20260603.021535-22`,
+  `winrt-gradle-plugin` `0.1.0-20260603.021843-3`, and
+  `winrt-compiler-plugin` `0.1.0-20260603.021535-22`.
+  `:compose:ui:ui:compileKotlinWinuiJvm` passes, and
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` reaches the full current
+  smoke path before the same `NTSTATUS 0xC0000005` process exit.
+- **2026-06-03 compose-side diagnostic:** deferring
+  `WinUIApplicationRuntime.dispose()` until after `Application.start` returned
+  did not change the result. The sample still reached the final smoke log and
+  exited with `NTSTATUS 0xC0000005`, so the crash is not explained solely by
+  compose-winui disposing its root before calling `Application.exit()`.
+- **Current compose-winui policy:** do not block skiko-winui integration or
+  follow-on compose-winui work on this teardown crash for now. Treat the sample
+  reaching `compose-winui-sample: text input session cancellation` as successful
+  validation of the current skiko-winui integration path, and revisit this issue
+  only when teardown correctness becomes the active focus again.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 
