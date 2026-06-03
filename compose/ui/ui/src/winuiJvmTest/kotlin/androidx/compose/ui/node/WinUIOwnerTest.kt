@@ -45,20 +45,29 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.setText
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -70,6 +79,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.skiko.winui.WinUIAccessibilityAction
 import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
+import org.jetbrains.skiko.winui.WinUIAccessibilityLiveSetting
 import org.jetbrains.skiko.winui.WinUIAccessibilityRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -196,6 +206,64 @@ class WinUIOwnerTest {
             assertTrue(semanticsNode.state.focused)
             assertTrue(WinUIAccessibilityAction.CLICK in semanticsNode.actions)
             assertEquals(semanticsNode.id, snapshot.focusedNodeId)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderMapsComposeSemanticsMetadata() {
+        val owner = createOwner()
+        try {
+            val visibleNode = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    contentDescription = "WinUI metadata"
+                    testTag = "winui-metadata"
+                    role = Role.Checkbox
+                    stateDescription = "Checked"
+                    liveRegion = LiveRegionMode.Assertive
+                    selected = true
+                    toggleableState = ToggleableState.On
+                    disabled()
+                    requestFocus { true }
+                    password()
+                    setText { true }
+                }
+                it.measurePolicy = fixedMeasurePolicy(40, 20)
+            }
+            val hiddenNode = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    contentDescription = "Hidden from WinUI"
+                    testTag = "winui-hidden"
+                    hideFromAccessibility()
+                }
+                it.measurePolicy = fixedMeasurePolicy(10, 10)
+            }
+            owner.root.insertAt(0, visibleNode)
+            owner.root.insertAt(1, hiddenNode)
+            owner.setWindowContainerSize(IntSize(100, 80))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val snapshot = assertNotNull(owner.accessibilityProvider.snapshot())
+            val semanticsNode = snapshot.root.children.single()
+
+            assertEquals(visibleNode.semanticsId.toLong(), semanticsNode.id)
+            assertEquals("WinUI metadata", semanticsNode.info.name)
+            assertEquals("winui-metadata", semanticsNode.info.automationId)
+            assertEquals("Checked", semanticsNode.info.helpText)
+            assertEquals(WinUIAccessibilityLiveSetting.ASSERTIVE, semanticsNode.info.liveSetting)
+            assertEquals(WinUIAccessibilityRole.CHECK_BOX, semanticsNode.info.role)
+            assertEquals(0f, semanticsNode.bounds.x)
+            assertEquals(0f, semanticsNode.bounds.y)
+            assertEquals(40f, semanticsNode.bounds.width)
+            assertEquals(20f, semanticsNode.bounds.height)
+            assertFalse(semanticsNode.state.enabled)
+            assertTrue(semanticsNode.state.focusable)
+            assertTrue(semanticsNode.state.selected)
+            assertEquals(true, semanticsNode.state.checked)
+            assertTrue(semanticsNode.state.editable)
+            assertTrue(semanticsNode.state.password)
         } finally {
             owner.dispose()
         }
