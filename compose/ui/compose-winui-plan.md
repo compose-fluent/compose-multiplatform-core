@@ -133,6 +133,10 @@
 - [x] Add a WinUI JVM runtime classpath guard that rejects Skiko AWT/Desktop
   native runtime artifacts while `SKIKO-006` tracks the temporary need for the
   AWT-named Skiko JVM API jar.
+- [x] Add the same Skiko runtime classpath isolation guard to the repository-local
+  WinUI sample and focused `runWinUISkikoSample` smoke path, so the runnable
+  validation rejects `skiko-awt-runtime-*` artifacts while requiring
+  `skiko-winui`.
 - [x] Add lifecycle tests for `WinUIView`: factory once, update after creation, repeated update on state changes, reset on reuse, release on final disposal.
 - [x] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.

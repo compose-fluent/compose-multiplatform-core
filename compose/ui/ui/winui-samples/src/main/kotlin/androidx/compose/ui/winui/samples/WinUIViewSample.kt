@@ -455,6 +455,7 @@ private object ComposeWinUiSmokeApp {
         if (sampleMode == WinUIViewSampleMode.Skiko) {
             LaunchedEffect(Unit) {
                 runSmoke(applicationScope) {
+                    runWinUISkikoRuntimeClasspathSmoke()
                     runWinUISkikoUnattachedSchedulerSmoke()
                     runWinUISkikoRenderDiagnosticsSmoke()
                     if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
@@ -512,6 +513,7 @@ private object ComposeWinUiSmokeApp {
                 runWinUIViewPropertiesUpdateSmoke()
                 runWinUIViewContainerSyncSmoke()
                 runWinUIViewGeneratedEventCleanupSmoke()
+                runWinUISkikoRuntimeClasspathSmoke()
                 runWinUISkikoUnattachedSchedulerSmoke()
                 runWinUISkikoRenderDiagnosticsSmoke()
                 runWinUISaveableStateSmoke()
@@ -2551,6 +2553,26 @@ private object ComposeWinUiSmokeApp {
             probe.secondInputCancelled
         }
         println("compose-winui-sample: text input session cancellation")
+    }
+
+    private fun runWinUISkikoRuntimeClasspathSmoke() {
+        val classpath = System.getProperty("java.class.path")
+            .split(System.getProperty("path.separator"))
+            .map { it.lowercase() }
+        check(classpath.any { it.contains("skiko-winui") }) {
+            "WinUI sample runtime classpath did not include skiko-winui."
+        }
+
+        // SKIKO-006: the current JVM Skiko API jar is still named skiko-awt,
+        // so keep this runtime guard focused on Desktop/AWT native runtime artifacts.
+        val offenders = classpath.filter { entry ->
+            entry.contains("skiko-awt-runtime")
+        }
+        check(offenders.isEmpty()) {
+            "WinUI sample runtime classpath included Skiko AWT/Desktop native runtime artifacts:\n" +
+                offenders.joinToString(separator = "\n")
+        }
+        println("compose-winui-sample: skiko runtime classpath isolated")
     }
 
     @OptIn(InternalComposeUiApi::class)
