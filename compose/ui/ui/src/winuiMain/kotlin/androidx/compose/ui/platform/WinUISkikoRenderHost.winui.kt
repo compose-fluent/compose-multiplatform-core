@@ -117,43 +117,33 @@ private class DefaultWinUISkikoLayerAdapter(
         get() = layer.component
 
     override val renderVersion: Long
-        get() = renderDiagnostics?.callOrNull("getRenderVersion") as? Long ?: 0L
+        get() = layer.renderDiagnostics.renderVersion
 
     override val lastRenderSize: IntSize?
-        get() = renderDiagnostics?.callOrNull("getLastPlatformResult")?.let {
-            runCatching {
-                IntSize(
-                    width = (it.callOrNull("getWidth") as Number).toInt(),
-                    height = (it.callOrNull("getHeight") as Number).toInt(),
-                )
-            }.getOrNull()
+        get() = layer.renderDiagnostics.lastPlatformResult?.let {
+            IntSize(width = it.width, height = it.height)
         }
 
     override val lastRenderedStateSize: IntSize?
-        get() = renderDiagnostics?.callOrNull("getLastRenderedState")?.let {
-            it.renderStateSizeOrNull()
+        get() = layer.renderDiagnostics.lastRenderedState?.let {
+            IntSize(width = it.scaledWidth, height = it.scaledHeight)
         }
 
     override val pendingRenderStateSize: IntSize?
-        get() = renderDiagnostics?.callOrNull("getPendingInvalidatedState")?.let {
-            it.renderStateSizeOrNull()
+        get() = layer.renderDiagnostics.pendingInvalidatedState?.let {
+            IntSize(width = it.scaledWidth, height = it.scaledHeight)
         }
 
     override val renderFailure: String?
-        get() = renderDiagnostics?.callOrNull("getLastFailure")?.let {
+        get() = layer.renderDiagnostics.lastFailure?.let {
             listOfNotNull(
-                it.callOrNull("getExceptionClass") as? String,
-                it.callOrNull("getMessage") as? String,
-                it.callOrNull("getCauseClass") as? String,
-                it.callOrNull("getCauseMessage") as? String,
+                it.exceptionClass,
+                it.message,
+                it.causeClass,
+                it.causeMessage,
             )
                 .joinToString(separator = ": ")
         }
-
-    private val renderDiagnostics: Any?
-        get() = runCatching {
-            layer.javaClass.getMethod("getRenderDiagnostics\$skiko_winui").invoke(layer)
-        }.getOrNull()
 
     override fun requestRender(throttledToVsync: Boolean) {
         layer.needRender(throttledToVsync)
@@ -171,16 +161,3 @@ private class DefaultWinUISkikoLayerAdapter(
         layer.close()
     }
 }
-
-private fun Any.callOrNull(methodName: String): Any? =
-    runCatching {
-        javaClass.getMethod(methodName).invoke(this)
-    }.getOrNull()
-
-private fun Any.renderStateSizeOrNull(): IntSize? =
-    runCatching {
-        IntSize(
-            width = (callOrNull("getScaledWidth") as Number).toInt(),
-            height = (callOrNull("getScaledHeight") as Number).toInt(),
-        )
-    }.getOrNull()

@@ -197,6 +197,9 @@
   render state size and platform render result size are both reported and
   consistent, and that no pending invalidated render state remains after the
   attached frame is consumed.
+- [x] Replace the temporary reflective Skiko render diagnostics bridge with the
+  typed `WinUISkiaLayer.renderDiagnostics` API once `skiko-winui`
+  `0.0.0-20260603.075139-3` published it publicly.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
@@ -238,6 +241,9 @@
   render state in the repository-local full sample and focused
   `runWinUISkikoSample` task. Nonblank frame validation is still deferred until
   there is a stable attached-window pixel-read path.
+- `SKIKO-005`: Closed in `skiko-winui` `0.0.0-20260603.075139-3`.
+  `WinUISkikoRenderHost` now consumes the public typed render diagnostics API
+  directly instead of reflecting `getRenderDiagnostics$skiko_winui`.
 - `SKIKO-003`: Closed on 2026-06-03. `WinUIComposeView.updateRootContent` now
   flushes pending root-content transactions even when the interop overlay
   identity is unchanged, and the sample validates WinUIView overlay children
