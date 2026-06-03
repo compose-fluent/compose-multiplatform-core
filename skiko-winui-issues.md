@@ -98,13 +98,13 @@ baseline, not every retest attempt.
   attached render, verifies `disposeComposition()` clears the recorded bounds
   back to `Rect.Zero`, and validates the Skiko WinUI accessibility provider can
   expose a tagged Compose semantics node from the render surface. Focused unit
-  coverage also validates a Skiko accessibility click action dispatching back
-  to Compose semantics. A focused `runWinUISkikoSample` task now runs just
-  those Skiko diagnostics and exits successfully without the full sample's
-  known `KWINRT-024` teardown crash. The current upstream diagnostics expose
-  render state/result metadata but no pixel-read or surface snapshot API, so
-  nonblank frame validation remains blocked on a stable attached-window
-  pixel-read path.
+  coverage also validates Skiko accessibility actions dispatching back to
+  Compose semantics for focus, click, expand, collapse, set-text, and progress
+  increment/decrement. A focused `runWinUISkikoSample` task now runs just those
+  Skiko diagnostics and exits successfully without the full sample's known
+  `KWINRT-024` teardown crash. The current upstream diagnostics expose render
+  state/result metadata but no pixel-read or surface snapshot API, so nonblank
+  frame validation remains blocked on a stable attached-window pixel-read path.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

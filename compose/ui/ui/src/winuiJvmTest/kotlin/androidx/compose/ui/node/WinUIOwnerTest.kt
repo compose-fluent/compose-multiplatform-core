@@ -46,14 +46,17 @@ import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -347,6 +350,59 @@ class WinUIOwnerTest {
 
             assertTrue(actionInvoked)
             assertEquals(AnnotatedString("WinUI text"), textSet)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderInvokesComposeProgressActions() {
+        val owner = createOwner()
+        try {
+            val progressValues = mutableListOf<Float>()
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    testTag = "winui-progress"
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = 0.5f,
+                        range = 0f..1f,
+                        steps = 4,
+                    )
+                    setProgress {
+                        progressValues += it
+                        true
+                    }
+                }
+                it.measurePolicy = fixedMeasurePolicy(24, 24)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(64, 64))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val semanticsNode = assertNotNull(owner.accessibilityProvider.snapshot())
+                .root.children.single()
+            assertTrue(WinUIAccessibilityAction.INCREMENT in semanticsNode.actions)
+            assertTrue(WinUIAccessibilityAction.DECREMENT in semanticsNode.actions)
+
+            val incrementInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.INCREMENT,
+                    text = "",
+                ),
+            )
+            val decrementInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.DECREMENT,
+                    text = "",
+                ),
+            )
+
+            assertTrue(incrementInvoked)
+            assertTrue(decrementInvoked)
+            assertEquals(listOf(0.7f, 0.3f), progressValues)
         } finally {
             owner.dispose()
         }

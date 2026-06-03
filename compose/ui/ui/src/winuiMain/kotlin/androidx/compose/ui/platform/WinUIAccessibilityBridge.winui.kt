@@ -143,8 +143,10 @@ internal class WinUIAccessibilityBridge(
                 config.getOrNull(SemanticsActions.SetText)?.action?.invoke(
                     AnnotatedString(request.text.orEmpty()),
                 ) == true
-            WinUIAccessibilityAction.INCREMENT,
-            WinUIAccessibilityAction.DECREMENT -> false
+            WinUIAccessibilityAction.INCREMENT ->
+                config.performProgressAction(increment = true)
+            WinUIAccessibilityAction.DECREMENT ->
+                config.performProgressAction(increment = false)
         }
     }
 
@@ -334,6 +336,25 @@ private fun SemanticsConfiguration.toWinUIAccessibilityActions(): Set<WinUIAcces
         if (hasKey(SemanticsActions.SetText)) add(WinUIAccessibilityAction.SET_TEXT)
     }
 
+private fun SemanticsConfiguration.performProgressAction(increment: Boolean): Boolean {
+    val rangeInfo = getOrNull(SemanticsProperties.ProgressBarRangeInfo)
+        ?: return false
+    val setProgressAction = getOrNull(SemanticsActions.SetProgress)?.action
+        ?: return false
+    val min = rangeInfo.range.start.coerceAtMost(rangeInfo.range.endInclusive)
+    val max = rangeInfo.range.endInclusive.coerceAtLeast(rangeInfo.range.start)
+    if (min == max) return false
+    val step = if (rangeInfo.steps > 0) {
+        (max - min) / (rangeInfo.steps + 1)
+    } else {
+        (max - min) / AccessibilitySliderStepsCount
+    }
+    val signedStep = if (increment) step else -step
+    val target = (rangeInfo.current + signedStep).coerceIn(min, max)
+    if (target == rangeInfo.current) return false
+    return setProgressAction.invoke(target) == true
+}
+
 private fun SemanticsConfiguration.accessibilityName(): String? =
     getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ") ?:
         getOrNull(SemanticsProperties.EditableText)?.text ?:
@@ -350,6 +371,8 @@ private fun SemanticsConfiguration.isHiddenFromAccessibility(): Boolean =
 
 private fun SemanticsConfiguration.hasKey(key: SemanticsPropertyKey<*>): Boolean =
     any { it.key == key }
+
+private const val AccessibilitySliderStepsCount = 20
 
 private fun Role?.toWinUIAccessibilityRole(
     config: SemanticsConfiguration,

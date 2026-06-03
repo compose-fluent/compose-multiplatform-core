@@ -244,7 +244,8 @@
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [x] Add initial WinUI Skiko accessibility-provider tests for semantics
   snapshot projection, render-host provider/change forwarding, and basic
-  action dispatch from the Skiko provider back to Compose semantics.
+  action dispatch from the Skiko provider back to Compose semantics, including
+  focus, click, expand, collapse, set-text, and progress increment/decrement.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
