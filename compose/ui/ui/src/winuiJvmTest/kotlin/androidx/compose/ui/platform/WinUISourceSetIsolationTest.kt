@@ -83,6 +83,44 @@ class WinUISourceSetIsolationTest {
     }
 
     @Test
+    fun winuiJvmCompileSourceBridgeDoesNotCompileDesktopOrGenericSkikoSources() {
+        val moduleRoot = findUiModuleRoot()
+        val buildScript = moduleRoot.resolve("build.gradle").readText()
+        val bridgeBlock = checkNotNull(compileKotlinWinuiJvmBridgeBlock(buildScript)) {
+            "Could not find the compileKotlinWinuiJvm source bridge in compose/ui/ui/build.gradle."
+        }
+        val requiredRoots = listOf(
+            "src/commonMain/kotlin",
+            "src/jvmAndAndroidMain/kotlin",
+            "src/winuiMain/kotlin",
+            "src/winuiJvmMain/kotlin",
+            "generated/kotlin-winrt/src/main/kotlin",
+            "generatedWinRtAuthoringSources",
+        )
+        val forbiddenRoots = listOf(
+            "src/desktopMain/kotlin",
+            "src/skikoMain/kotlin",
+        )
+
+        requiredRoots.forEach { root ->
+            assertTrue(
+                bridgeBlock.contains(root),
+                "WinUI JVM compile source bridge should include $root.",
+            )
+        }
+        assertTrue(
+            buildScript.contains("generated/kotlin-winrt-authoring/src/main/kotlin"),
+            "WinUI JVM compile source bridge should define generatedWinRtAuthoringSources.",
+        )
+        forbiddenRoots.forEach { root ->
+            assertFalse(
+                bridgeBlock.contains(root),
+                "WinUI JVM compile source bridge must not compile $root.",
+            )
+        }
+    }
+
+    @Test
     fun winuiJvmRuntimeUsesSkikoWinuiWithoutSkikoAwtNativeRuntime() {
         val classpath = System.getProperty("java.class.path")
             .split(System.getProperty("path.separator"))
@@ -135,6 +173,24 @@ class WinUISourceSetIsolationTest {
         if (start < 0) return null
         var depth = 0
         for (index in start until buildScript.length) {
+            when (buildScript[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) return buildScript.substring(start, index + 1)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun compileKotlinWinuiJvmBridgeBlock(buildScript: String): String? {
+        val start = buildScript.indexOf("task.name == \"compileKotlinWinuiJvm\"")
+        if (start < 0) return null
+        val blockStart = buildScript.indexOf('{', start)
+        if (blockStart < 0) return null
+        var depth = 0
+        for (index in blockStart until buildScript.length) {
             when (buildScript[index]) {
                 '{' -> depth += 1
                 '}' -> {

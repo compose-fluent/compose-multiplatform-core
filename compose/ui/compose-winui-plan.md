@@ -130,6 +130,10 @@
 - [x] Add repository-local WinUI `retain` smoke validation for restoring retained values across `WinUIComposeView.disposeComposition()` and subsequent `setContent()`.
 - [ ] Add compile validation for the new WinUI mingwX64 source set after `kotlin-winrt` supports mingw.
 - [x] Add tests proving WinUI source sets do not depend on `desktopMain`, AWT, Swing, or Skiko AWT classes, and that WinUI keeps its own XAML/WinRT actuals where Skiko has generic or Win32-backed behavior.
+- [x] Add a WinUI JVM compile-source bridge isolation test that keeps the
+  temporary `compileKotlinWinuiJvm` source override limited to common,
+  jvm/Android, WinUI, and generated WinRT sources, without compiling
+  `desktopMain` or generic `skikoMain` sources.
 - [x] Add a WinUI JVM runtime classpath guard that rejects Skiko AWT/Desktop
   native runtime artifacts while `SKIKO-006` tracks the temporary need for the
   AWT-named Skiko JVM API jar.
