@@ -67,6 +67,7 @@
 ## WinUI rendering host
 - [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes; the known `KWINRT-024` native teardown crash is tracked separately as non-blocking.
 - [x] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
+- [x] Add initial unit coverage for the `WinUISkikoRenderHost` adapter lifecycle: render invalidation forwarding, resize forwarding, frame-scheduler reuse, close ordering, idempotent close, and suppression of post-close render/resize requests.
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
 - [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
@@ -189,6 +190,7 @@
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
 - [ ] Split the current monolithic `runWinUIViewSample` smoke into focused WinUI JVM test/smoke suites, mirroring UIKit's split between unit/instrumented coverage: scene/rendering, interop lifecycle/layout/input, accessibility, text input/keyboard, window/lifecycle, pointer/scroll, resource loading, disposal/leaks, and launch integration.
 - [ ] Add WinUI rendering-host tests comparable to UIKit `MetalRedrawer` and layer tests: resize, invalidation coalescing, frame pacing, render/interop transaction ordering, disposal after pending frame callbacks, and nonblank surface output once drawing is implemented.
+- [x] Add initial WinUI rendering-host adapter unit tests for resize, render requests, frame-scheduler reuse, idempotent close, and post-close suppression.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.

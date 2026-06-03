@@ -30,29 +30,77 @@ import org.jetbrains.skiko.winui.WinUISkiaLayer
  * host is split out and connected to [WinUIComposeView].
  */
 internal class WinUISkikoRenderHost(
-    renderDelegate: SkikoRenderDelegate? = null,
+    private val layer: WinUISkikoLayerAdapter,
 ) : AutoCloseable {
-    private val layer = WinUISkiaLayer(renderDelegate)
-    private var frameScheduler: WinUIFrameScheduler? = null
+    constructor(renderDelegate: SkikoRenderDelegate? = null) : this(
+        DefaultWinUISkikoLayerAdapter(renderDelegate)
+    )
+
+    private var frameScheduler: AutoCloseable? = null
+    private var isClosed = false
 
     val component: FrameworkElement
         get() = layer.component
 
     fun requestRender(throttledToVsync: Boolean = true) {
-        layer.needRender(throttledToVsync)
+        if (!isClosed) {
+            layer.requestRender(throttledToVsync)
+        }
     }
 
     fun setSize(size: IntSize) {
+        if (!isClosed) {
+            layer.setSize(size)
+        }
+    }
+
+    fun startFrameScheduler(): AutoCloseable {
+        check(!isClosed) {
+            "Cannot start a WinUI Skiko frame scheduler after the render host is closed."
+        }
+        return frameScheduler ?: layer.startFrameScheduler().also { frameScheduler = it }
+    }
+
+    override fun close() {
+        if (isClosed) return
+        isClosed = true
+        frameScheduler?.close()
+        frameScheduler = null
+        layer.close()
+    }
+}
+
+internal interface WinUISkikoLayerAdapter : AutoCloseable {
+    val component: FrameworkElement
+
+    fun requestRender(throttledToVsync: Boolean)
+
+    fun setSize(size: IntSize)
+
+    fun startFrameScheduler(): AutoCloseable
+}
+
+private class DefaultWinUISkikoLayerAdapter(
+    renderDelegate: SkikoRenderDelegate?,
+) : WinUISkikoLayerAdapter {
+    private val layer = WinUISkiaLayer(renderDelegate)
+
+    override val component: FrameworkElement
+        get() = layer.component
+
+    override fun requestRender(throttledToVsync: Boolean) {
+        layer.needRender(throttledToVsync)
+    }
+
+    override fun setSize(size: IntSize) {
         component.width = size.width.toDouble()
         component.height = size.height.toDouble()
     }
 
-    fun startFrameScheduler(): WinUIFrameScheduler =
-        (frameScheduler ?: layer.startFrameScheduler().also { frameScheduler = it })
+    override fun startFrameScheduler(): WinUIFrameScheduler =
+        layer.startFrameScheduler()
 
     override fun close() {
-        frameScheduler?.close()
-        frameScheduler = null
         layer.close()
     }
 }
