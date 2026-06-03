@@ -558,6 +558,18 @@ baseline, not every retest attempt.
   through `ntdll!RtlpFlsDataCleanup` / `ntdll!LdrShutdownThread`. This confirms
   the latest reproduced failure is still teardown/lifetime related and not a
   managed exception or a Skiko render failure.
+- **2026-06-03 17:06 +08 kt-winrt fix-claim retest:** direct Sonatype snapshot
+  metadata still reports `winrt-runtime`, `winrt-runtime-jvm`,
+  `winrt-authoring`, and `winrt-compiler-plugin`
+  `0.1.0-20260603.042831-23`, with `winrt-gradle-plugin`
+  `0.1.0-20260603.043142-4`. Gradle dependency insight resolves the sample
+  runtime classpath to the same kotlin-winrt coordinates and `skiko-winui`
+  `0.0.0-20260603.075139-3`. A normal full sample run and a forced
+  `--rerun-tasks` run both reach
+  `compose-winui-sample: text input session cancellation` and exit with
+  `NTSTATUS 0xC0000005`. No newer WER dump was produced; the latest native
+  evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.41020.dmp` /
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).41020.dmp`.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful

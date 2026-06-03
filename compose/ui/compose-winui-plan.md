@@ -230,6 +230,10 @@
   runtime/compiler `0.1.0-20260603.042831-23` and Gradle plugin
   `0.1.0-20260603.043142-4`; the full sample still fails at process teardown
   with fresh XAML dynamic-metadata / unloaded-XAML CDB buckets.
+- The 2026-06-03 17:06 +08 fix-claim retest still resolves the same
+  kotlin-winrt snapshots; normal and forced `--rerun-tasks` full sample runs
+  still reach the final smoke log and exit with `NTSTATUS 0xC0000005`, with no
+  newer WER dump.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
   authoring sources into the WinUI JVM target; the hand-written
   `WinUIXamlApplication` authoring registration workaround has been removed.
