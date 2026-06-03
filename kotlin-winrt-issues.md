@@ -530,6 +530,34 @@ baseline, not every retest attempt.
   exception parameters include `0x8007000e`. This differs from the older
   unloaded-XAML AV dump but still points at WinUI/XAML runtime teardown or
   application lifetime, not a Java/Kotlin managed exception.
+- **2026-06-03 kotlin-winrt fix-claim retest after cache clear:** stopped
+  Gradle/Kotlin daemons, cleared the targeted kotlin-winrt `0.1.0-SNAPSHOT`
+  Gradle artifact and descriptor cache directories, and reran the full sample.
+  Direct Sonatype snapshot metadata still reports `winrt-runtime` and
+  `winrt-compiler-plugin` `0.1.0-20260603.042831-23`, with
+  `winrt-gradle-plugin` `0.1.0-20260603.043142-4`; Gradle downloaded fresh
+  kotlin-winrt artifacts at 2026-06-03 16:26-16:27 local time. The full
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` again reached
+  `compose-winui-sample: text input session cancellation` and exited with
+  `NTSTATUS 0xC0000005`.
+- **2026-06-03 cache-clear dump evidence:** Store CDB
+  `10.0.29547.1002` analyzed the new dumps
+  `%LOCALAPPDATA%\CrashDumps\java.exe.41020.dmp` and
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).41020.dmp`; logs are
+  `out/compose-multiplatform-core/windbg-java-41020.log` and
+  `out/compose-multiplatform-core/windbg-java-41020-1.log`. The first dump is
+  back in the XAML dynamic metadata teardown bucket
+  `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`,
+  through
+  `Microsoft_UI_Xaml!CCustomDependencyProperty::~CCustomDependencyProperty`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::~DynamicMetadataStorage`,
+  `Microsoft_UI_Xaml!DeinitializeDll`, `ntdll!LdrUnloadDll`, and
+  `combase!CoUninitialize`. The second dump is the paired unloaded-XAML execute
+  bucket
+  `SOFTWARE_NX_FAULT_INVALID_POINTER_EXECUTE_c0000005_Microsoft.UI.Xaml.dll!Unloaded`
+  through `ntdll!RtlpFlsDataCleanup` / `ntdll!LdrShutdownThread`. This confirms
+  the latest reproduced failure is still teardown/lifetime related and not a
+  managed exception or a Skiko render failure.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful
