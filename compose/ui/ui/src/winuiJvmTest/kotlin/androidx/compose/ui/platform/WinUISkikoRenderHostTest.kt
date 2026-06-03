@@ -18,7 +18,9 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.unit.IntSize
 import microsoft.ui.xaml.FrameworkElement
+import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
+import org.jetbrains.skiko.SkikoRenderDelegate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -170,6 +172,46 @@ class WinUISkikoRenderHostTest {
         assertEquals(1, layer.scheduler.closeCount)
         assertEquals(1, layer.closeCount)
     }
+
+    @Test
+    fun closesAutoCloseableRenderDelegateAfterLayer() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val renderDelegate = FakeAutoCloseableRenderDelegate(layer.events)
+        val host = WinUISkikoRenderHost(layer, renderDelegate)
+
+        host.startFrameScheduler()
+        host.close()
+
+        assertEquals(
+            listOf(
+                "startFrameScheduler",
+                "closeFrameScheduler",
+                "closeLayer",
+                "closeRenderDelegate",
+            ),
+            layer.events,
+        )
+        assertEquals(1, renderDelegate.closeCount)
+    }
+
+    @Test
+    fun closesAutoCloseableRenderDelegateWhenLayerCloseFails() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val renderDelegate = FakeAutoCloseableRenderDelegate(layer.events)
+        val host = WinUISkikoRenderHost(layer, renderDelegate)
+        layer.closeFailure = IllegalArgumentException("layer close failed")
+        renderDelegate.closeFailure = IllegalStateException("delegate close failed")
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            host.close()
+        }
+
+        assertEquals("layer close failed", failure.message)
+        assertEquals("delegate close failed", failure.suppressed.single().message)
+        assertEquals(listOf("closeLayer", "closeRenderDelegate"), layer.events)
+        assertEquals(1, layer.closeCount)
+        assertEquals(1, renderDelegate.closeCount)
+    }
 }
 
 private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
@@ -222,6 +264,21 @@ private class FakeFrameScheduler(
     override fun close() {
         closeCount += 1
         events += "closeFrameScheduler"
+        closeFailure?.let { throw it }
+    }
+}
+
+private class FakeAutoCloseableRenderDelegate(
+    private val events: MutableList<String>,
+) : SkikoRenderDelegate, AutoCloseable {
+    var closeCount = 0
+    var closeFailure: Throwable? = null
+
+    override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) = Unit
+
+    override fun close() {
+        closeCount += 1
+        events += "closeRenderDelegate"
         closeFailure?.let { throw it }
     }
 }

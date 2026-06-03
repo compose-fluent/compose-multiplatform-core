@@ -32,9 +32,11 @@ import org.jetbrains.skiko.winui.WinUISkiaLayer
  */
 internal class WinUISkikoRenderHost(
     private val layer: WinUISkikoLayerAdapter,
+    private val renderDelegateCloseable: AutoCloseable? = null,
 ) : AutoCloseable {
     constructor(renderDelegate: SkikoRenderDelegate? = null) : this(
-        DefaultWinUISkikoLayerAdapter(renderDelegate)
+        DefaultWinUISkikoLayerAdapter(renderDelegate),
+        renderDelegate as? AutoCloseable,
     )
 
     private var frameScheduler: AutoCloseable? = null
@@ -89,19 +91,21 @@ internal class WinUISkikoRenderHost(
         val scheduler = frameScheduler
         frameScheduler = null
         var failure: Throwable? = null
-        if (scheduler != null) {
-            try {
-                scheduler.close()
-            } catch (e: Throwable) {
-                failure = e
-            }
-        }
-        try {
-            layer.close()
-        } catch (e: Throwable) {
-            failure?.addSuppressed(e) ?: throw e
-        }
+        failure = scheduler.closePreserving(failure)
+        failure = layer.closePreserving(failure)
+        failure = renderDelegateCloseable.closePreserving(failure)
         failure?.let { throw it }
+    }
+
+    private fun AutoCloseable?.closePreserving(previousFailure: Throwable?): Throwable? {
+        if (this == null) return previousFailure
+        var failure = previousFailure
+        try {
+            close()
+        } catch (e: Throwable) {
+            failure?.addSuppressed(e) ?: run { failure = e }
+        }
+        return failure
     }
 }
 

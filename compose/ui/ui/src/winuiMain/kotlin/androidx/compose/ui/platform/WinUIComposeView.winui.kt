@@ -244,18 +244,7 @@ class WinUIComposeView internal constructor(
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
         clearLoadedRenderSchedulerRequest()
-        var failure: Throwable? = null
-        try {
-            renderHost.close()
-        } catch (e: Throwable) {
-            failure = e
-        }
-        try {
-            renderDelegate.close()
-        } catch (e: Throwable) {
-            failure?.addSuppressed(e) ?: throw e
-        }
-        failure?.let { throw it }
+        renderHost.close()
     }
 
     internal fun setWindowFocused(isWindowFocused: Boolean) {
