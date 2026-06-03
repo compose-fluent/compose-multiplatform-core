@@ -99,3 +99,15 @@ tasks.register("runWinUIViewSample", JavaExec) {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.sample.autoExit", "true")
 }
+
+tasks.register("runWinUISkikoSample", JavaExec) {
+    group = "verification"
+    description = "Runs the compose-winui Skiko render smoke sample."
+    dependsOn("classes")
+    dependsOn("stageWinRtRuntimeAssets")
+    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
+    classpath = sourceSets.main.runtimeClasspath
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    systemProperty("compose.winui.sample.autoExit", "true")
+    args("skiko")
+}

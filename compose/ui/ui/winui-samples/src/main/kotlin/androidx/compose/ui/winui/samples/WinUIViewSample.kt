@@ -416,10 +416,30 @@ private fun ValidateWinUIOwnerFocus() {
     }
 }
 
-fun main() {
-    println("compose-winui-sample: application starting")
+fun main(args: Array<String>) {
+    val sampleMode = WinUIViewSampleMode.fromArgs(args)
+    println("compose-winui-sample: application starting mode=${sampleMode.id}")
     Application {
-        ComposeWinUiSmokeApp.launch(this)
+        ComposeWinUiSmokeApp.launch(this, sampleMode)
+    }
+}
+
+private enum class WinUIViewSampleMode(
+    val id: String,
+) {
+    Full("full"),
+    Skiko("skiko");
+
+    companion object {
+        fun fromArgs(args: Array<String>): WinUIViewSampleMode {
+            val id = args.firstOrNull()
+                ?: System.getProperty("compose.winui.sample.mode")
+                ?: Full.id
+            return entries.firstOrNull { it.id == id } ?: error(
+                "Unknown compose-winui sample mode '$id'. " +
+                    "Expected one of ${entries.joinToString { it.id }}."
+            )
+        }
     }
 }
 
@@ -427,7 +447,23 @@ private object ComposeWinUiSmokeApp {
     private var composeView: Any? = null
 
     @Composable
-    fun launch(applicationScope: ApplicationScope) {
+    fun launch(
+        applicationScope: ApplicationScope,
+        sampleMode: WinUIViewSampleMode,
+    ) {
+        if (sampleMode == WinUIViewSampleMode.Skiko) {
+            LaunchedEffect(Unit) {
+                runSmoke(applicationScope) {
+                    runWinUISkikoUnattachedSchedulerSmoke()
+                    runWinUISkikoRenderDiagnosticsSmoke()
+                    if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
+                        applicationScope.exitApplication()
+                    }
+                }
+            }
+            return
+        }
+
         var reuseSmokePassed by remember { mutableStateOf(false) }
         var windowSmokePassed by remember { mutableStateOf(false) }
         var secondaryWindowVisible by remember { mutableStateOf(true) }
@@ -449,7 +485,7 @@ private object ComposeWinUiSmokeApp {
             true
         }
         LaunchedEffect(Unit) {
-            try {
+            runSmoke(applicationScope) {
                 runWinUIViewPlacementSmoke()
                 runWinUIViewDensitySmoke()
                 runWinUIViewReuseSmoke()
@@ -481,10 +517,6 @@ private object ComposeWinUiSmokeApp {
                 runWinUIRetainedValuesSmoke()
                 runWinUITextInputSessionSmoke()
                 reuseSmokePassed = true
-            } catch (throwable: Throwable) {
-                throwable.printStackTrace()
-                applicationScope.exitApplication()
-                throw throwable
             }
         }
         LaunchedEffect(reuseSmokePassed, windowSmokePassed, secondaryWindowClosePassed) {
@@ -661,6 +693,19 @@ private object ComposeWinUiSmokeApp {
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun runSmoke(
+        applicationScope: ApplicationScope,
+        block: suspend () -> Unit,
+    ) {
+        try {
+            block()
+        } catch (throwable: Throwable) {
+            throwable.printStackTrace()
+            applicationScope.exitApplication()
+            throw throwable
         }
     }
 

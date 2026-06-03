@@ -493,6 +493,14 @@ baseline, not every retest attempt.
   `compose-winui-sample: retained value restored`, and the final
   `compose-winui-sample: text input session cancellation` log before the same
   `NTSTATUS 0xC0000005` process exit.
+- **2026-06-03 focused Skiko sample split:** added a focused
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` task that runs only the
+  unattached Skiko scheduler deferral and attached render diagnostics smokes.
+  This focused task reaches both Skiko smoke logs and exits successfully without
+  producing a new WER dump. The default full `runWinUIViewSample` entrypoint
+  still reaches `compose-winui-sample: text input session cancellation` and then
+  exits with the same `NTSTATUS 0xC0000005`; no newer dump was produced, so the
+  latest native evidence remains `java.exe.51408.dmp`.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is
