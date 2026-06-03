@@ -9,9 +9,10 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/publication:** `SKIKO-002`.
+- **Open upstream/publication:** none.
+- **Open compose-side integration:** `SKIKO-003`.
 - **Open compose-side workarounds:** none.
-- **Closed/fixed or superseded:** `SKIKO-001`.
+- **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 
@@ -45,28 +46,43 @@ baseline, not every retest attempt.
 
 ## SKIKO-002: skiko-winui generic WinRT support is not usable transitively
 
-- **Status:** Open as of 2026-06-02.
+- **Status:** Fixed upstream in the 2026-06-03 Maven snapshots.
 - **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
   while constructing `org.jetbrains.skiko.winui.WinUISkiaLayer` from
   compose-winui.
-- **Failure:** `runWinUIViewSample` starts the WinUI application and then fails
-  during `WinUISkiaHostPanel` construction with:
+- **Failure:** Older snapshots let `runWinUIViewSample` start the WinUI
+  application, then fail during `WinUISkiaHostPanel` construction with:
   `NoSuchMethodError: androidx.compose.ui.winui.samples.WinUIViewSampleKt.kotlinWinRtGenericTypeInstantiationInitializeBySourceType(String)`.
-- **Trigger path:** `WinUISkiaHostPanel` adds a `WinUISkiaSwapChainPanel` to a
-  projected `UIElementCollection`; that calls
-  `WinRTGenericTypeInstantiations.initializeBySourceType(...)`. The runtime
-  tries to dispatch to a compiler-plugin helper in the final sample module
-  rather than resolving support that was published with the skiko-winui
-  dependency.
-- **Impact:** compose-winui can compile against and instantiate the
-  `WinUISkiaLayer` API shape, but the repository-local sample cannot validate
-  the rendering path until skiko-winui/kotlin-winrt generic-instantiation
-  support is consumable across Maven dependencies.
-- **Compose-side action:** no workaround is installed yet. Avoid adding an
-  app-local fake helper for production code; the fix should make the published
-  skiko-winui projection support visible to downstream apps or avoid requiring
-  downstream compiler support for skiko-winui internal collection operations.
+- **Resolution:** After clearing the Gradle snapshot cache, compose-winui
+  resolved `skiko-winui` timestamped build `0.0.0-20260603.023842-2`,
+  `winrt-gradle-plugin` `0.1.0-20260603.021843-3`, and
+  `winrt-compiler-plugin` `0.1.0-20260603.021535-22`. The sample no longer
+  throws the generic-support `NoSuchMethodError` and reaches Compose content.
 - **Validation baseline:** `:compose:ui:ui:compileKotlinWinuiJvm` passes with
   `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
   --no-configure-on-demand`; `:compose:ui:ui:winui-samples:runWinUIViewSample`
-  fails before the previous `KWINRT-024` teardown point.
+  now fails later in compose-winui's local interop root smoke path, tracked as
+  `SKIKO-003`.
+
+## SKIKO-003: compose-winui interop root smoke does not install wrapper after Skiko host hookup
+
+- **Status:** Open as of 2026-06-03.
+- **Observed in:** `runWinUIViewSample` after `WinUISkikoRenderHost` is backed
+  by `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
+- **Failure:** The sample enters Compose content and then fails in
+  `ComposeWinUiSmokeApp.runWinUIViewLifecycleSmoke` with:
+  `IllegalStateException: WinUIView lifecycle smoke did not install a wrapper into the root host.`
+- **Evidence:** `rootHost.content` is already the expected interop `Canvas`,
+  but `rootCanvas.requiredChildren.singleOrNull()` is null. The previous
+  `SKIKO-002` generic-support exception is gone.
+- **Current analysis:** This appears to be a compose-winui root content sync
+  issue rather than an upstream skiko-winui generic support issue. The smoke
+  creates a detached `WinUIComposeView`, immediately calls `setContent`, and
+  checks native interop children synchronously. With the Skiko render host now
+  installed through `WinUIRootContentHost`, pending root-content transactions can
+  remain unapplied when `collectWinUIInteropRoots()` returns no placed interop
+  nodes.
+- **Next compose-winui action:** audit detached `WinUIComposeView` sizing,
+  first-layout timing, and `WinUIRootContentHost` transaction flushing so the
+  sample validates the real render host without relying on stale synchronous
+  assumptions.
