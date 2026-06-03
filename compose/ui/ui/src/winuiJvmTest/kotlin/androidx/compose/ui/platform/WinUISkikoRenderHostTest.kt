@@ -18,6 +18,7 @@ package androidx.compose.ui.platform
 
 import androidx.compose.ui.unit.IntSize
 import microsoft.ui.xaml.FrameworkElement
+import org.jetbrains.skiko.GraphicsApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -51,6 +52,7 @@ class WinUISkikoRenderHostTest {
         layer.renderFailure = "render failed"
 
         assertEquals(7L, host.renderVersionForTest)
+        assertEquals(GraphicsApi.DIRECT3D, host.renderApiForTest)
         assertEquals(IntSize(80, 60), host.lastRenderSizeForTest)
         assertEquals(IntSize(80, 60), host.lastRenderedStateSizeForTest)
         assertEquals(IntSize(120, 90), host.pendingRenderStateSizeForTest)
@@ -115,6 +117,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     var startFrameSchedulerCount = 0
     var closeCount = 0
     override var renderVersion: Long = 0L
+    override var renderApi: GraphicsApi = GraphicsApi.DIRECT3D
     override var lastRenderSize: IntSize? = null
     override var lastRenderedStateSize: IntSize? = null
     override var pendingRenderStateSize: IntSize? = null

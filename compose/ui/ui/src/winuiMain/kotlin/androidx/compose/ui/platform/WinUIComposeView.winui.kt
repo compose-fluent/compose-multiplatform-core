@@ -57,6 +57,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.jetbrains.skia.Canvas
+import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
 
 /**
@@ -87,6 +88,10 @@ class WinUIComposeView internal constructor(
     @InternalComposeUiApi
     val renderVersionForTest: Long
         get() = renderHost.renderVersionForTest
+
+    @InternalComposeUiApi
+    val renderApiForTest: GraphicsApi
+        get() = renderHost.renderApiForTest
 
     @InternalComposeUiApi
     val lastRenderSizeForTest: IntSize?

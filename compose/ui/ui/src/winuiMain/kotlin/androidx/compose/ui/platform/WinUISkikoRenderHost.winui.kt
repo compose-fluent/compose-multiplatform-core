@@ -18,6 +18,7 @@ package androidx.compose.ui.platform
 
 import microsoft.ui.xaml.FrameworkElement
 import androidx.compose.ui.unit.IntSize
+import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.winui.WinUIFrameScheduler
 import org.jetbrains.skiko.winui.WinUISkiaLayer
@@ -41,6 +42,9 @@ internal class WinUISkikoRenderHost(
 
     val component: FrameworkElement
         get() = layer.component
+
+    val renderApiForTest: GraphicsApi
+        get() = layer.renderApi
 
     val renderVersionForTest: Long
         get() = layer.renderVersion
@@ -91,6 +95,8 @@ internal class WinUISkikoRenderHost(
 internal interface WinUISkikoLayerAdapter : AutoCloseable {
     val component: FrameworkElement
 
+    val renderApi: GraphicsApi
+
     val renderVersion: Long
 
     val lastRenderSize: IntSize?
@@ -115,6 +121,9 @@ private class DefaultWinUISkikoLayerAdapter(
 
     override val component: FrameworkElement
         get() = layer.component
+
+    override val renderApi: GraphicsApi
+        get() = layer.renderApi
 
     override val renderVersion: Long
         get() = layer.renderDiagnostics.renderVersion

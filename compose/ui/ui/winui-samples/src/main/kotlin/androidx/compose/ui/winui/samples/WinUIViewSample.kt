@@ -132,6 +132,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.skiko.GraphicsApi
 
 @Composable
 fun WinUIViewSampleContent(
@@ -2565,6 +2566,10 @@ private object ComposeWinUiSmokeApp {
             }
             currentComposeView.setWindowContainerSizeForTest(IntSize(160, 96))
             delay(100)
+            check(currentComposeView.renderApiForTest == GraphicsApi.DIRECT3D) {
+                "Unattached WinUIComposeView did not use the Skiko Direct3D render API: " +
+                    currentComposeView.renderApiForTest
+            }
             check(!currentComposeView.isRenderSchedulerStartedForTest) {
                 "Unattached WinUIComposeView started the Skiko frame scheduler."
             }
@@ -2606,6 +2611,10 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.setWindowContainerSizeForTest(IntSize(160, 96))
         window.activate()
         try {
+            check(currentComposeView.renderApiForTest == GraphicsApi.DIRECT3D) {
+                "Attached WinUIComposeView did not use the Skiko Direct3D render API: " +
+                    currentComposeView.renderApiForTest
+            }
             awaitCondition("WinUI Skiko attached render diagnostics") {
                 currentComposeView.renderVersionForTest > 0L ||
                     currentComposeView.renderFailureForTest != null
