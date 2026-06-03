@@ -2564,9 +2564,11 @@ private object ComposeWinUiSmokeApp {
             check(failure == null) {
                 "WinUI Skiko render failed after window attachment: $failure"
             }
-            val size = currentComposeView.lastRenderSizeForTest
-            check(size == null || (size.width >= 0 && size.height >= 0)) {
-                "WinUI Skiko render diagnostics reported an invalid size: $size."
+            val size = checkNotNull(currentComposeView.lastRenderSizeForTest) {
+                "WinUI Skiko render diagnostics did not report a platform render size."
+            }
+            check(size.width > 0 && size.height > 0) {
+                "WinUI Skiko render diagnostics reported a non-positive size: $size."
             }
         } finally {
             currentComposeView.dispose()

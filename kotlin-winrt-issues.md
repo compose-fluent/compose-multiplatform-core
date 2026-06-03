@@ -482,16 +482,17 @@ baseline, not every retest attempt.
 - **2026-06-03 cached snapshot retest:** with the currently cached Maven
   snapshots, Gradle dependency insight resolves `skiko-winui` to
   `0.0.0-20260603.023842-2` and kotlin-winrt runtime/authoring artifacts to
-  `0.1.0-20260603.042831-23`. `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `0.1.0-20260603.042831-23`. Direct Sonatype snapshot metadata reads confirm
+  these are still the latest published `io.github.compose-fluent` snapshots as
+  of this retest; Gradle `--refresh-dependencies` remains blocked by external
+  Maven/Google repository TLS handshake failures while resolving buildSrc
+  dependencies. `:compose:ui:ui:compileKotlinWinuiJvm` and
   `WinUISkikoRenderHostTest` pass. The repository-local WinUI sample reaches
   `compose-winui-sample: skiko render diagnostics`,
   `compose-winui-sample: saveable state restored`,
   `compose-winui-sample: retained value restored`, and the final
   `compose-winui-sample: text input session cancellation` log before the same
-  `NTSTATUS 0xC0000005` process exit. A `--refresh-dependencies` retest was
-  blocked by external Maven/Google repository TLS handshake failures while
-  resolving buildSrc dependencies, so this run does not prove whether a newer
-  upstream snapshot fixes KWINRT-024.
+  `NTSTATUS 0xC0000005` process exit.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is

@@ -40,8 +40,11 @@ baseline, not every retest attempt.
   `Loaded` token on composition/view disposal. Keep render-host diagnostics
   covered by `WinUISkikoRenderHostTest`; the repository-local sample validates
   both that an unattached `WinUIComposeView` does not start the Skiko frame
-  scheduler and that an attached-window render diagnostics frame succeeds before
-  the known `KWINRT-024` teardown crash.
+  scheduler and that an attached-window render diagnostics frame succeeds with
+  a positive platform render size before the known `KWINRT-024` teardown crash.
+  The current upstream diagnostics expose render state/result metadata but no
+  pixel-read or surface snapshot API, so nonblank frame validation remains
+  blocked on a stable attached-window pixel-read path.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

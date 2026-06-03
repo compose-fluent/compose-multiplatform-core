@@ -228,9 +228,9 @@
   direct `microsoft.ui.xaml.Window.setContent` root before starting composition,
   defers `WinUIComposeView` frame-scheduler startup until the root is loaded,
   keeps diagnostics unit-tested, and validates both an unattached scheduler
-  deferral path and an attached-window render diagnostics frame in the
-  repository-local sample. Nonblank frame validation is still deferred until
-  there is a stable attached-window pixel-read path.
+  deferral path and an attached-window render diagnostics frame with a positive
+  platform render size in the repository-local sample. Nonblank frame validation
+  is still deferred until there is a stable attached-window pixel-read path.
 - `SKIKO-003`: Closed on 2026-06-03. `WinUIComposeView.updateRootContent` now
   flushes pending root-content transactions even when the interop overlay
   identity is unchanged, and the sample validates WinUIView overlay children
