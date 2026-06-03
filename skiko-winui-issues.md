@@ -10,11 +10,34 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** none.
+- **Open upstream/publication/API:** `SKIKO-006`.
 - **Open compose-side integration:** `SKIKO-004`.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
   `SKIKO-005`.
+
+## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
+
+- **Status:** Open upstream/publication/API.
+- **Observed in:** compose-winui dependency isolation while validating
+  `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
+  `0.0.0-20260603.075139-3`.
+- **Failure:** excluding `org.jetbrains.skiko:skiko-awt` from WinUI
+  configurations removes the JVM API classes needed by compose-winui and
+  `skiko-winui`, including `org.jetbrains.skia.Canvas`,
+  `org.jetbrains.skiko.GraphicsApi`, and
+  `org.jetbrains.skiko.SkikoRenderDelegate`; `compileKotlinWinuiJvm` then
+  fails. Dependency insight shows `skiko-awt` arrives through
+  `org.jetbrains.skiko:skiko`, including the `skiko-winui -> skiko` path.
+- **Why this matters:** compose-winui must remain independent from Desktop/AWT
+  runtime behavior. The source code does not use AWT or `SkiaLayer`, but the
+  current JVM artifact naming and dependency shape still put core Skia/Skiko
+  JVM APIs in an AWT-named artifact.
+- **Current compose-winui action:** keep source isolation checks for AWT,
+  Swing, Desktop, and `SkiaLayer`, and add a runtime classpath guard that
+  rejects `skiko-awt-runtime-*` native runtime artifacts while temporarily
+  allowing the `skiko-awt` API jar. Remove that allowance once skiko-winui or
+  Skiko publishes an AWT-free JVM API artifact for the WinUI path.
 
 ## SKIKO-005: published render diagnostics API is still internal
 

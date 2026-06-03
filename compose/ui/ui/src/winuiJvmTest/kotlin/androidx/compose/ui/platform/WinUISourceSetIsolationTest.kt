@@ -82,6 +82,33 @@ class WinUISourceSetIsolationTest {
         )
     }
 
+    @Test
+    fun winuiJvmRuntimeUsesSkikoWinuiWithoutSkikoAwtNativeRuntime() {
+        val classpath = System.getProperty("java.class.path")
+            .split(System.getProperty("path.separator"))
+            .map { it.lowercase() }
+
+        assertTrue(
+            classpath.any { it.contains("skiko-winui") },
+            "WinUI JVM runtime classpath should include skiko-winui.",
+        )
+
+        // SKIKO-006: the current JVM Skiko API jar is still named skiko-awt,
+        // so keep the guard focused on Desktop/AWT native runtime artifacts.
+        val forbiddenArtifacts = listOf(
+            "skiko-awt-runtime",
+        )
+        val offenders = classpath.filter { entry ->
+            forbiddenArtifacts.any { artifact -> entry.contains(artifact) }
+        }
+
+        assertTrue(
+            offenders.isEmpty(),
+            "WinUI JVM runtime classpath must not include Skiko AWT/Desktop native runtime artifacts:\n" +
+                offenders.joinToString(separator = "\n"),
+        )
+    }
+
     private fun kotlinFiles(root: Path): List<Path> {
         if (!root.exists()) return emptyList()
         Files.walk(root).use { paths ->

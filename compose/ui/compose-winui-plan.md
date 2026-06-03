@@ -130,6 +130,9 @@
 - [x] Add repository-local WinUI `retain` smoke validation for restoring retained values across `WinUIComposeView.disposeComposition()` and subsequent `setContent()`.
 - [ ] Add compile validation for the new WinUI mingwX64 source set after `kotlin-winrt` supports mingw.
 - [x] Add tests proving WinUI source sets do not depend on `desktopMain`, AWT, Swing, or Skiko AWT classes, and that WinUI keeps its own XAML/WinRT actuals where Skiko has generic or Win32-backed behavior.
+- [x] Add a WinUI JVM runtime classpath guard that rejects Skiko AWT/Desktop
+  native runtime artifacts while `SKIKO-006` tracks the temporary need for the
+  AWT-named Skiko JVM API jar.
 - [x] Add lifecycle tests for `WinUIView`: factory once, update after creation, repeated update on state changes, reset on reuse, release on final disposal.
 - [x] Add layout tests for bounds, clipping, z-order, placement, unplacement, and relayout after density or size changes.
 - [x] Add repository-local WinUIView smoke validation for fixed Compose size and position propagation to the native WinUI wrapper and child element.
@@ -254,6 +257,10 @@
   `runWinUISkikoSample` task. The same focused sample now verifies both paths
   report the Skiko WinUI Direct3D render API. Nonblank frame validation is still
   deferred until there is a stable attached-window pixel-read path.
+- `SKIKO-006`: Open upstream/publication/API. The current WinUI JVM path still
+  needs `org.jetbrains.skiko:skiko-awt` for core Skia/Skiko JVM API classes, so
+  compose-winui guards against `skiko-awt-runtime-*` native runtime artifacts
+  while waiting for an AWT-free JVM API artifact.
 - `SKIKO-005`: Closed in `skiko-winui` `0.0.0-20260603.075139-3`.
   `WinUISkikoRenderHost` now consumes the public typed render diagnostics API
   directly instead of reflecting `getRenderDiagnostics$skiko_winui`.
