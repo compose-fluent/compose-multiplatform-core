@@ -510,6 +510,14 @@ baseline, not every retest attempt.
   `compose-winui-sample: text input session cancellation` log and fails with
   process exit `NTSTATUS 0xC0000005`. This run did not produce a newer WER dump,
   so no fresh native bucket was available to analyze.
+- **2026-06-03 skiko-winui typed-diagnostics retest:** after resolving
+  `skiko-winui` / `skiko-winui-windows` to
+  `0.0.0-20260603.075139-3` and removing the compose-side reflection bridge for
+  render diagnostics, `:compose:ui:ui:winui-samples:runWinUISkikoSample` passes.
+  The full `:compose:ui:ui:winui-samples:runWinUIViewSample` still reaches
+  `compose-winui-sample: text input session cancellation` and exits with
+  `NTSTATUS 0xC0000005`. No newer `java*.dmp` appeared in
+  `%LOCALAPPDATA%\CrashDumps`, so there was no new native dump to analyze.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is
