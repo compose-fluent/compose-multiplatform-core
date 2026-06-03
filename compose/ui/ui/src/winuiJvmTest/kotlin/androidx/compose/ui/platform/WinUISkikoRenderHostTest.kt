@@ -70,6 +70,7 @@ class WinUISkikoRenderHostTest {
         host.close()
 
         assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(listOf("startFrameScheduler", "closeFrameScheduler", "closeLayer"), layer.events)
         assertEquals(1, layer.scheduler.closeCount)
         assertEquals(1, layer.closeCount)
     }
@@ -98,13 +99,15 @@ class WinUISkikoRenderHostTest {
         assertFailsWith<IllegalStateException> {
             host.startFrameScheduler()
         }
+        assertEquals(0, layer.startFrameSchedulerCount)
     }
 }
 
 private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
+    val events = mutableListOf<String>()
     val renderRequests = mutableListOf<Boolean>()
     val sizes = mutableListOf<IntSize>()
-    val scheduler = FakeFrameScheduler()
+    val scheduler = FakeFrameScheduler(events)
     var startFrameSchedulerCount = 0
     var closeCount = 0
     override var renderVersion: Long = 0L
@@ -124,18 +127,23 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
 
     override fun startFrameScheduler(): AutoCloseable {
         startFrameSchedulerCount += 1
+        events += "startFrameScheduler"
         return scheduler
     }
 
     override fun close() {
         closeCount += 1
+        events += "closeLayer"
     }
 }
 
-private class FakeFrameScheduler : AutoCloseable {
+private class FakeFrameScheduler(
+    private val events: MutableList<String>,
+) : AutoCloseable {
     var closeCount = 0
 
     override fun close() {
         closeCount += 1
+        events += "closeFrameScheduler"
     }
 }
