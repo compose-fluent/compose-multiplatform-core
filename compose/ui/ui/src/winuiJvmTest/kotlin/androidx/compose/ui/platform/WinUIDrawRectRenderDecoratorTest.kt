@@ -45,6 +45,23 @@ class WinUIDrawRectRenderDecoratorTest {
     }
 
     @Test
+    fun recordsNegativeDrawBounds() {
+        val drawRects = mutableListOf<Rect>()
+        val decorator = WinUIDrawRectRenderDecorator(
+            decorated = DrawRectDelegate(SkRect.makeXYWH(-6f, -4f, 10f, 8f)),
+            onDrawRectChange = { drawRects += it },
+        )
+
+        try {
+            renderWith(decorator)
+        } finally {
+            decorator.close()
+        }
+
+        assertEquals(listOf(Rect(-6f, -4f, 4f, 4f)), drawRects)
+    }
+
+    @Test
     fun reportsZeroBoundsAfterDrawsStop() {
         val drawRects = mutableListOf<Rect>()
         val delegate = SwitchingDrawDelegate()
