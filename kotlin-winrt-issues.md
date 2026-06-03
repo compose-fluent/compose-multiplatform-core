@@ -435,6 +435,22 @@ baseline, not every retest attempt.
   `compose-winui-sample: text input session cancellation` log before the same
   `NTSTATUS 0xC0000005` process exit. No newer WER dump was produced in
   `%LOCALAPPDATA%\CrashDumps`.
+- **2026-06-03 attach-aware Skiko scheduler retest:** after deferring
+  `WinUIComposeView` Skiko frame-scheduler startup until root `Loaded`, the
+  sample still reaches `compose-winui-sample: skiko render diagnostics` and
+  `compose-winui-sample: text input session cancellation` before failing with
+  `NTSTATUS 0xC0000005`. This run produced
+  `%LOCALAPPDATA%\CrashDumps\java.exe.55780.dmp`; Store CDB/WinDbg
+  `10.0.29547.1002` analysis is saved at
+  `out/compose-multiplatform-core/windbg-java-55780.log`. The bucket is
+  `STOWED_EXCEPTION_c000027b_CoreMessagingXP.dll!Microsoft::UI::Dispatching::DispatcherQueue::DeferInvokeCallback`;
+  the stack goes through `KERNELBASE!RaiseFailFastException`,
+  `combase!RoFailFastWithErrorContextInternal2`,
+  `CoreMessagingXP!Microsoft::UI::Dispatching::DispatcherQueue::DeferInvokeCallback`,
+  CoreMessaging dispatch/deferred-call frames, and
+  `Microsoft_UI_Xaml!DirectUI::FrameworkApplication::StartDesktop`. This again
+  points at WinUI/CoreMessaging application lifetime or dispatcher teardown
+  after the full compose-winui smoke path, not a Skiko render failure.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is

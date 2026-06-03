@@ -71,7 +71,7 @@
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
 - [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
-- [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work.
+- [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work. `WinUIComposeView` now starts the Skiko frame scheduler only after the WinUI root is loaded, so unattached roots can compose and run owner/interops tests without starting presentation callbacks.
 - [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
 ## WinUIView interop
@@ -226,9 +226,10 @@
   this differs from skiko's own sample because the skiko sample renders through
   a layer already hosted by a real WinUI window. Compose-winui now attaches the
   direct `microsoft.ui.xaml.Window.setContent` root before starting composition,
+  defers `WinUIComposeView` frame-scheduler startup until the root is loaded,
   keeps diagnostics unit-tested, and validates an attached-window render
-  diagnostics frame in the repository-local sample. Nonblank frame validation is
-  still deferred until there is a stable attached-window pixel-read path.
+  diagnostics frame in the repository-local sample. Nonblank frame validation
+  is still deferred until there is a stable attached-window pixel-read path.
 - `SKIKO-003`: Closed on 2026-06-03. `WinUIComposeView.updateRootContent` now
   flushes pending root-content transactions even when the interop overlay
   identity is unchanged, and the sample validates WinUIView overlay children

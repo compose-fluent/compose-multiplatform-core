@@ -35,10 +35,12 @@ baseline, not every retest attempt.
   unattached `WinUIComposeView`. `microsoft.ui.xaml.Window.setContent` now
   installs the compose root into the WinUI `Window` before starting composition,
   so that direct window entry point does not briefly start the Skiko frame
-  scheduler on an unattached root. Keep render-host diagnostics covered by
-  `WinUISkikoRenderHostTest`; the repository-local sample also validates an
-  attached-window render diagnostics frame before the known `KWINRT-024`
-  teardown crash.
+  scheduler on an unattached root. `WinUIComposeView` also defers starting the
+  Skiko frame scheduler until its root is loaded, and removes the pending
+  `Loaded` token on composition/view disposal. Keep render-host diagnostics
+  covered by `WinUISkikoRenderHostTest`; the repository-local sample also
+  validates an attached-window render diagnostics frame before the known
+  `KWINRT-024` teardown crash.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

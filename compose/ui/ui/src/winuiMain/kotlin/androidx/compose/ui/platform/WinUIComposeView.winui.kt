@@ -48,8 +48,10 @@ import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
+import microsoft.ui.xaml.RoutedEventHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -141,6 +143,8 @@ class WinUIComposeView internal constructor(
     private var currentInteropRoots: List<UIElement> = emptyList()
     private var isRootContentSyncScheduled = false
     private var isDisposed = false
+    private var loadedRenderSchedulerHandler: RoutedEventHandler? = null
+    private var loadedRenderSchedulerToken: EventRegistrationToken? = null
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
     private val pointerInputAdapter = WinUIPointerInputAdapter(root, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner.winUIDragAndDropManager)
@@ -176,7 +180,7 @@ class WinUIComposeView internal constructor(
                 }
             }
         }
-        renderHost.startFrameScheduler()
+        startRenderSchedulerWhenLoaded()
         syncRootContent()
         requestRender()
     }
@@ -196,6 +200,7 @@ class WinUIComposeView internal constructor(
         frameClock?.cancel()
         frameClock = null
         content = null
+        clearLoadedRenderSchedulerRequest()
         updateRootContent(emptyList())
         rootNode.removeAll()
         displayRequestController.setKeepScreenOn(false)
@@ -213,6 +218,7 @@ class WinUIComposeView internal constructor(
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
+        clearLoadedRenderSchedulerRequest()
         renderHost.close()
     }
 
@@ -268,6 +274,36 @@ class WinUIComposeView internal constructor(
     private fun invalidateRootLayer() {
         scheduleRootContentSync()
         requestRender()
+    }
+
+    private fun startRenderSchedulerWhenLoaded() {
+        if (runCatching { rootContentControl.isLoaded }.getOrDefault(false)) {
+            startRenderScheduler()
+        } else if (loadedRenderSchedulerToken == null) {
+            val handler = RoutedEventHandler { _, _ ->
+                clearLoadedRenderSchedulerRequest()
+                if (!isDisposed) {
+                    startRenderScheduler()
+                    requestRender()
+                }
+            }
+            loadedRenderSchedulerHandler = handler
+            loadedRenderSchedulerToken = rootContentControl.loaded.add(handler)
+        }
+    }
+
+    private fun startRenderScheduler() {
+        if (!isDisposed && content != null) {
+            renderHost.startFrameScheduler()
+        }
+    }
+
+    private fun clearLoadedRenderSchedulerRequest() {
+        loadedRenderSchedulerToken?.let { token ->
+            runCatching { rootContentControl.loaded.remove(token) }
+            loadedRenderSchedulerToken = null
+        }
+        loadedRenderSchedulerHandler = null
     }
 
     private fun requestRender() {
