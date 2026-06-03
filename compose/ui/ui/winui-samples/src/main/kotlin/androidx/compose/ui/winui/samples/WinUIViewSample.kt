@@ -46,6 +46,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.indirect.IndirectPointerEvent
@@ -2674,6 +2675,19 @@ private object ComposeWinUiSmokeApp {
             check(drawRect.width > 0f && drawRect.height > 0f) {
                 "WinUI Skiko render diagnostics did not record non-empty Compose draw bounds: " +
                     drawRect
+            }
+            currentComposeView.disposeComposition()
+            awaitCondition("WinUI Skiko cleared draw bounds") {
+                currentComposeView.lastDrawRectForTest == ComposeRect.Zero ||
+                    currentComposeView.renderFailureForTest != null
+            }
+            val clearFailure = currentComposeView.renderFailureForTest
+            check(clearFailure == null) {
+                "WinUI Skiko render failed after clearing Compose content: $clearFailure"
+            }
+            check(currentComposeView.lastDrawRectForTest == ComposeRect.Zero) {
+                "WinUI Skiko render diagnostics kept stale draw bounds after clearing content: " +
+                    currentComposeView.lastDrawRectForTest
             }
         } finally {
             currentComposeView.dispose()

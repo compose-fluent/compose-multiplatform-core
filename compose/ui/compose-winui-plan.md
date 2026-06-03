@@ -221,7 +221,7 @@
 - [x] Add WinUI Skiko draw-bounds diagnostics by wrapping the WinUI render
   delegate with a narrow recorder and validating the focused
   `runWinUISkikoSample` path records non-empty Compose draw bounds after an
-  attached render.
+  attached render and clears those bounds after Compose content is disposed.
 - [x] Add focused WinUI JVM unit coverage for the draw-bounds recorder:
   non-empty draws update bounds, empty subsequent renders report zero bounds,
   negative-area draws retain their negative bounds, and a closed recorder still
