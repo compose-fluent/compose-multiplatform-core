@@ -215,6 +215,10 @@
 - [x] Add repository-local Skiko diagnostics coverage that verifies
   `WinUIComposeView` is backed by the Skiko WinUI Direct3D render API in both
   unattached scheduler-deferral and attached-window render paths.
+- [x] Add WinUI Skiko draw-bounds diagnostics by wrapping the WinUI render
+  delegate with a narrow recorder and validating the focused
+  `runWinUISkikoSample` path records non-empty Compose draw bounds after an
+  attached render.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
@@ -263,7 +267,8 @@
   platform render size, matching rendered-state size, and no pending invalidated
   render state in the repository-local full sample and focused
   `runWinUISkikoSample` task. The same focused sample now verifies both paths
-  report the Skiko WinUI Direct3D render API. Nonblank frame validation is still
+  report the Skiko WinUI Direct3D render API and records non-empty Compose draw
+  bounds after an attached render. Pixel-read nonblank frame validation is still
   deferred until there is a stable attached-window pixel-read path.
 - `SKIKO-006`: Open upstream/publication/API. The current WinUI JVM path still
   needs `org.jetbrains.skiko:skiko-awt` for core Skia/Skiko JVM API classes, so

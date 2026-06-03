@@ -40,11 +40,13 @@ import androidx.compose.ui.autofill.createFromBoolean
 import androidx.compose.ui.autofill.createFromDateMillis
 import androidx.compose.ui.autofill.createFromListIndex
 import androidx.compose.ui.autofill.createFromText
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.indirect.IndirectPointerEvent
 import androidx.compose.ui.input.indirect.IndirectPointerEventPrimaryDirectionalMotionAxis
@@ -2625,6 +2627,9 @@ private object ComposeWinUiSmokeApp {
         val window = XamlWindow()
         val currentComposeView = window.setContent {
             Layout(
+                modifier = Modifier.drawBehind {
+                    drawRect(Color.Red)
+                },
                 content = {},
             ) { _, _ ->
                 layout(48, 32) {}
@@ -2664,6 +2669,11 @@ private object ComposeWinUiSmokeApp {
             check(currentComposeView.pendingRenderStateSizeForTest == null) {
                 "WinUI Skiko render diagnostics left a pending render state after rendering: " +
                     currentComposeView.pendingRenderStateSizeForTest
+            }
+            val drawRect = currentComposeView.lastDrawRectForTest
+            check(drawRect.width > 0f && drawRect.height > 0f) {
+                "WinUI Skiko render diagnostics did not record non-empty Compose draw bounds: " +
+                    drawRect
             }
         } finally {
             currentComposeView.dispose()

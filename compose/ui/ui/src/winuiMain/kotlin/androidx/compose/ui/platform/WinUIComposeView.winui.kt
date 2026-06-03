@@ -28,6 +28,7 @@ import androidx.compose.runtime.retain.LocalRetainedValuesStoreProvider
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.WinUIPlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
@@ -110,6 +111,10 @@ class WinUIComposeView internal constructor(
         get() = renderHost.renderFailureForTest
 
     @InternalComposeUiApi
+    val lastDrawRectForTest: Rect
+        get() = lastDrawRect
+
+    @InternalComposeUiApi
     val isRenderSchedulerStartedForTest: Boolean
         get() = renderHost.isFrameSchedulerStartedForTest
 
@@ -124,13 +129,16 @@ class WinUIComposeView internal constructor(
     private val displayRequestController = WinUIDisplayRequestController()
     private val pointerCursorAdapter = WinUIPointerCursorAdapter(rootContentControl)
     private val pointerIconService = WinUIPointerIconService(pointerCursorAdapter::setIcon)
-    private val renderHost = WinUISkikoRenderHost(
+    private var lastDrawRect = Rect.Zero
+    private val renderDelegate = WinUIDrawRectRenderDecorator(
         object : SkikoRenderDelegate {
             override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
                 render(canvas)
             }
-        }
+        },
+        onDrawRectChange = { lastDrawRect = it },
     )
+    private val renderHost = WinUISkikoRenderHost(renderDelegate)
     init {
         setRenderContent(renderHost.component)
     }
@@ -236,7 +244,18 @@ class WinUIComposeView internal constructor(
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         owner.dispose()
         clearLoadedRenderSchedulerRequest()
-        renderHost.close()
+        var failure: Throwable? = null
+        try {
+            renderHost.close()
+        } catch (e: Throwable) {
+            failure = e
+        }
+        try {
+            renderDelegate.close()
+        } catch (e: Throwable) {
+            failure?.addSuppressed(e) ?: throw e
+        }
+        failure?.let { throw it }
     }
 
     internal fun setWindowFocused(isWindowFocused: Boolean) {
