@@ -32,10 +32,13 @@ baseline, not every retest attempt.
   smoke that exposed this issue rendered an unattached compose view, which is
   not the same lifetime or presentation path.
 - **Current compose-winui action:** do not validate rendered frames from an
-  unattached `WinUIComposeView`. Keep render-host diagnostics covered by
-  `WinUISkikoRenderHostTest`, and move repository-local nonblank frame
-  validation to an attached-window path once compose-winui has a stable hook for
-  accessing the window-owned `WinUIComposeView` diagnostics.
+  unattached `WinUIComposeView`. `microsoft.ui.xaml.Window.setContent` now
+  installs the compose root into the WinUI `Window` before starting composition,
+  so that direct window entry point does not briefly start the Skiko frame
+  scheduler on an unattached root. Keep render-host diagnostics covered by
+  `WinUISkikoRenderHostTest`; the repository-local sample also validates an
+  attached-window render diagnostics frame before the known `KWINRT-024`
+  teardown crash.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

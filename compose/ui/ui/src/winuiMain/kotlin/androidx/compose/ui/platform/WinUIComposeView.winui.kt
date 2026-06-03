@@ -82,6 +82,18 @@ class WinUIComposeView internal constructor(
     val root: UIElement
         get() = rootContentControl
 
+    @InternalComposeUiApi
+    val renderVersionForTest: Long
+        get() = renderHost.renderVersionForTest
+
+    @InternalComposeUiApi
+    val lastRenderSizeForTest: IntSize?
+        get() = renderHost.lastRenderSizeForTest
+
+    @InternalComposeUiApi
+    val renderFailureForTest: String?
+        get() = renderHost.renderFailureForTest
+
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,
     ).apply {
@@ -214,6 +226,11 @@ class WinUIComposeView internal constructor(
         requestRender()
     }
 
+    @InternalComposeUiApi
+    fun setWindowContainerSizeForTest(size: IntSize) {
+        setWindowContainerSize(size)
+    }
+
     private fun createComposition(): Composition {
         val dispatcherQueue = requireRootDispatcherQueue()
         WinUIScheduler.register(dispatcherQueue)
@@ -319,8 +336,8 @@ class WinUIComposeView internal constructor(
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
     val composeView = WinUIComposeView()
-    composeView.setContent(content)
     this.content = composeView.root
+    composeView.setContent(content)
     return composeView
 }
 

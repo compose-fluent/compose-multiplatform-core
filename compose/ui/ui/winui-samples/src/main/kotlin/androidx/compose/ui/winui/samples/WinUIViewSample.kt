@@ -86,6 +86,7 @@ import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.platform.sendPointerEventForTest
+import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.getAllSemanticsNodes
@@ -125,6 +126,7 @@ import microsoft.ui.xaml.controls.ToggleSwitch
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.media.RectangleGeometry
+import microsoft.ui.xaml.Window as XamlWindow
 import windows.foundation.Rect
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -472,6 +474,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
             runWinUIViewGeneratedEventCleanupSmoke()
+            runWinUISkikoRenderDiagnosticsSmoke()
             runWinUISaveableStateSmoke()
             runWinUIRetainedValuesSmoke()
             runWinUITextInputSessionSmoke()
@@ -2495,6 +2498,38 @@ private object ComposeWinUiSmokeApp {
             probe.secondInputCancelled
         }
         println("compose-winui-sample: text input session cancellation")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUISkikoRenderDiagnosticsSmoke() {
+        val window = XamlWindow()
+        val currentComposeView = window.setContent {
+            Layout(
+                content = {},
+            ) { _, _ ->
+                layout(48, 32) {}
+            }
+        }
+        currentComposeView.setWindowContainerSizeForTest(IntSize(160, 96))
+        window.activate()
+        try {
+            awaitCondition("WinUI Skiko attached render diagnostics") {
+                currentComposeView.renderVersionForTest > 0L ||
+                    currentComposeView.renderFailureForTest != null
+            }
+            val failure = currentComposeView.renderFailureForTest
+            check(failure == null) {
+                "WinUI Skiko render failed after window attachment: $failure"
+            }
+            val size = currentComposeView.lastRenderSizeForTest
+            check(size == null || (size.width >= 0 && size.height >= 0)) {
+                "WinUI Skiko render diagnostics reported an invalid size: $size."
+            }
+        } finally {
+            currentComposeView.dispose()
+            window.close()
+        }
+        println("compose-winui-sample: skiko render diagnostics")
     }
 
     private suspend fun awaitCondition(label: String, condition: () -> Boolean) {

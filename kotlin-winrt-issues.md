@@ -429,6 +429,12 @@ baseline, not every retest attempt.
   `NTSTATUS 0xC0000005`. No newer WER dump was produced in
   `%LOCALAPPDATA%\CrashDumps` after that run; Store WinDbg/CDB logs are kept at
   `out/compose-multiplatform-core/cdb-runWinUIViewSample-latest*.log`.
+- **2026-06-03 attached Skiko diagnostics retest:** after adding an
+  attached-window Skiko render diagnostics smoke, the sample reaches
+  `compose-winui-sample: skiko render diagnostics` and still reaches the final
+  `compose-winui-sample: text input session cancellation` log before the same
+  `NTSTATUS 0xC0000005` process exit. No newer WER dump was produced in
+  `%LOCALAPPDATA%\CrashDumps`.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is
