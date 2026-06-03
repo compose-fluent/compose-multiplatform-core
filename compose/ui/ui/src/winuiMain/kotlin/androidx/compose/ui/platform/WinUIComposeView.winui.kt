@@ -287,10 +287,15 @@ class WinUIComposeView internal constructor(
     }
 
     private fun updateRootContent(content: List<UIElement>) {
-        if (currentInteropRoots.hasSameIdentityOrder(content)) return
-        currentInteropRoots = content
-        setRootContent(content)
-        retrieveInteropTransaction().performTransaction()
+        val contentChanged = !currentInteropRoots.hasSameIdentityOrder(content)
+        if (contentChanged) {
+            currentInteropRoots = content
+            setRootContent(content)
+        }
+        val transaction = retrieveInteropTransaction()
+        if (contentChanged || transaction.actions.isNotEmpty()) {
+            transaction.performTransaction()
+        }
     }
 
     private constructor(host: WinUIRootContentHost) : this(

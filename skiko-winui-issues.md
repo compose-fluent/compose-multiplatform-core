@@ -10,9 +10,9 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication:** none.
-- **Open compose-side integration:** `SKIKO-003`.
+- **Open compose-side integration:** none.
 - **Open compose-side workarounds:** none.
-- **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`.
+- **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 
@@ -66,7 +66,7 @@ baseline, not every retest attempt.
 
 ## SKIKO-003: compose-winui interop root smoke does not install wrapper after Skiko host hookup
 
-- **Status:** Open as of 2026-06-03.
+- **Status:** Fixed compose-side on 2026-06-03.
 - **Observed in:** `runWinUIViewSample` after `WinUISkikoRenderHost` is backed
   by `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
 - **Failure:** The sample enters Compose content and then fails in
@@ -75,14 +75,16 @@ baseline, not every retest attempt.
 - **Evidence:** `rootHost.content` is already the expected interop `Canvas`,
   but `rootCanvas.requiredChildren.singleOrNull()` is null. The previous
   `SKIKO-002` generic-support exception is gone.
-- **Current analysis:** This appears to be a compose-winui root content sync
-  issue rather than an upstream skiko-winui generic support issue. The smoke
-  creates a detached `WinUIComposeView`, immediately calls `setContent`, and
-  checks native interop children synchronously. With the Skiko render host now
-  installed through `WinUIRootContentHost`, pending root-content transactions can
-  remain unapplied when `collectWinUIInteropRoots()` returns no placed interop
-  nodes.
-- **Next compose-winui action:** audit detached `WinUIComposeView` sizing,
-  first-layout timing, and `WinUIRootContentHost` transaction flushing so the
-  sample validates the real render host without relying on stale synchronous
-  assumptions.
+- **Resolution:** `WinUIComposeView.updateRootContent` now flushes pending
+  root-content transactions even when the interop overlay identity has not
+  changed, so the Skiko render base child cannot leave queued WinUI child
+  updates unapplied. The sample smoke now treats the Skiko render surface as a
+  root `Canvas` base child and validates only interop overlay children when
+  checking wrapper installation, ordering, and removal.
+- **Validation:** With `JAVA_HOME=C:\Program Files\Microsoft\jdk-25.0.3.9-hotspot`,
+  `:compose:ui:ui:compileKotlinWinuiJvm` passes using
+  `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
+  --no-configure-on-demand`. `:compose:ui:ui:winui-samples:runWinUIViewSample`
+  reaches the full current smoke path, including `text input session
+  cancellation`, and then fails only at the known `KWINRT-024` native teardown
+  crash with `NTSTATUS 0xC0000005`.
