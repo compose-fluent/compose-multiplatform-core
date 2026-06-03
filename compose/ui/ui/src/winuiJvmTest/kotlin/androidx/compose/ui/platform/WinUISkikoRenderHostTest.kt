@@ -131,6 +131,33 @@ class WinUISkikoRenderHostTest {
     }
 
     @Test
+    fun ignoresAccessibilityUpdatesAfterClose() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+        val provider = FakeWinUIAccessibilityProvider()
+        val change = WinUIAccessibilityChange(
+            type = WinUIAccessibilityChangeType.NODE_UPDATED,
+            nodeId = 7L,
+        )
+
+        host.close()
+        host.setAccessibilityProvider(provider)
+        host.notifyAccessibilityChanged(
+            WinUIAccessibilityUpdate(
+                semanticsOwner = null,
+                semanticsChanged = false,
+                layoutChangedSemanticsIds = listOf(7),
+                scrollDelta = null,
+                change = change,
+            )
+        )
+
+        assertEquals(null, layer.installedAccessibilityProvider)
+        assertEquals(emptyList(), layer.accessibilityChanges)
+        assertEquals(1, layer.closeCount)
+    }
+
+    @Test
     fun rejectsStartingFrameSchedulerAfterClose() {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
