@@ -593,6 +593,33 @@ baseline, not every retest attempt.
   `NTSTATUS 0xC0000005`. No newer WER dump was produced; the latest native
   evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.41020.dmp` /
   `%LOCALAPPDATA%\CrashDumps\java.exe(1).41020.dmp`.
+- **2026-06-03 19:21 +08 kt-winrt fix-claim cache-clear retest:** direct
+  Sonatype snapshot metadata still reports `winrt-runtime`,
+  `winrt-runtime-jvm`, `winrt-authoring`, and `winrt-compiler-plugin`
+  `0.1.0-20260603.042831-23`, with `winrt-gradle-plugin`
+  `0.1.0-20260603.043142-4`. After stopping Gradle daemons and clearing the
+  targeted `io.github.compose-fluent` snapshot artifact and descriptor caches
+  under `GRADLE_USER_HOME=F:\Dependencies\gradle`, Gradle dependency insight
+  re-resolved the sample runtime classpath to the same kotlin-winrt coordinates
+  and `skiko-winui` `0.0.0-20260603.075139-3`. The full
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` still reaches the final
+  `compose-winui-sample: text input session cancellation` log and exits with
+  `NTSTATUS 0xC0000005`. Store CDB analyzed the fresh dumps
+  `%LOCALAPPDATA%\CrashDumps\java.exe.58444.dmp` and
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).58444.dmp`; logs are
+  `out/compose-multiplatform-core/windbg-java-58444.log` and
+  `out/compose-multiplatform-core/windbg-java-58444-1.log`. The first dump is
+  again
+  `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`
+  through `Microsoft_UI_Xaml!CCustomDependencyProperty::~CCustomDependencyProperty`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::~DynamicMetadataStorage`,
+  `Microsoft_UI_Xaml!DeinitializeDll`, and `combase!CoUninitialize`. The paired
+  dump is again
+  `SOFTWARE_NX_FAULT_INVALID_POINTER_EXECUTE_c0000005_Microsoft.UI.Xaml.dll!Unloaded`
+  through `ntdll!RtlpFlsDataCleanup` / `ntdll!LdrShutdownThread`. This retest
+  does not resolve `KWINRT-024`; it confirms the currently published Maven
+  snapshot is still in the same XAML dynamic-metadata / unloaded-XAML teardown
+  bucket.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful

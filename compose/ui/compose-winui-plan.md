@@ -274,6 +274,12 @@
   `--refresh-dependencies` is blocked by external TLS handshakes, and the full
   sample still reaches the final smoke log before `NTSTATUS 0xC0000005` without
   producing a newer WER dump.
+- The 2026-06-03 19:21 +08 cache-clear fix-claim retest uses the correct
+  `GRADLE_USER_HOME=F:\Dependencies\gradle`, re-resolves Gradle to the same
+  kotlin-winrt runtime/compiler `0.1.0-20260603.042831-23` and plugin
+  `0.1.0-20260603.043142-4`, and the full sample still reaches the final smoke
+  log before `NTSTATUS 0xC0000005`; fresh Store CDB evidence is back in the XAML
+  dynamic-metadata / unloaded-XAML teardown buckets.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
   authoring sources into the WinUI JVM target; the hand-written
   `WinUIXamlApplication` authoring registration workaround has been removed.
