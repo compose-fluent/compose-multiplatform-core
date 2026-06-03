@@ -212,6 +212,40 @@ class WinUISkikoRenderHostTest {
         assertEquals(1, layer.closeCount)
         assertEquals(1, renderDelegate.closeCount)
     }
+
+    @Test
+    fun preservesAllCloseFailuresWhenSchedulerLayerAndRenderDelegateFail() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val renderDelegate = FakeAutoCloseableRenderDelegate(layer.events)
+        val host = WinUISkikoRenderHost(layer, renderDelegate)
+        layer.scheduler.closeFailure = IllegalStateException("scheduler close failed")
+        layer.closeFailure = IllegalArgumentException("layer close failed")
+        renderDelegate.closeFailure = UnsupportedOperationException("delegate close failed")
+
+        host.startFrameScheduler()
+        val failure = assertFailsWith<IllegalStateException> {
+            host.close()
+        }
+
+        assertEquals("scheduler close failed", failure.message)
+        assertEquals(
+            listOf("layer close failed", "delegate close failed"),
+            failure.suppressed.map { it.message },
+        )
+        assertEquals(
+            listOf(
+                "startFrameScheduler",
+                "closeFrameScheduler",
+                "closeLayer",
+                "closeRenderDelegate",
+            ),
+            layer.events,
+        )
+        assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(1, layer.scheduler.closeCount)
+        assertEquals(1, layer.closeCount)
+        assertEquals(1, renderDelegate.closeCount)
+    }
 }
 
 private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {

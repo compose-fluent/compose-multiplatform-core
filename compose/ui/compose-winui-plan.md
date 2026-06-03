@@ -204,6 +204,9 @@
 - [x] Keep AutoCloseable Skiko render delegates owned by `WinUISkikoRenderHost`
   so draw-bounds recorder cleanup follows the same scheduler/layer/delegate
   close ordering and failure-preservation rules.
+- [x] Cover WinUI Skiko render-host cleanup when scheduler, layer, and
+  AutoCloseable render delegate cleanup all fail, preserving the scheduler
+  failure while suppressing later cleanup failures.
 - [x] Cover WinUI Skiko frame-scheduler startup failure so a failed start is not
   cached as a started scheduler and the host can retry startup.
 - [x] Add repository-local Skiko scheduler/render diagnostics smoke coverage that verifies an unattached `WinUIComposeView` does not start the frame scheduler, and a window-owned `WinUIComposeView` reaches a render frame without `WinUISkikoRenderHost` reporting a render failure.
