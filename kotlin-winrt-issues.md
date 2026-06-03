@@ -458,6 +458,40 @@ baseline, not every retest attempt.
   `compose-winui-sample: text input session cancellation` log before the same
   `NTSTATUS 0xC0000005` process exit. No newer WER dump was produced after this
   run; the latest dump remains `java.exe.55780.dmp`.
+- **2026-06-03 render-size diagnostics retest:** tightening the sample to wait
+  for Skiko diagnostics to report exactly the test-injected `160x96` render
+  size timed out in the attached-window smoke. This was reverted to the stable
+  check that the attached host renders, reports no Skiko failure, and reports a
+  non-negative size when the upstream diagnostics expose one. The failed
+  strict-size probe is not currently treated as a skiko-winui or kotlin-winrt
+  bug because the reported Skiko platform size is not guaranteed to equal the
+  Compose `WindowInfo` test size.
+- **2026-06-03 Store CDB latest dump retest:** Store CDB
+  `10.0.29547.1002` analyzed
+  `%LOCALAPPDATA%\CrashDumps\java.exe.51408.dmp`; the log is
+  `out/compose-multiplatform-core/windbg-java-51408.log`. The bucket is again
+  `STOWED_EXCEPTION_c000027b_CoreMessagingXP.dll!Microsoft::UI::Dispatching::DispatcherQueue::DeferInvokeCallback`.
+  The native stack goes through `KERNELBASE!RaiseFailFastException`,
+  `combase!RoFailFastWithErrorContextInternal2`,
+  `CoreMessagingXP!Microsoft::UI::Dispatching::DispatcherQueue::DeferInvokeCallback`,
+  CoreMessaging deferred-call dispatch, and
+  `Microsoft_UI_Xaml!DirectUI::FrameworkApplication::StartDesktop`. The loaded
+  `Microsoft.UI.Xaml.dll` is Windows App SDK `3.1.8.2604` from the staged
+  kotlin-winrt application package. This is the same application
+  lifetime/dispatcher teardown failure as the previous Store CDB evidence.
+- **2026-06-03 cached snapshot retest:** with the currently cached Maven
+  snapshots, Gradle dependency insight resolves `skiko-winui` to
+  `0.0.0-20260603.023842-2` and kotlin-winrt runtime/authoring artifacts to
+  `0.1.0-20260603.042831-23`. `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `WinUISkikoRenderHostTest` pass. The repository-local WinUI sample reaches
+  `compose-winui-sample: skiko render diagnostics`,
+  `compose-winui-sample: saveable state restored`,
+  `compose-winui-sample: retained value restored`, and the final
+  `compose-winui-sample: text input session cancellation` log before the same
+  `NTSTATUS 0xC0000005` process exit. A `--refresh-dependencies` retest was
+  blocked by external Maven/Google repository TLS handshake failures while
+  resolving buildSrc dependencies, so this run does not prove whether a newer
+  upstream snapshot fixes KWINRT-024.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is

@@ -449,37 +449,43 @@ private object ComposeWinUiSmokeApp {
             true
         }
         LaunchedEffect(Unit) {
-            runWinUIViewPlacementSmoke()
-            runWinUIViewDensitySmoke()
-            runWinUIViewReuseSmoke()
-            runWinUIViewStateUpdateSmoke()
-            runWinUILayoutSnapshotInvalidationSmoke()
-            runWinUILayoutCompletedListenerSmoke()
-            runWinUILayoutRectChangedSmoke()
-            runWinUIOwnerLayerTransformSmoke()
-            runWinUIRootKeyEventSmoke()
-            runWinUIRootFocusTraversalKeySmoke()
-            runWinUIViewFocusInputIntegrationSmoke()
-            runWinUIRootSemanticsSmoke()
-            runWinUIOwnerEndApplyChangesSmoke()
-            runWinUIRootUncaughtExceptionHandlerSmoke()
-            runWinUIRootIndirectPointerSmoke()
-            runWinUIPointerInputSmoke()
-            runWinUIPointerMoveSmoke()
-            runWinUIPointerEnterExitSmoke()
-            runWinUIPointerScrollSmoke()
-            runWinUIViewPointerInteropSmoke()
-            runWinUIPointerCancelOnDisposeSmoke()
-            runWinUIViewRelayoutSmoke()
-            runWinUIViewPropertiesUpdateSmoke()
-            runWinUIViewContainerSyncSmoke()
-            runWinUIViewGeneratedEventCleanupSmoke()
-            runWinUISkikoUnattachedSchedulerSmoke()
-            runWinUISkikoRenderDiagnosticsSmoke()
-            runWinUISaveableStateSmoke()
-            runWinUIRetainedValuesSmoke()
-            runWinUITextInputSessionSmoke()
-            reuseSmokePassed = true
+            try {
+                runWinUIViewPlacementSmoke()
+                runWinUIViewDensitySmoke()
+                runWinUIViewReuseSmoke()
+                runWinUIViewStateUpdateSmoke()
+                runWinUILayoutSnapshotInvalidationSmoke()
+                runWinUILayoutCompletedListenerSmoke()
+                runWinUILayoutRectChangedSmoke()
+                runWinUIOwnerLayerTransformSmoke()
+                runWinUIRootKeyEventSmoke()
+                runWinUIRootFocusTraversalKeySmoke()
+                runWinUIViewFocusInputIntegrationSmoke()
+                runWinUIRootSemanticsSmoke()
+                runWinUIOwnerEndApplyChangesSmoke()
+                runWinUIRootUncaughtExceptionHandlerSmoke()
+                runWinUIRootIndirectPointerSmoke()
+                runWinUIPointerInputSmoke()
+                runWinUIPointerMoveSmoke()
+                runWinUIPointerEnterExitSmoke()
+                runWinUIPointerScrollSmoke()
+                runWinUIViewPointerInteropSmoke()
+                runWinUIPointerCancelOnDisposeSmoke()
+                runWinUIViewRelayoutSmoke()
+                runWinUIViewPropertiesUpdateSmoke()
+                runWinUIViewContainerSyncSmoke()
+                runWinUIViewGeneratedEventCleanupSmoke()
+                runWinUISkikoUnattachedSchedulerSmoke()
+                runWinUISkikoRenderDiagnosticsSmoke()
+                runWinUISaveableStateSmoke()
+                runWinUIRetainedValuesSmoke()
+                runWinUITextInputSessionSmoke()
+                reuseSmokePassed = true
+            } catch (throwable: Throwable) {
+                throwable.printStackTrace()
+                applicationScope.exitApplication()
+                throw throwable
+            }
         }
         LaunchedEffect(reuseSmokePassed, windowSmokePassed, secondaryWindowClosePassed) {
             if (
@@ -2519,6 +2525,10 @@ private object ComposeWinUiSmokeApp {
             }
             check(currentComposeView.renderVersionForTest == 0L) {
                 "Unattached WinUIComposeView rendered before its root was loaded."
+            }
+            check(currentComposeView.lastRenderSizeForTest == null) {
+                "Unattached WinUIComposeView reported a render size before loading: " +
+                    currentComposeView.lastRenderSizeForTest
             }
             check(currentComposeView.renderFailureForTest == null) {
                 "Unattached WinUIComposeView reported a Skiko render failure: " +
