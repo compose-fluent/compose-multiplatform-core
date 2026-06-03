@@ -51,6 +51,9 @@ internal class WinUISkikoRenderHost(
     val lastRenderedStateSizeForTest: IntSize?
         get() = layer.lastRenderedStateSize
 
+    val pendingRenderStateSizeForTest: IntSize?
+        get() = layer.pendingRenderStateSize
+
     val renderFailureForTest: String?
         get() = layer.renderFailure
 
@@ -94,6 +97,8 @@ internal interface WinUISkikoLayerAdapter : AutoCloseable {
 
     val lastRenderedStateSize: IntSize?
 
+    val pendingRenderStateSize: IntSize?
+
     val renderFailure: String?
 
     fun requestRender(throttledToVsync: Boolean)
@@ -126,6 +131,11 @@ private class DefaultWinUISkikoLayerAdapter(
 
     override val lastRenderedStateSize: IntSize?
         get() = renderDiagnostics?.callOrNull("getLastRenderedState")?.let {
+            it.renderStateSizeOrNull()
+        }
+
+    override val pendingRenderStateSize: IntSize?
+        get() = renderDiagnostics?.callOrNull("getPendingInvalidatedState")?.let {
             it.renderStateSizeOrNull()
         }
 

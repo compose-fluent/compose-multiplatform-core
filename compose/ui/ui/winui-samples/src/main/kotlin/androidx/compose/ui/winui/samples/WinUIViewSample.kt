@@ -2579,6 +2579,10 @@ private object ComposeWinUiSmokeApp {
                 "Unattached WinUIComposeView reported a rendered state before loading: " +
                     currentComposeView.lastRenderedStateSizeForTest
             }
+            check(currentComposeView.pendingRenderStateSizeForTest == null) {
+                "Unattached WinUIComposeView reported a pending render state before loading: " +
+                    currentComposeView.pendingRenderStateSizeForTest
+            }
             check(currentComposeView.renderFailureForTest == null) {
                 "Unattached WinUIComposeView reported a Skiko render failure: " +
                     currentComposeView.renderFailureForTest
@@ -2625,6 +2629,10 @@ private object ComposeWinUiSmokeApp {
             check(renderedStateSize == size) {
                 "WinUI Skiko render diagnostics reported rendered state size " +
                     "$renderedStateSize but platform render size $size."
+            }
+            check(currentComposeView.pendingRenderStateSizeForTest == null) {
+                "WinUI Skiko render diagnostics left a pending render state after rendering: " +
+                    currentComposeView.pendingRenderStateSizeForTest
             }
         } finally {
             currentComposeView.dispose()
