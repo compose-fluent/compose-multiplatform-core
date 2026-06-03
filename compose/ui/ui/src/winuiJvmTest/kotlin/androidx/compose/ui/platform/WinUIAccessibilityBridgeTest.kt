@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.semantics.EmptySemanticsModifier
 import androidx.compose.ui.semantics.SemanticsOwner
+import org.jetbrains.skiko.winui.WinUIAccessibilityChangeType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -73,8 +74,56 @@ class WinUIAccessibilityBridgeTest {
         assertTrue(update.semanticsChanged)
         assertEquals(listOf(11, 12), update.layoutChangedSemanticsIds)
         assertEquals(Offset(4f, 6f), update.scrollDelta)
+        assertEquals(WinUIAccessibilityChangeType.STRUCTURE_CHANGED, update.change.type)
+        assertEquals(11L, update.change.nodeId)
         assertFalse(bridge.stateForTest().currentSemanticsNodesInvalidated)
         assertFalse(bridge.stateForTest().hasPendingFlush)
+    }
+
+    @Test
+    fun emitsNodeUpdatedChangeForLayoutOnlyFlush() {
+        val scheduled = mutableListOf<() -> Unit>()
+        val updates = mutableListOf<WinUIAccessibilityUpdate>()
+        val bridge = createBridge(
+            scheduled = scheduled,
+            updates = updates,
+        )
+        val owner = createSemanticsOwner()
+
+        bridge.forceAccessibilityForTesting(true)
+        bridge.onLayoutChange(owner, semanticsId = 21)
+
+        scheduled.single().invoke()
+
+        val update = updates.single()
+        assertFalse(update.semanticsChanged)
+        assertEquals(listOf(21), update.layoutChangedSemanticsIds)
+        assertEquals(null, update.scrollDelta)
+        assertEquals(WinUIAccessibilityChangeType.NODE_UPDATED, update.change.type)
+        assertEquals(21L, update.change.nodeId)
+    }
+
+    @Test
+    fun emitsValueChangedChangeForScrollOnlyFlush() {
+        val scheduled = mutableListOf<() -> Unit>()
+        val updates = mutableListOf<WinUIAccessibilityUpdate>()
+        val bridge = createBridge(
+            scheduled = scheduled,
+            updates = updates,
+        )
+
+        bridge.forceAccessibilityForTesting(true)
+        bridge.onScrollChanged(Offset(5f, 7f))
+
+        scheduled.single().invoke()
+
+        val update = updates.single()
+        assertSame(null, update.semanticsOwner)
+        assertFalse(update.semanticsChanged)
+        assertEquals(emptyList(), update.layoutChangedSemanticsIds)
+        assertEquals(Offset(5f, 7f), update.scrollDelta)
+        assertEquals(WinUIAccessibilityChangeType.VALUE_CHANGED, update.change.type)
+        assertEquals(null, update.change.nodeId)
     }
 
     @Test

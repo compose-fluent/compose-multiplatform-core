@@ -248,7 +248,9 @@
   focus, click, expand, collapse, set-text, and progress increment/decrement.
   Snapshot coverage now also validates projected bounds, hidden-node filtering,
   live-region metadata, help text, role, and enabled/focusable/selected/
-  checked/editable/password state.
+  checked/editable/password state. Change-notification coverage validates
+  structure, node-updated, and value-changed events before they are forwarded
+  to the Skiko WinUI layer.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
