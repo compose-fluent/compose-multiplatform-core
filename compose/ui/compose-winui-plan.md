@@ -298,7 +298,8 @@
 
 ## skiko-winui status
 
-- `SKIKO-004`: Open compose-side integration / upstream triage. An unattached
+- `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
+  current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;
   this differs from skiko's own sample because the skiko sample renders through
   a layer already hosted by a real WinUI window. Compose-winui now attaches the
@@ -314,8 +315,10 @@
   Compose semantics. The 2026-06-03 23:00 +08 cache-clear retest resolves
   `skiko-winui` / `skiko-winui-windows` to `0.0.0-20260603.150039-4`; WinUI JVM
   compile, focused Skiko/owner/isolation tests, and `runWinUISkikoSample` pass.
-  Pixel-read nonblank frame validation is still deferred until there is a stable
-  attached-window pixel-read path.
+  This should not be treated as proof that latest upstream still hangs; reopen
+  only with a deliberate upstream-style unattached scheduler repro on the
+  current snapshot. Pixel-read nonblank frame validation is still deferred until
+  there is a stable attached-window pixel-read path.
 - `SKIKO-006`: Open upstream/publication/API. The current WinUI JVM path still
   needs `org.jetbrains.skiko:skiko-awt` for core Skia/Skiko JVM API classes, so
   compose-winui guards against `skiko-awt-runtime-*` native runtime artifacts

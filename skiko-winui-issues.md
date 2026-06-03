@@ -11,10 +11,10 @@ baseline, not every retest attempt.
 
 - **Open upstream/publication coordinates:** none.
 - **Open upstream/publication/API:** `SKIKO-006`.
-- **Open compose-side integration:** `SKIKO-004`.
+- **Open compose-side integration:** none.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
-  `SKIKO-005`.
+  `SKIKO-004`, `SKIKO-005`.
 
 ## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
 
@@ -38,6 +38,11 @@ baseline, not every retest attempt.
   rejects `skiko-awt-runtime-*` native runtime artifacts while temporarily
   allowing the `skiko-awt` API jar. Remove that allowance once skiko-winui or
   Skiko publishes an AWT-free JVM API artifact for the WinUI path.
+- **2026-06-03 23:16 +08 snapshot retest:** with `skiko-winui`
+  `0.0.0-20260603.150039-4`, Gradle dependency insight for
+  `winuiJvmRuntimeClasspath` still resolves `org.jetbrains.skiko:skiko-awt`
+  through `org.jetbrains.skiko:skiko:0.0.0-SNAPSHOT`, so `SKIKO-006` remains
+  open.
 
 ## SKIKO-005: published render diagnostics API is still internal
 
@@ -66,7 +71,8 @@ baseline, not every retest attempt.
 
 ## SKIKO-004: unattached WinUI Skiko surface can hang in flushAndSubmit
 
-- **Status:** Open compose-side integration / upstream triage.
+- **Status:** Mitigated locally; not an active upstream/open issue for the
+  current compose-winui path.
 - **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
   while adding render diagnostics to the repository-local
   `runWinUIViewSample` smoke path on 2026-06-03.
@@ -116,6 +122,12 @@ baseline, not every retest attempt.
   `runWinUIViewSample` still reaches the final smoke log and exits with the
   known non-blocking `KWINRT-024` `NTSTATUS 0xC0000005` teardown crash, without
   producing a newer WER dump.
+- **Current assessment:** do not keep this as proof that the latest upstream
+  `skiko-winui` still hangs. The validated current behavior is that
+  compose-winui no longer starts Skiko presentation for unattached roots, and
+  attached Skiko rendering passes in the focused repository-local sample. Reopen
+  only if a deliberate upstream-style unattached scheduler probe reproduces the
+  original `flushAndSubmit` hang on the current snapshot.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 
