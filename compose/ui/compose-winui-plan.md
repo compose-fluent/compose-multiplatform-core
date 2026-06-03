@@ -132,8 +132,9 @@
 - [x] Add tests proving WinUI source sets do not depend on `desktopMain`, AWT, Swing, or Skiko AWT classes, and that WinUI keeps its own XAML/WinRT actuals where Skiko has generic or Win32-backed behavior.
 - [x] Add a WinUI JVM compile-source bridge isolation test that keeps the
   temporary `compileKotlinWinuiJvm` source override limited to common,
-  jvm/Android, WinUI, and generated WinRT sources, without compiling
-  `desktopMain` or generic `skikoMain` sources.
+  jvm/Android, WinUI, generated WinRT sources, and explicitly selected shared
+  Skiko sources, without compiling `desktopMain` or the whole generic
+  `skikoMain` source tree.
 - [x] Add a WinUI JVM runtime classpath guard that rejects Skiko AWT/Desktop
   native runtime artifacts while `SKIKO-006` tracks the temporary need for the
   AWT-named Skiko JVM API jar.
@@ -226,7 +227,7 @@
   `WinUIComposeView` is backed by the Skiko WinUI Direct3D render API in both
   unattached scheduler-deferral and attached-window render paths.
 - [x] Add WinUI Skiko draw-bounds diagnostics by wrapping the WinUI render
-  delegate with a narrow recorder and validating the focused
+  delegate with the shared Skiko draw-rect recorder and validating the focused
   `runWinUISkikoSample` path records non-empty Compose draw bounds after an
   attached render and clears those bounds after Compose content is disposed.
 - [x] Add focused WinUI JVM unit coverage for the draw-bounds recorder:

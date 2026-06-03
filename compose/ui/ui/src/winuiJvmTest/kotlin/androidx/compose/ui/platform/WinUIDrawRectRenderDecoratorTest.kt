@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.skiko.RecordDrawRectRenderDecorator
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.PictureRecorder
@@ -26,11 +27,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class WinUIDrawRectRenderDecoratorTest {
+class WinUIRecordDrawRectRenderDecoratorTest {
     @Test
     fun recordsNonEmptyDrawBounds() {
         val drawRects = mutableListOf<Rect>()
-        val decorator = WinUIDrawRectRenderDecorator(
+        val decorator = RecordDrawRectRenderDecorator(
             decorated = DrawRectDelegate(SkRect.makeXYWH(4f, 5f, 20f, 10f)),
             onDrawRectChange = { drawRects += it },
         )
@@ -47,7 +48,7 @@ class WinUIDrawRectRenderDecoratorTest {
     @Test
     fun recordsNegativeDrawBounds() {
         val drawRects = mutableListOf<Rect>()
-        val decorator = WinUIDrawRectRenderDecorator(
+        val decorator = RecordDrawRectRenderDecorator(
             decorated = DrawRectDelegate(SkRect.makeXYWH(-6f, -4f, 10f, 8f)),
             onDrawRectChange = { drawRects += it },
         )
@@ -65,7 +66,7 @@ class WinUIDrawRectRenderDecoratorTest {
     fun reportsZeroBoundsAfterDrawsStop() {
         val drawRects = mutableListOf<Rect>()
         val delegate = SwitchingDrawDelegate()
-        val decorator = WinUIDrawRectRenderDecorator(
+        val decorator = RecordDrawRectRenderDecorator(
             decorated = delegate,
             onDrawRectChange = { drawRects += it },
         )
@@ -87,7 +88,7 @@ class WinUIDrawRectRenderDecoratorTest {
     fun closedDecoratorForwardsRenderWithoutUpdatingDrawBounds() {
         val drawRects = mutableListOf<Rect>()
         val delegate = CountingDrawDelegate()
-        val decorator = WinUIDrawRectRenderDecorator(
+        val decorator = RecordDrawRectRenderDecorator(
             decorated = delegate,
             onDrawRectChange = { drawRects += it },
         )

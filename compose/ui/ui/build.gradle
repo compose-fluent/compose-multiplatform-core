@@ -38,7 +38,7 @@ plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
     id("JetBrainsAndroidXPlugin")
-    id("io.github.composefluent.winrt")
+    id("io.github.composefluent.winrt") apply false
 }
 
 def composeWinUiJvmTargetEnabled = providers
@@ -46,7 +46,9 @@ def composeWinUiJvmTargetEnabled = providers
         .map { it.toBoolean() }
         .orElse(false)
         .get()
-def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiGradlePluginRuntimeAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiGradlePluginAvailable =
+        composeWinUiJvmTargetEnabled && composeWinUiGradlePluginRuntimeAvailable
 def composeWinUiWindowsSdkVersion = providers
         .gradleProperty("composeWinUi.windowsSdkVersion")
         .orElse("10.0.26100.0")
@@ -64,11 +66,13 @@ def composeWinUiSkikoVersion = providers
         .gradleProperty("composeWinUi.skikoVersion")
         .orElse(composeWinUiSkikoWinUiVersion)
 
-if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginAvailable) {
+if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginRuntimeAvailable) {
     throw new GradleException("compose-winui JVM target requires running Gradle on JDK 22 or newer.")
 }
 
 if (composeWinUiGradlePluginAvailable) {
+    apply plugin: "io.github.composefluent.winrt"
+
     winRt {
         windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
         nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
@@ -517,12 +521,19 @@ if (composeWinUiGradlePluginAvailable) {
 
     def generatedWinRtSources = layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin")
     def generatedWinRtAuthoringSources = layout.buildDirectory.dir("generated/kotlin-winrt-authoring/src/main/kotlin")
+    def generatedWinRtSourceDirectories = [
+            generatedWinRtSources,
+            generatedWinRtAuthoringSources,
+    ]
     tasks.withType(KotlinCompile).configureEach { task ->
         if (!task.name.contains("Winui")) {
             task.exclude { details ->
-                details.file.toPath().toAbsolutePath().normalize().startsWith(
-                        generatedWinRtSources.get().asFile.toPath().toAbsolutePath().normalize()
-                )
+                def filePath = details.file.toPath().toAbsolutePath().normalize()
+                generatedWinRtSourceDirectories.any { sourceDirectory ->
+                    filePath.startsWith(
+                            sourceDirectory.get().asFile.toPath().toAbsolutePath().normalize()
+                    )
+                }
             }
             return
         }
@@ -534,6 +545,7 @@ if (composeWinUiGradlePluginAvailable) {
             task.setSource(project.files(
                     "src/commonMain/kotlin",
                     "src/jvmAndAndroidMain/kotlin",
+                    "src/skikoMain/kotlin/androidx/compose/ui/skiko/RecordDrawRectRenderDecorator.skiko.kt",
                     "src/winuiMain/kotlin",
                     "src/winuiJvmMain/kotlin",
                     layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin"),

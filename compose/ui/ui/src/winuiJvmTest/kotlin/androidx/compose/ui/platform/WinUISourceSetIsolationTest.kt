@@ -83,7 +83,7 @@ class WinUISourceSetIsolationTest {
     }
 
     @Test
-    fun winuiJvmCompileSourceBridgeDoesNotCompileDesktopOrGenericSkikoSources() {
+    fun winuiJvmCompileSourceBridgeOnlyCompilesSelectedSkikoSharedSource() {
         val moduleRoot = findUiModuleRoot()
         val buildScript = moduleRoot.resolve("build.gradle").readText()
         val bridgeBlock = checkNotNull(compileKotlinWinuiJvmBridgeBlock(buildScript)) {
@@ -92,6 +92,7 @@ class WinUISourceSetIsolationTest {
         val requiredRoots = listOf(
             "src/commonMain/kotlin",
             "src/jvmAndAndroidMain/kotlin",
+            "src/skikoMain/kotlin/androidx/compose/ui/skiko/RecordDrawRectRenderDecorator.skiko.kt",
             "src/winuiMain/kotlin",
             "src/winuiJvmMain/kotlin",
             "generated/kotlin-winrt/src/main/kotlin",
@@ -99,7 +100,7 @@ class WinUISourceSetIsolationTest {
         )
         val forbiddenRoots = listOf(
             "src/desktopMain/kotlin",
-            "src/skikoMain/kotlin",
+            "\"src/skikoMain/kotlin\"",
         )
 
         requiredRoots.forEach { root ->

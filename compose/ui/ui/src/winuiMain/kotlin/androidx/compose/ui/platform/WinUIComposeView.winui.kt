@@ -41,6 +41,7 @@ import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.node.WinUICoordinateMapper
 import androidx.compose.ui.node.WinUIOwner
+import androidx.compose.ui.skiko.RecordDrawRectRenderDecorator
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.WinUIInteropTransaction
 import androidx.compose.ui.viewinterop.WinUIRootContentHost
@@ -130,7 +131,7 @@ class WinUIComposeView internal constructor(
     private val pointerCursorAdapter = WinUIPointerCursorAdapter(rootContentControl)
     private val pointerIconService = WinUIPointerIconService(pointerCursorAdapter::setIcon)
     private var lastDrawRect = Rect.Zero
-    private val renderDelegate = WinUIDrawRectRenderDecorator(
+    private val renderDelegate = RecordDrawRectRenderDecorator(
         object : SkikoRenderDelegate {
             override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
                 render(canvas)

@@ -17,7 +17,6 @@
 package androidx.compose.ui.skiko
 
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.toComposeRect
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Picture
 import org.jetbrains.skia.PictureRecorder
@@ -63,11 +62,13 @@ internal class RecordDrawRectRenderDecorator(
         block: (Canvas) -> Unit
     ): SkRect? {
         val pictureCanvas = pictureRecorder.beginRecording(
-            Float.MIN_VALUE,
-            Float.MIN_VALUE,
-            Float.MAX_VALUE,
-            Float.MAX_VALUE,
-            bbhFactory
+            SkRect.makeLTRB(
+                Float.MIN_VALUE,
+                Float.MIN_VALUE,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+            ),
+            bbhFactory,
         )
         pictureCanvas.translate(MeasureOffset, MeasureOffset)
         block(pictureCanvas)
@@ -88,6 +89,14 @@ internal class RecordDrawRectRenderDecorator(
             picture.close()
         }
     }
+
+    private fun SkRect.toComposeRect(): Rect =
+        Rect(
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+        )
 }
 
 /**
