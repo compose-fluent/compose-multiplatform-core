@@ -371,6 +371,31 @@ baseline, not every retest attempt.
   `ucrtbase!common_end_thread`. This keeps the latest evidence in the
   unloaded-XAML teardown bucket and still does not show a Java/Kotlin managed
   exception or FFM upcall frame.
+- **2026-06-03 initial dump evidence:** Store WinDbg also analyzed the earlier
+  same-PID dump `%LOCALAPPDATA%\CrashDumps\java.exe.39844.dmp`; the log is
+  `out/compose-multiplatform-core/windbg-java-39844-initial.log`. This first
+  dump has the more useful pre-unload bucket
+  `INVALID_POINTER_READ_c0000005_Microsoft.UI.Xaml.dll!ctl::ComPtr_ABI::Microsoft::UI::Xaml::IFrameworkElement_::InternalRelease`.
+  The exception address is
+  `Microsoft_UI_Xaml!ctl::ComPtr<ABI::Microsoft::UI::Xaml::IFrameworkElement>::InternalRelease+0x1e`
+  (`Microsoft.UI.Xaml.dll` `+0x5c5ce`), attempting to read from
+  `0x00007ff9e06e57f8`. The native stack runs through
+  `Microsoft_UI_Xaml!CCustomDependencyProperty::~CCustomDependencyProperty`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::~DynamicMetadataStorage`,
+  `Microsoft_UI_Xaml!DirectUI::DynamicMetadataStorage::Destroy`,
+  `Microsoft_UI_Xaml!DeinitializeDll`, then `ntdll!LdrpProcessDetachNode`,
+  `KERNELBASE!FreeLibrary`, `combase!CClassCache::CleanUpDllsForProcess`,
+  `combase!CoUninitialize`, and `combase!FlsThreadCleanupCallback`. This points
+  specifically at XAML dynamic metadata / custom dependency property lifetime
+  during COM thread cleanup.
+- **2026-06-03 compose-side isolation:** a diagnostic build replaced the
+  authored `WinUIRootContentControl : ContentControl` with a plain
+  `ContentControl` typealias and disabled root cursor assignment. The WinUI JVM
+  compile still passed and the sample still reached
+  `compose-winui-sample: text input session cancellation` before exiting with
+  `NTSTATUS 0xC0000005`. This rules out the compose-winui root content control
+  authored subclass as the sole trigger; the remaining authored XAML type in
+  that diagnostic path is `WinUIXamlApplication`.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 
