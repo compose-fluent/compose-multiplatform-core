@@ -352,6 +352,25 @@ baseline, not every retest attempt.
   `compose-winui-sample: text input session cancellation` and exits with
   `NTSTATUS 0xC0000005`. No newer `java.exe*.dmp` was present in
   `%LOCALAPPDATA%\CrashDumps` after this run.
+- **2026-06-03 skiko-winui snapshot validation:** after consuming
+  `skiko-winui` `0.0.0-20260603.023842-2`,
+  `winrt-gradle-plugin` `0.1.0-20260603.021843-3`, and
+  `winrt-compiler-plugin` `0.1.0-20260603.021535-22`,
+  `runWinUIViewSample` reaches the same final smoke log
+  `compose-winui-sample: text input session cancellation` and exits with
+  `NTSTATUS 0xC0000005`.
+- **2026-06-03 WinDbg evidence:** Store WinDbg
+  `10.0.29547.1002` analyzed
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).39844.dmp`; the log is
+  `out/compose-multiplatform-core/windbg-java-39844.log`. The failure bucket is
+  `SOFTWARE_NX_FAULT_INVALID_POINTER_EXECUTE_c0000005_Microsoft.UI.Xaml.dll!Unloaded`,
+  with `ExceptionAddress` `<Unloaded_Microsoft.UI.Xaml.dll>+0x287490` and
+  `AV.Type=Execute`. The stack is in thread teardown through
+  `ntdll!RtlpFlsDataCleanup`, `ntdll!LdrShutdownThread`,
+  `ntdll!RtlExitUserThread`, `KERNELBASE!FreeLibraryAndExitThread`, and
+  `ucrtbase!common_end_thread`. This keeps the latest evidence in the
+  unloaded-XAML teardown bucket and still does not show a Java/Kotlin managed
+  exception or FFM upcall frame.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 
