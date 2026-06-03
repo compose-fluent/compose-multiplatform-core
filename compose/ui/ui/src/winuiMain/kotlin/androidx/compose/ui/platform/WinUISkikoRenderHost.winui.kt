@@ -48,6 +48,9 @@ internal class WinUISkikoRenderHost(
     val lastRenderSizeForTest: IntSize?
         get() = layer.lastRenderSize
 
+    val lastRenderedStateSizeForTest: IntSize?
+        get() = layer.lastRenderedStateSize
+
     val renderFailureForTest: String?
         get() = layer.renderFailure
 
@@ -89,6 +92,8 @@ internal interface WinUISkikoLayerAdapter : AutoCloseable {
 
     val lastRenderSize: IntSize?
 
+    val lastRenderedStateSize: IntSize?
+
     val renderFailure: String?
 
     fun requestRender(throttledToVsync: Boolean)
@@ -117,6 +122,11 @@ private class DefaultWinUISkikoLayerAdapter(
                     height = (it.callOrNull("getHeight") as Number).toInt(),
                 )
             }.getOrNull()
+        }
+
+    override val lastRenderedStateSize: IntSize?
+        get() = renderDiagnostics?.callOrNull("getLastRenderedState")?.let {
+            it.renderStateSizeOrNull()
         }
 
     override val renderFailure: String?
@@ -155,4 +165,12 @@ private class DefaultWinUISkikoLayerAdapter(
 private fun Any.callOrNull(methodName: String): Any? =
     runCatching {
         javaClass.getMethod(methodName).invoke(this)
+    }.getOrNull()
+
+private fun Any.renderStateSizeOrNull(): IntSize? =
+    runCatching {
+        IntSize(
+            width = (callOrNull("getScaledWidth") as Number).toInt(),
+            height = (callOrNull("getScaledHeight") as Number).toInt(),
+        )
     }.getOrNull()

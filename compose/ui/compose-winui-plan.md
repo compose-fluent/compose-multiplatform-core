@@ -193,6 +193,7 @@
 - [x] Add initial WinUI rendering-host adapter unit tests for resize, render requests, frame-scheduler reuse, close ordering, idempotent close, post-close suppression, and render diagnostics exposure.
 - [x] Add repository-local Skiko scheduler/render diagnostics smoke coverage that verifies an unattached `WinUIComposeView` does not start the frame scheduler, and a window-owned `WinUIComposeView` reaches a render frame without `WinUISkikoRenderHost` reporting a render failure.
 - [x] Add a focused repository-local `runWinUISkikoSample` task so Skiko scheduler/render diagnostics can be retested without running the full WinUIView/window/interops smoke suite.
+- [x] Add repository-local Skiko diagnostics coverage that checks attached render state size and platform render result size are both reported and consistent.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
@@ -230,9 +231,9 @@
   defers `WinUIComposeView` frame-scheduler startup until the root is loaded,
   keeps diagnostics unit-tested, and validates both an unattached scheduler
   deferral path and an attached-window render diagnostics frame with a positive
-  platform render size in the repository-local full sample and focused
-  `runWinUISkikoSample` task. Nonblank frame validation is still deferred until
-  there is a stable attached-window pixel-read path.
+  platform render size plus matching rendered-state size in the repository-local
+  full sample and focused `runWinUISkikoSample` task. Nonblank frame validation
+  is still deferred until there is a stable attached-window pixel-read path.
 - `SKIKO-003`: Closed on 2026-06-03. `WinUIComposeView.updateRootContent` now
   flushes pending root-content transactions even when the interop overlay
   identity is unchanged, and the sample validates WinUIView overlay children

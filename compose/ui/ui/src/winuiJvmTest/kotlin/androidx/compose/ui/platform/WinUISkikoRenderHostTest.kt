@@ -46,10 +46,12 @@ class WinUISkikoRenderHostTest {
 
         layer.renderVersion = 7L
         layer.lastRenderSize = IntSize(80, 60)
+        layer.lastRenderedStateSize = IntSize(80, 60)
         layer.renderFailure = "render failed"
 
         assertEquals(7L, host.renderVersionForTest)
         assertEquals(IntSize(80, 60), host.lastRenderSizeForTest)
+        assertEquals(IntSize(80, 60), host.lastRenderedStateSizeForTest)
         assertEquals("render failed", host.renderFailureForTest)
     }
 
@@ -112,6 +114,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     var closeCount = 0
     override var renderVersion: Long = 0L
     override var lastRenderSize: IntSize? = null
+    override var lastRenderedStateSize: IntSize? = null
     override var renderFailure: String? = null
 
     override val component: FrameworkElement

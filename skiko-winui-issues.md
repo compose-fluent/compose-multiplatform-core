@@ -41,12 +41,12 @@ baseline, not every retest attempt.
   covered by `WinUISkikoRenderHostTest`; the repository-local sample validates
   both that an unattached `WinUIComposeView` does not start the Skiko frame
   scheduler and that an attached-window render diagnostics frame succeeds with
-  a positive platform render size. A focused `runWinUISkikoSample` task now
-  runs just those Skiko diagnostics and exits successfully without the full
-  sample's known `KWINRT-024` teardown crash. The current upstream diagnostics
-  expose render state/result metadata but no pixel-read or surface snapshot API,
-  so nonblank frame validation remains blocked on a stable attached-window
-  pixel-read path.
+  a positive platform render size whose dimensions match the last rendered
+  state. A focused `runWinUISkikoSample` task now runs just those Skiko
+  diagnostics and exits successfully without the full sample's known
+  `KWINRT-024` teardown crash. The current upstream diagnostics expose render
+  state/result metadata but no pixel-read or surface snapshot API, so nonblank
+  frame validation remains blocked on a stable attached-window pixel-read path.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

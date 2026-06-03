@@ -93,6 +93,10 @@ class WinUIComposeView internal constructor(
         get() = renderHost.lastRenderSizeForTest
 
     @InternalComposeUiApi
+    val lastRenderedStateSizeForTest: IntSize?
+        get() = renderHost.lastRenderedStateSizeForTest
+
+    @InternalComposeUiApi
     val renderFailureForTest: String?
         get() = renderHost.renderFailureForTest
 
