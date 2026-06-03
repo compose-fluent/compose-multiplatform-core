@@ -579,6 +579,20 @@ baseline, not every retest attempt.
   `NTSTATUS 0xC0000005`. No newer WER dump was produced; the latest native
   evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.41020.dmp` /
   `%LOCALAPPDATA%\CrashDumps\java.exe(1).41020.dmp`.
+- **2026-06-03 18:49 +08 kt-winrt fix-claim retest:** direct Sonatype snapshot
+  metadata still reports `winrt-runtime` and `winrt-compiler-plugin`
+  `0.1.0-20260603.042831-23`; transient SSL handshake failures prevented
+  reading every metadata file directly, and Gradle `--refresh-dependencies`
+  remains blocked by external Maven/Google TLS handshake failures while
+  resolving settings/buildSrc dependencies. A cached Gradle dependency insight
+  still resolves the sample runtime classpath to `winrt-runtime`,
+  `winrt-runtime-jvm`, and `winrt-authoring` `0.1.0-20260603.042831-23`,
+  with `skiko-winui` `0.0.0-20260603.075139-3`. The full
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` again reaches the final
+  `compose-winui-sample: text input session cancellation` log and exits with
+  `NTSTATUS 0xC0000005`. No newer WER dump was produced; the latest native
+  evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.41020.dmp` /
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).41020.dmp`.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful

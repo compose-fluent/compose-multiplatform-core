@@ -46,12 +46,17 @@ import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineStart
@@ -223,6 +228,125 @@ class WinUIOwnerTest {
 
             assertTrue(actionInvoked)
             assertTrue(clicked)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderInvokesComposeFocusAction() {
+        val owner = createOwner()
+        try {
+            var focused = false
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    testTag = "winui-focus"
+                    requestFocus {
+                        focused = true
+                        true
+                    }
+                }
+                it.measurePolicy = fixedMeasurePolicy(24, 24)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(64, 64))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val actionInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.FOCUS,
+                    text = "",
+                ),
+            )
+
+            assertTrue(actionInvoked)
+            assertTrue(focused)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderInvokesComposeExpandAndCollapseActions() {
+        val owner = createOwner()
+        try {
+            var expanded = false
+            var collapsed = false
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    testTag = "winui-expand-collapse"
+                    expand {
+                        expanded = true
+                        true
+                    }
+                    collapse {
+                        collapsed = true
+                        true
+                    }
+                }
+                it.measurePolicy = fixedMeasurePolicy(24, 24)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(64, 64))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val expandInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.EXPAND,
+                    text = "",
+                ),
+            )
+            val collapseInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.COLLAPSE,
+                    text = "",
+                ),
+            )
+
+            assertTrue(expandInvoked)
+            assertTrue(collapseInvoked)
+            assertTrue(expanded)
+            assertTrue(collapsed)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderInvokesComposeSetTextAction() {
+        val owner = createOwner()
+        try {
+            var textSet: AnnotatedString? = null
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    testTag = "winui-set-text"
+                    setText {
+                        textSet = it
+                        true
+                    }
+                }
+                it.measurePolicy = fixedMeasurePolicy(24, 24)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(64, 64))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val actionInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.SET_TEXT,
+                    text = "WinUI text",
+                ),
+            )
+
+            assertTrue(actionInvoked)
+            assertEquals(AnnotatedString("WinUI text"), textSet)
         } finally {
             owner.dispose()
         }

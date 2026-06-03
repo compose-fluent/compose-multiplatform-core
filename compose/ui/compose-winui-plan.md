@@ -263,6 +263,11 @@
   kotlin-winrt snapshots; normal and forced `--rerun-tasks` full sample runs
   still reach the final smoke log and exit with `NTSTATUS 0xC0000005`, with no
   newer WER dump.
+- The 2026-06-03 18:49 +08 fix-claim retest also resolves the same cached
+  kotlin-winrt snapshots; direct metadata for runtime/compiler is unchanged,
+  `--refresh-dependencies` is blocked by external TLS handshakes, and the full
+  sample still reaches the final smoke log before `NTSTATUS 0xC0000005` without
+  producing a newer WER dump.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
   authoring sources into the WinUI JVM target; the hand-written
   `WinUIXamlApplication` authoring registration workaround has been removed.
