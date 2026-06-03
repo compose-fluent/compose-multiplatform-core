@@ -86,9 +86,22 @@ internal class WinUISkikoRenderHost(
     override fun close() {
         if (isClosed) return
         isClosed = true
-        frameScheduler?.close()
+        val scheduler = frameScheduler
         frameScheduler = null
-        layer.close()
+        var failure: Throwable? = null
+        if (scheduler != null) {
+            try {
+                scheduler.close()
+            } catch (e: Throwable) {
+                failure = e
+            }
+        }
+        try {
+            layer.close()
+        } catch (e: Throwable) {
+            failure?.addSuppressed(e) ?: throw e
+        }
+        failure?.let { throw it }
     }
 }
 

@@ -191,6 +191,9 @@
 - [ ] Split the current monolithic `runWinUIViewSample` smoke into focused WinUI JVM test/smoke suites, mirroring UIKit's split between unit/instrumented coverage: scene/rendering, interop lifecycle/layout/input, accessibility, text input/keyboard, window/lifecycle, pointer/scroll, resource loading, disposal/leaks, and launch integration.
 - [ ] Add WinUI rendering-host tests comparable to UIKit `MetalRedrawer` and layer tests: resize, invalidation coalescing, frame pacing, render/interop transaction ordering, disposal after pending frame callbacks, and nonblank surface output once drawing is implemented.
 - [x] Add initial WinUI rendering-host adapter unit tests for resize, render requests, frame-scheduler reuse, close ordering, idempotent close, post-close suppression, and render diagnostics exposure.
+- [x] Harden WinUI Skiko rendering-host release so layer cleanup still runs if
+  frame-scheduler cleanup throws, preserving the first close failure and
+  suppressing the second.
 - [x] Add repository-local Skiko scheduler/render diagnostics smoke coverage that verifies an unattached `WinUIComposeView` does not start the frame scheduler, and a window-owned `WinUIComposeView` reaches a render frame without `WinUISkikoRenderHost` reporting a render failure.
 - [x] Add a focused repository-local `runWinUISkikoSample` task so Skiko scheduler/render diagnostics can be retested without running the full WinUIView/window/interops smoke suite.
 - [x] Add repository-local Skiko diagnostics coverage that checks attached

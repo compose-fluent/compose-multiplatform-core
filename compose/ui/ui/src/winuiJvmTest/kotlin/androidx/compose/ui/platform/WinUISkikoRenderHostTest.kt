@@ -107,6 +107,44 @@ class WinUISkikoRenderHostTest {
         }
         assertEquals(0, layer.startFrameSchedulerCount)
     }
+
+    @Test
+    fun closesLayerWhenFrameSchedulerCloseFails() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+        layer.scheduler.closeFailure = IllegalStateException("scheduler close failed")
+
+        host.startFrameScheduler()
+        val failure = assertFailsWith<IllegalStateException> {
+            host.close()
+        }
+
+        assertEquals("scheduler close failed", failure.message)
+        assertEquals(listOf("startFrameScheduler", "closeFrameScheduler", "closeLayer"), layer.events)
+        assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(1, layer.scheduler.closeCount)
+        assertEquals(1, layer.closeCount)
+    }
+
+    @Test
+    fun suppressesLayerCloseFailureWhenFrameSchedulerCloseAlsoFails() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+        layer.scheduler.closeFailure = IllegalStateException("scheduler close failed")
+        layer.closeFailure = IllegalArgumentException("layer close failed")
+
+        host.startFrameScheduler()
+        val failure = assertFailsWith<IllegalStateException> {
+            host.close()
+        }
+
+        assertEquals("scheduler close failed", failure.message)
+        assertEquals("layer close failed", failure.suppressed.single().message)
+        assertEquals(listOf("startFrameScheduler", "closeFrameScheduler", "closeLayer"), layer.events)
+        assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(1, layer.scheduler.closeCount)
+        assertEquals(1, layer.closeCount)
+    }
 }
 
 private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
@@ -116,6 +154,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     val scheduler = FakeFrameScheduler(events)
     var startFrameSchedulerCount = 0
     var closeCount = 0
+    var closeFailure: Throwable? = null
     override var renderVersion: Long = 0L
     override var renderApi: GraphicsApi = GraphicsApi.DIRECT3D
     override var lastRenderSize: IntSize? = null
@@ -143,6 +182,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     override fun close() {
         closeCount += 1
         events += "closeLayer"
+        closeFailure?.let { throw it }
     }
 }
 
@@ -150,9 +190,11 @@ private class FakeFrameScheduler(
     private val events: MutableList<String>,
 ) : AutoCloseable {
     var closeCount = 0
+    var closeFailure: Throwable? = null
 
     override fun close() {
         closeCount += 1
         events += "closeFrameScheduler"
+        closeFailure?.let { throw it }
     }
 }
