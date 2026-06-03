@@ -38,6 +38,20 @@ class WinUISkikoRenderHostTest {
     }
 
     @Test
+    fun exposesRenderDiagnosticsFromLayer() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+
+        layer.renderVersion = 7L
+        layer.lastRenderSize = IntSize(80, 60)
+        layer.renderFailure = "render failed"
+
+        assertEquals(7L, host.renderVersionForTest)
+        assertEquals(IntSize(80, 60), host.lastRenderSizeForTest)
+        assertEquals("render failed", host.renderFailureForTest)
+    }
+
+    @Test
     fun startsFrameSchedulerOnlyOnceAndClosesItWithLayer() {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
@@ -88,6 +102,9 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     val scheduler = FakeFrameScheduler()
     var startFrameSchedulerCount = 0
     var closeCount = 0
+    override var renderVersion: Long = 0L
+    override var lastRenderSize: IntSize? = null
+    override var renderFailure: String? = null
 
     override val component: FrameworkElement
         get() = error("Fake layer does not expose a WinUI component.")

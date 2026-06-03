@@ -10,9 +10,32 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication:** none.
-- **Open compose-side integration:** none.
+- **Open compose-side integration:** `SKIKO-004`.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`.
+
+## SKIKO-004: unattached WinUI Skiko surface can hang in flushAndSubmit
+
+- **Status:** Open compose-side integration / upstream triage.
+- **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
+  while adding render diagnostics to the repository-local
+  `runWinUIViewSample` smoke path on 2026-06-03.
+- **Failure:** A standalone `WinUIComposeView` created by the sample, sized with
+  the test hook, and rendered without first attaching it to a WinUI `Window`
+  left the sample JVM alive indefinitely. A `jcmd Thread.print` showed the
+  WinUI UI thread inside
+  `org.jetbrains.skia.DirectContext.flushAndSubmit`, called through
+  `WinUISkiaLayerPlatformInterop.drawAndPresent`,
+  `WinUISkiaLayer.renderNow`, and the `WinUIFrameScheduler` timer callback.
+- **Why skiko's own sample does not show it:** the skiko sample exercises a
+  Skia layer after it is hosted by a real WinUI window/surface. The compose
+  smoke that exposed this issue rendered an unattached compose view, which is
+  not the same lifetime or presentation path.
+- **Current compose-winui action:** do not validate rendered frames from an
+  unattached `WinUIComposeView`. Keep render-host diagnostics covered by
+  `WinUISkikoRenderHostTest`, and move repository-local nonblank frame
+  validation to an attached-window path once compose-winui has a stable hook for
+  accessing the window-owned `WinUIComposeView` diagnostics.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

@@ -42,6 +42,15 @@ internal class WinUISkikoRenderHost(
     val component: FrameworkElement
         get() = layer.component
 
+    val renderVersionForTest: Long
+        get() = layer.renderVersion
+
+    val lastRenderSizeForTest: IntSize?
+        get() = layer.lastRenderSize
+
+    val renderFailureForTest: String?
+        get() = layer.renderFailure
+
     fun requestRender(throttledToVsync: Boolean = true) {
         if (!isClosed) {
             layer.requestRender(throttledToVsync)
@@ -73,6 +82,12 @@ internal class WinUISkikoRenderHost(
 internal interface WinUISkikoLayerAdapter : AutoCloseable {
     val component: FrameworkElement
 
+    val renderVersion: Long
+
+    val lastRenderSize: IntSize?
+
+    val renderFailure: String?
+
     fun requestRender(throttledToVsync: Boolean)
 
     fun setSize(size: IntSize)
@@ -87,6 +102,35 @@ private class DefaultWinUISkikoLayerAdapter(
 
     override val component: FrameworkElement
         get() = layer.component
+
+    override val renderVersion: Long
+        get() = renderDiagnostics?.callOrNull("getRenderVersion") as? Long ?: 0L
+
+    override val lastRenderSize: IntSize?
+        get() = renderDiagnostics?.callOrNull("getLastPlatformResult")?.let {
+            runCatching {
+                IntSize(
+                    width = (it.callOrNull("getWidth") as Number).toInt(),
+                    height = (it.callOrNull("getHeight") as Number).toInt(),
+                )
+            }.getOrNull()
+        }
+
+    override val renderFailure: String?
+        get() = renderDiagnostics?.callOrNull("getLastFailure")?.let {
+            listOfNotNull(
+                it.callOrNull("getExceptionClass") as? String,
+                it.callOrNull("getMessage") as? String,
+                it.callOrNull("getCauseClass") as? String,
+                it.callOrNull("getCauseMessage") as? String,
+            )
+                .joinToString(separator = ": ")
+        }
+
+    private val renderDiagnostics: Any?
+        get() = runCatching {
+            layer.javaClass.getMethod("getRenderDiagnostics\$skiko_winui").invoke(layer)
+        }.getOrNull()
 
     override fun requestRender(throttledToVsync: Boolean) {
         layer.needRender(throttledToVsync)
@@ -104,3 +148,8 @@ private class DefaultWinUISkikoLayerAdapter(
         layer.close()
     }
 }
+
+private fun Any.callOrNull(methodName: String): Any? =
+    runCatching {
+        javaClass.getMethod(methodName).invoke(this)
+    }.getOrNull()

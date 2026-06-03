@@ -28,7 +28,7 @@
 - [ ] Add `winuiMingwMain` as a dependent of `winuiMain` after the mingw target is enabled.
 - [x] Add matching test source sets for shared WinUI behavior and target-specific JVM behavior.
 - [x] Do not make `winuiMain`, `winuiJvmMain`, or `winuiMingwMain` depend on `desktopMain`, AWT, Swing, or `org.jetbrains.skiko.SkiaLayer`.
-- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring, a narrow `WinUISkikoRenderHost` adapter, and the first `WinUIComposeView` render-surface connection compile on 2026-06-02. `SKIKO-002` and `SKIKO-003` are fixed as of 2026-06-03; runtime sample validation reaches the full current smoke path. The remaining `KWINRT-024` native process-exit crash is deferred and is not a current skiko-winui integration blocker.
+- [ ] Replace the temporary WinUI JVM compile-source bridge with a principled source-set split now that `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` is resolvable, so shared Skiko scene/rendering code can be reused without compiling conflicting Skiko generic actuals. Initial Maven dependency wiring, a narrow `WinUISkikoRenderHost` adapter, and the first `WinUIComposeView` render-surface connection compile on 2026-06-02. `SKIKO-002` and `SKIKO-003` are fixed as of 2026-06-03; runtime sample validation reaches the full current smoke path. Latest kotlin-winrt snapshots `0.1.0-20260603.042831-23` / plugin `0.1.0-20260603.043142-4` still leave only the deferred `KWINRT-024` native process-exit crash, which is not a current skiko-winui integration blocker.
 - [x] Wire `winuiMain` to the local `kotlin-winrt` runtime without depending on checked-in `winrt-projections`.
 - [x] Apply the local `kotlin-winrt` Gradle plugin for WinUI projection generation when running on JDK 22 or newer.
 - [x] Declare the Windows App SDK NuGet package through the `winRt` DSL instead of directly depending on projection modules.
@@ -67,7 +67,7 @@
 ## WinUI rendering host
 - [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes; the known `KWINRT-024` native teardown crash is tracked separately as non-blocking.
 - [x] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
-- [x] Add initial unit coverage for the `WinUISkikoRenderHost` adapter lifecycle: render invalidation forwarding, resize forwarding, frame-scheduler reuse, close ordering, idempotent close, and suppression of post-close render/resize requests.
+- [x] Add initial unit coverage for the `WinUISkikoRenderHost` adapter lifecycle: render invalidation forwarding, resize forwarding, frame-scheduler reuse, close ordering, idempotent close, suppression of post-close render/resize requests, and render diagnostics exposure.
 - [ ] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
 - [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
@@ -190,16 +190,16 @@
 - [ ] Add shutdown tests that verify composition disposal releases WinUI event tokens, COM references, rendering resources, and runtime registrations.
 - [ ] Split the current monolithic `runWinUIViewSample` smoke into focused WinUI JVM test/smoke suites, mirroring UIKit's split between unit/instrumented coverage: scene/rendering, interop lifecycle/layout/input, accessibility, text input/keyboard, window/lifecycle, pointer/scroll, resource loading, disposal/leaks, and launch integration.
 - [ ] Add WinUI rendering-host tests comparable to UIKit `MetalRedrawer` and layer tests: resize, invalidation coalescing, frame pacing, render/interop transaction ordering, disposal after pending frame callbacks, and nonblank surface output once drawing is implemented.
-- [x] Add initial WinUI rendering-host adapter unit tests for resize, render requests, frame-scheduler reuse, idempotent close, and post-close suppression.
+- [x] Add initial WinUI rendering-host adapter unit tests for resize, render requests, frame-scheduler reuse, idempotent close, post-close suppression, and render diagnostics exposure.
 - [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [ ] Add WinUI text input and keyboard tests comparable to UIKit keyboard/text-field tests: focus entry, IME session lifecycle, composing text, selection updates, clipboard/edit menu interaction, software keyboard show/hide behavior where available, and keyboard-driven focus order.
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Deferred / non-blocking after the 2026-06-03 retest.
+- `KWINRT-024`: Deferred / non-blocking after the 2026-06-03 latest snapshot retest.
   `runWinUIViewSample` still reaches the full current smoke path, then exits with
-  `NTSTATUS 0xC0000005`; latest dump analysis points to XAML dynamic metadata /
-  unloaded-XAML teardown after the final smoke log, not an FFM upcall frame.
+  `NTSTATUS 0xC0000005`; Store WinDbg dump evidence points to a XAML
+  fail-fast/stowed exception after the final smoke log, not an FFM upcall frame.
   Do not block current skiko-winui integration or follow-on compose-winui work
   on this issue.
 - `KWINRT-023`: Fixed for compose-winui by compiling kotlin-winrt generated
@@ -220,6 +220,11 @@
 
 ## skiko-winui status
 
+- `SKIKO-004`: Open compose-side integration / upstream triage. An unattached
+  `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;
+  this differs from skiko's own sample because the skiko sample renders through
+  a layer already hosted by a real WinUI window. Compose-winui keeps diagnostics
+  unit-tested and defers nonblank frame validation to an attached-window hook.
 - `SKIKO-003`: Closed on 2026-06-03. `WinUIComposeView.updateRootContent` now
   flushes pending root-content transactions even when the interop overlay
   identity is unchanged, and the sample validates WinUIView overlay children
@@ -235,11 +240,3 @@
 - `SKIKO-001`: Closed. The Maven snapshot coordinates are
   `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` plus
   `io.github.compose-fluent:skiko-winui-windows:0.0.0-SNAPSHOT`.
-
-- `SKIKO-001`: Closed as coordinate discovery. The current Maven snapshot is
-  `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` plus
-  `io.github.compose-fluent:skiko-winui-windows:0.0.0-SNAPSHOT`, with
-  timestamped build `0.0.0-20260602.094020-1`. compose-winui now compiles
-  against the snapshot and keeps a narrow `WinUISkikoRenderHost` adapter ready
-  for the rendering-host integration step. Details are tracked in
-  `skiko-winui-issues.md`.

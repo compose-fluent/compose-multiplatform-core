@@ -418,6 +418,29 @@ baseline, not every retest attempt.
   did not change the result. The sample still reached the final smoke log and
   exited with `NTSTATUS 0xC0000005`, so the crash is not explained solely by
   compose-winui disposing its root before calling `Application.exit()`.
+- **2026-06-03 latest Maven snapshot retest:** after clearing Gradle
+  `files-2.1`, descriptor, and `resources-2.1` snapshot metadata for
+  `io.github.compose-fluent`, Gradle resolved kotlin-winrt runtime/authoring
+  metadata to `0.1.0-20260603.042831-23` and `winrt-gradle-plugin` to
+  `0.1.0-20260603.043142-4`; `skiko-winui` remained
+  `0.0.0-20260603.023842-2`. `:compose:ui:ui:compileKotlinWinuiJvm` passes,
+  and `:compose:ui:ui:winui-samples:runWinUIViewSample` again reaches
+  `compose-winui-sample: text input session cancellation` before failing with
+  `NTSTATUS 0xC0000005`. No newer WER dump was produced in
+  `%LOCALAPPDATA%\CrashDumps` after that run; Store WinDbg/CDB logs are kept at
+  `out/compose-multiplatform-core/cdb-runWinUIViewSample-latest*.log`.
+- **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
+  `10.0.29547.1002` analyzed
+  `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is
+  `out/compose-multiplatform-core/windbg-javaw-55656.log`. The bucket is
+  `STOWED_EXCEPTION_c000027b_Microsoft.UI.Xaml.dll!FailFastWithStowedExceptions`;
+  the stack goes through `KERNELBASE!RaiseFailFastException`,
+  `combase!RoFailFastWithErrorContextInternal2`,
+  `Microsoft_UI_Xaml!FailFastWithStowedExceptions`, and
+  `Microsoft_UI_Xaml!DirectUI::FrameworkApplication::StartDesktop`. The stowed
+  exception parameters include `0x8007000e`. This differs from the older
+  unloaded-XAML AV dump but still points at WinUI/XAML runtime teardown or
+  application lifetime, not a Java/Kotlin managed exception.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful
