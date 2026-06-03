@@ -109,6 +109,31 @@ class WinUISkikoRenderHostTest {
     }
 
     @Test
+    fun failedFrameSchedulerStartIsNotCachedAndCanBeRetried() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+        layer.startFrameSchedulerFailure = IllegalStateException("scheduler start failed")
+
+        val failure = assertFailsWith<IllegalStateException> {
+            host.startFrameScheduler()
+        }
+        assertEquals("scheduler start failed", failure.message)
+        assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(1, layer.startFrameSchedulerCount)
+
+        layer.startFrameSchedulerFailure = null
+        val scheduler = host.startFrameScheduler()
+
+        assertSame(layer.scheduler, scheduler)
+        assertTrue(host.isFrameSchedulerStartedForTest)
+        assertEquals(2, layer.startFrameSchedulerCount)
+        assertEquals(
+            listOf("startFrameScheduler", "startFrameScheduler"),
+            layer.events,
+        )
+    }
+
+    @Test
     fun closesLayerWhenFrameSchedulerCloseFails() {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
@@ -153,6 +178,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     val sizes = mutableListOf<IntSize>()
     val scheduler = FakeFrameScheduler(events)
     var startFrameSchedulerCount = 0
+    var startFrameSchedulerFailure: Throwable? = null
     var closeCount = 0
     var closeFailure: Throwable? = null
     override var renderVersion: Long = 0L
@@ -176,6 +202,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     override fun startFrameScheduler(): AutoCloseable {
         startFrameSchedulerCount += 1
         events += "startFrameScheduler"
+        startFrameSchedulerFailure?.let { throw it }
         return scheduler
     }
 
