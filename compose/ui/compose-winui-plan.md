@@ -310,12 +310,17 @@
   render state in the repository-local full sample and focused
   `runWinUISkikoSample` task. The same focused sample now verifies both paths
   report the Skiko WinUI Direct3D render API and records non-empty Compose draw
-  bounds after an attached render. Pixel-read nonblank frame validation is still
-  deferred until there is a stable attached-window pixel-read path.
+  bounds after an attached render, and dispatches a Skiko click action back to
+  Compose semantics. The 2026-06-03 23:00 +08 cache-clear retest resolves
+  `skiko-winui` / `skiko-winui-windows` to `0.0.0-20260603.150039-4`; WinUI JVM
+  compile, focused Skiko/owner/isolation tests, and `runWinUISkikoSample` pass.
+  Pixel-read nonblank frame validation is still deferred until there is a stable
+  attached-window pixel-read path.
 - `SKIKO-006`: Open upstream/publication/API. The current WinUI JVM path still
   needs `org.jetbrains.skiko:skiko-awt` for core Skia/Skiko JVM API classes, so
   compose-winui guards against `skiko-awt-runtime-*` native runtime artifacts
-  while waiting for an AWT-free JVM API artifact.
+  while waiting for an AWT-free JVM API artifact. Still observed with
+  `skiko-winui` `0.0.0-20260603.150039-4`.
 - `SKIKO-005`: Closed in `skiko-winui` `0.0.0-20260603.075139-3`.
   `WinUISkikoRenderHost` now consumes the public typed render diagnostics API
   directly instead of reflecting `getRenderDiagnostics$skiko_winui`.

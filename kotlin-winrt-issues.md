@@ -620,6 +620,15 @@ baseline, not every retest attempt.
   does not resolve `KWINRT-024`; it confirms the currently published Maven
   snapshot is still in the same XAML dynamic-metadata / unloaded-XAML teardown
   bucket.
+- **2026-06-03 23:00 +08 skiko snapshot retest:** after clearing targeted
+  Skiko Gradle snapshot caches, Gradle resolved `skiko-winui` and
+  `skiko-winui-windows` to `0.0.0-20260603.150039-4` while kotlin-winrt
+  remained at `0.1.0-20260603.042831-23`. The focused Skiko sample passes, but
+  the full `:compose:ui:ui:winui-samples:runWinUIViewSample` still reaches the
+  final `compose-winui-sample: text input session cancellation` log and exits
+  with `NTSTATUS 0xC0000005`. No newer WER dump was produced, so the latest
+  native evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.58444.dmp` /
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).58444.dmp`.
 - **Current compose-winui policy:** do not block skiko-winui integration or
   follow-on compose-winui work on this teardown crash for now. Treat the sample
   reaching `compose-winui-sample: text input session cancellation` as successful

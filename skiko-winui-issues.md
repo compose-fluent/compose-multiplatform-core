@@ -21,7 +21,7 @@ baseline, not every retest attempt.
 - **Status:** Open upstream/publication/API.
 - **Observed in:** compose-winui dependency isolation while validating
   `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
-  `0.0.0-20260603.075139-3`.
+  `0.0.0-20260603.150039-4`.
 - **Failure:** excluding `org.jetbrains.skiko:skiko-awt` from WinUI
   configurations removes the JVM API classes needed by compose-winui and
   `skiko-winui`, including `org.jetbrains.skia.Canvas`,
@@ -106,6 +106,16 @@ baseline, not every retest attempt.
   `KWINRT-024` teardown crash. The current upstream diagnostics expose render
   state/result metadata but no pixel-read or surface snapshot API, so nonblank
   frame validation remains blocked on a stable attached-window pixel-read path.
+- **2026-06-03 23:00 +08 snapshot retest:** after clearing the targeted
+  `skiko-winui` and `skiko-winui-windows` Gradle snapshot caches under
+  `GRADLE_USER_HOME=F:\Dependencies\gradle`, Gradle resolved both artifacts to
+  `0.0.0-20260603.150039-4`. With JDK 25,
+  `:compose:ui:ui:compileKotlinWinuiJvm`, focused `WinUIOwnerTest`,
+  `WinUISkikoRenderHostTest`, `WinUISourceSetIsolationTest`, and
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` pass. The full
+  `runWinUIViewSample` still reaches the final smoke log and exits with the
+  known non-blocking `KWINRT-024` `NTSTATUS 0xC0000005` teardown crash, without
+  producing a newer WER dump.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 
