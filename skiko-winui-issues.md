@@ -9,10 +9,33 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/publication:** none.
-- **Open compose-side integration:** `SKIKO-004`.
+- **Open upstream/publication coordinates:** none.
+- **Open upstream/publication/API:** `SKIKO-005`.
+- **Open compose-side integration:** `SKIKO-004`, `SKIKO-005`.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`.
+
+## SKIKO-005: published render diagnostics API is still internal
+
+- **Status:** Open upstream/publication/API.
+- **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
+  timestamped build `0.0.0-20260603.023842-2` while replacing
+  compose-winui's reflective render diagnostics bridge with the typed
+  `WinUISkiaLayer.renderDiagnostics` API visible in the local
+  `compose-fluent/skiko` `winui_dev` branch at `14aee24f`.
+- **Failure:** `:compose:ui:ui:compileKotlinWinuiJvm` fails because the
+  published artifact still exposes `WinUISkiaLayer.renderDiagnostics` and
+  `WinUILayerRenderDiagnostics` / `WinUIPlatformRenderResult` /
+  `WinUILayerRenderState` / `WinUILayerRenderFailure` as internal declarations.
+- **Current compose-winui action:** keep the narrow reflection bridge in
+  `WinUISkikoRenderHost` for now, because it lets repository-local diagnostics
+  read render version, platform size, rendered-state size, and render failure
+  from the current Maven snapshot without depending on AWT/Desktop APIs. Remove
+  the reflection once a newer `skiko-winui` snapshot publishes the public
+  diagnostics surface from the `winui_dev` branch.
+- **Validation baseline:** the attempted typed bridge failed compilation with
+  JDK 25 using `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
+  --no-configure-on-demand`. The change was reverted before continuing.
 
 ## SKIKO-004: unattached WinUI Skiko surface can hang in flushAndSubmit
 
