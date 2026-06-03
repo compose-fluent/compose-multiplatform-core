@@ -474,6 +474,7 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewPropertiesUpdateSmoke()
             runWinUIViewContainerSyncSmoke()
             runWinUIViewGeneratedEventCleanupSmoke()
+            runWinUISkikoUnattachedSchedulerSmoke()
             runWinUISkikoRenderDiagnosticsSmoke()
             runWinUISaveableStateSmoke()
             runWinUIRetainedValuesSmoke()
@@ -2501,6 +2502,35 @@ private object ComposeWinUiSmokeApp {
     }
 
     @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUISkikoUnattachedSchedulerSmoke() {
+        val currentComposeView = WinUIComposeView()
+        try {
+            currentComposeView.setContent {
+                Layout(
+                    content = {},
+                ) { _, _ ->
+                    layout(48, 32) {}
+                }
+            }
+            currentComposeView.setWindowContainerSizeForTest(IntSize(160, 96))
+            delay(100)
+            check(!currentComposeView.isRenderSchedulerStartedForTest) {
+                "Unattached WinUIComposeView started the Skiko frame scheduler."
+            }
+            check(currentComposeView.renderVersionForTest == 0L) {
+                "Unattached WinUIComposeView rendered before its root was loaded."
+            }
+            check(currentComposeView.renderFailureForTest == null) {
+                "Unattached WinUIComposeView reported a Skiko render failure: " +
+                    currentComposeView.renderFailureForTest
+            }
+        } finally {
+            currentComposeView.dispose()
+        }
+        println("compose-winui-sample: skiko unattached scheduler deferred")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUISkikoRenderDiagnosticsSmoke() {
         val window = XamlWindow()
         val currentComposeView = window.setContent {
@@ -2516,6 +2546,9 @@ private object ComposeWinUiSmokeApp {
             awaitCondition("WinUI Skiko attached render diagnostics") {
                 currentComposeView.renderVersionForTest > 0L ||
                     currentComposeView.renderFailureForTest != null
+            }
+            check(currentComposeView.isRenderSchedulerStartedForTest) {
+                "Attached WinUIComposeView did not start the Skiko frame scheduler."
             }
             val failure = currentComposeView.renderFailureForTest
             check(failure == null) {

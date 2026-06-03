@@ -96,6 +96,10 @@ class WinUIComposeView internal constructor(
     val renderFailureForTest: String?
         get() = renderHost.renderFailureForTest
 
+    @InternalComposeUiApi
+    val isRenderSchedulerStartedForTest: Boolean
+        get() = renderHost.isFrameSchedulerStartedForTest
+
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,
     ).apply {

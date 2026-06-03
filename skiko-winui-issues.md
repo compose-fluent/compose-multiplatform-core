@@ -38,9 +38,10 @@ baseline, not every retest attempt.
   scheduler on an unattached root. `WinUIComposeView` also defers starting the
   Skiko frame scheduler until its root is loaded, and removes the pending
   `Loaded` token on composition/view disposal. Keep render-host diagnostics
-  covered by `WinUISkikoRenderHostTest`; the repository-local sample also
-  validates an attached-window render diagnostics frame before the known
-  `KWINRT-024` teardown crash.
+  covered by `WinUISkikoRenderHostTest`; the repository-local sample validates
+  both that an unattached `WinUIComposeView` does not start the Skiko frame
+  scheduler and that an attached-window render diagnostics frame succeeds before
+  the known `KWINRT-024` teardown crash.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

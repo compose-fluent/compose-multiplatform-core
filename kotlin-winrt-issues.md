@@ -451,6 +451,13 @@ baseline, not every retest attempt.
   `Microsoft_UI_Xaml!DirectUI::FrameworkApplication::StartDesktop`. This again
   points at WinUI/CoreMessaging application lifetime or dispatcher teardown
   after the full compose-winui smoke path, not a Skiko render failure.
+- **2026-06-03 unattached scheduler smoke retest:** after adding explicit
+  sample coverage for the deferred unattached Skiko scheduler path, the sample
+  reaches `compose-winui-sample: skiko unattached scheduler deferred`,
+  `compose-winui-sample: skiko render diagnostics`, and the final
+  `compose-winui-sample: text input session cancellation` log before the same
+  `NTSTATUS 0xC0000005` process exit. No newer WER dump was produced after this
+  run; the latest dump remains `java.exe.55780.dmp`.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is

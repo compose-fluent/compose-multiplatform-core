@@ -21,7 +21,9 @@ import microsoft.ui.xaml.FrameworkElement
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class WinUISkikoRenderHostTest {
     @Test
@@ -56,15 +58,18 @@ class WinUISkikoRenderHostTest {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
 
+        assertFalse(host.isFrameSchedulerStartedForTest)
         val firstScheduler = host.startFrameScheduler()
         val secondScheduler = host.startFrameScheduler()
 
+        assertTrue(host.isFrameSchedulerStartedForTest)
         assertSame(firstScheduler, secondScheduler)
         assertEquals(1, layer.startFrameSchedulerCount)
 
         host.close()
         host.close()
 
+        assertFalse(host.isFrameSchedulerStartedForTest)
         assertEquals(1, layer.scheduler.closeCount)
         assertEquals(1, layer.closeCount)
     }

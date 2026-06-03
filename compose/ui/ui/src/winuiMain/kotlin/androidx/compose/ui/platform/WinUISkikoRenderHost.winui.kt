@@ -51,6 +51,9 @@ internal class WinUISkikoRenderHost(
     val renderFailureForTest: String?
         get() = layer.renderFailure
 
+    val isFrameSchedulerStartedForTest: Boolean
+        get() = frameScheduler != null
+
     fun requestRender(throttledToVsync: Boolean = true) {
         if (!isClosed) {
             layer.requestRender(throttledToVsync)
