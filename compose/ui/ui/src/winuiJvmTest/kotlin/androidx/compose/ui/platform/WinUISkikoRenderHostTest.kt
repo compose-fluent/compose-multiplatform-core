@@ -21,6 +21,14 @@ import microsoft.ui.xaml.FrameworkElement
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
+import org.jetbrains.skiko.winui.WinUIAccessibilityChange
+import org.jetbrains.skiko.winui.WinUIAccessibilityChangeType
+import org.jetbrains.skiko.winui.WinUIAccessibilityInfo
+import org.jetbrains.skiko.winui.WinUIAccessibilityNode
+import org.jetbrains.skiko.winui.WinUIAccessibilityProvider
+import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
+import org.jetbrains.skiko.winui.WinUIAccessibilityState
+import org.jetbrains.skiko.winui.WinUIRect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,6 +67,31 @@ class WinUISkikoRenderHostTest {
         assertEquals(IntSize(80, 60), host.lastRenderedStateSizeForTest)
         assertEquals(IntSize(120, 90), host.pendingRenderStateSizeForTest)
         assertEquals("render failed", host.renderFailureForTest)
+    }
+
+    @Test
+    fun forwardsAccessibilityProviderAndChangesToLayer() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+        val provider = FakeWinUIAccessibilityProvider()
+        val change = WinUIAccessibilityChange(
+            type = WinUIAccessibilityChangeType.STRUCTURE_CHANGED,
+            nodeId = 42L,
+        )
+
+        host.setAccessibilityProvider(provider)
+        host.notifyAccessibilityChanged(
+            WinUIAccessibilityUpdate(
+                semanticsOwner = null,
+                semanticsChanged = true,
+                layoutChangedSemanticsIds = emptyList(),
+                scrollDelta = null,
+                change = change,
+            )
+        )
+
+        assertSame(provider, layer.installedAccessibilityProvider)
+        assertEquals(listOf(change), layer.accessibilityChanges)
     }
 
     @Test
@@ -263,6 +296,8 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     override var lastRenderedStateSize: IntSize? = null
     override var pendingRenderStateSize: IntSize? = null
     override var renderFailure: String? = null
+    var installedAccessibilityProvider: WinUIAccessibilityProvider? = null
+    val accessibilityChanges = mutableListOf<WinUIAccessibilityChange>()
 
     override val component: FrameworkElement
         get() = error("Fake layer does not expose a WinUI component.")
@@ -273,6 +308,14 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
 
     override fun setSize(size: IntSize) {
         sizes += size
+    }
+
+    override fun setAccessibilityProvider(provider: WinUIAccessibilityProvider) {
+        installedAccessibilityProvider = provider
+    }
+
+    override fun notifyAccessibilityChanged(update: WinUIAccessibilityUpdate) {
+        accessibilityChanges += update.change
     }
 
     override fun startFrameScheduler(): AutoCloseable {
@@ -287,6 +330,19 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
         events += "closeLayer"
         closeFailure?.let { throw it }
     }
+}
+
+private class FakeWinUIAccessibilityProvider : WinUIAccessibilityProvider {
+    override fun snapshot(): WinUIAccessibilitySnapshot =
+        WinUIAccessibilitySnapshot(
+            root = WinUIAccessibilityNode(
+                id = 0L,
+                bounds = WinUIRect(0f, 0f, 0f, 0f),
+                info = WinUIAccessibilityInfo(),
+                state = WinUIAccessibilityState(),
+                children = emptyList(),
+            ),
+        )
 }
 
 private class FakeFrameScheduler(

@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WinUIAccessibilityBridge
 import androidx.compose.ui.platform.WinUIAccessibilityBridgeState
+import androidx.compose.ui.platform.WinUIAccessibilityUpdate
 import androidx.compose.ui.platform.WinUIAccessibilityManager
 import androidx.compose.ui.platform.WinUIClipboard
 import androidx.compose.ui.platform.WinUIClipboardManager
@@ -99,6 +100,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.InteropView
+import org.jetbrains.skiko.winui.WinUIAccessibilityProvider
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -113,6 +115,7 @@ internal class WinUIOwner(
     private val onSemanticsChanged: (SemanticsOwner) -> Unit = {},
     private val onLayoutChanged: (SemanticsOwner, Int) -> Unit = { _, _ -> },
     private val onScrollChanged: (Offset) -> Unit = {},
+    private val onAccessibilityUpdate: (WinUIAccessibilityUpdate) -> Unit = {},
     private val onKeepScreenOnChanged: (Boolean) -> Unit = {},
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
     private val scheduleOutOfFrame: (() -> Unit) -> Unit = { it() },
@@ -128,7 +131,9 @@ internal class WinUIOwner(
     private var isDisposed = false
     private val isShuttingDown: Boolean
         get() = isDisposing || isDisposed
-    private val accessibilityBridge = WinUIAccessibilityBridge()
+    private val accessibilityBridge = WinUIAccessibilityBridge(
+        onUpdate = onAccessibilityUpdate,
+    )
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
@@ -153,6 +158,8 @@ internal class WinUIOwner(
     override val clipboardManager: ClipboardManager = WinUIClipboardManager(winUIClipboard)
     override val clipboard: Clipboard = winUIClipboard
     override val accessibilityManager: AccessibilityManager = WinUIAccessibilityManager()
+    internal val accessibilityProvider: WinUIAccessibilityProvider
+        get() = accessibilityBridge
     override val graphicsContext: GraphicsContext = WinUIGraphicsContext
     @Suppress("DEPRECATION")
     override val autofillTree: AutofillTree = AutofillTree()

@@ -136,6 +136,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.skiko.GraphicsApi
+import org.jetbrains.skiko.winui.WinUIAccessibilityNode
 
 @Composable
 fun WinUIViewSampleContent(
@@ -2628,9 +2629,14 @@ private object ComposeWinUiSmokeApp {
         val window = XamlWindow()
         val currentComposeView = window.setContent {
             Layout(
-                modifier = Modifier.drawBehind {
-                    drawRect(Color.Red)
-                },
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = "WinUI Skiko rendered content"
+                        testTag = "winui-skiko-render"
+                    }
+                    .drawBehind {
+                        drawRect(Color.Red)
+                    },
                 content = {},
             ) { _, _ ->
                 layout(48, 32) {}
@@ -2671,6 +2677,14 @@ private object ComposeWinUiSmokeApp {
                 "WinUI Skiko render diagnostics left a pending render state after rendering: " +
                     currentComposeView.pendingRenderStateSizeForTest
             }
+            val accessibilitySnapshot = checkNotNull(currentComposeView.accessibilitySnapshotForTest) {
+                "WinUI Skiko accessibility provider did not expose a semantics snapshot."
+            }
+            val accessibilityNode = accessibilitySnapshot.root.findAccessibilityNode("winui-skiko-render")
+            check(accessibilityNode?.info?.name == "WinUI Skiko rendered content") {
+                "WinUI Skiko accessibility provider did not expose Compose semantics: " +
+                    accessibilitySnapshot.root
+            }
             val drawRect = currentComposeView.lastDrawRectForTest
             check(drawRect.width > 0f && drawRect.height > 0f) {
                 "WinUI Skiko render diagnostics did not record non-empty Compose draw bounds: " +
@@ -2694,6 +2708,16 @@ private object ComposeWinUiSmokeApp {
             window.close()
         }
         println("compose-winui-sample: skiko render diagnostics")
+    }
+
+    private fun WinUIAccessibilityNode.findAccessibilityNode(
+        automationId: String,
+    ): WinUIAccessibilityNode? {
+        if (info.automationId == automationId) return this
+        children.forEach { child ->
+            child.findAccessibilityNode(automationId)?.let { return it }
+        }
+        return null
     }
 
     private suspend fun awaitCondition(label: String, condition: () -> Boolean) {

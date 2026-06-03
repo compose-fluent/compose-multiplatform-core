@@ -20,6 +20,7 @@ import microsoft.ui.xaml.FrameworkElement
 import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
+import org.jetbrains.skiko.winui.WinUIAccessibilityProvider
 import org.jetbrains.skiko.winui.WinUIFrameScheduler
 import org.jetbrains.skiko.winui.WinUISkiaLayer
 
@@ -65,6 +66,18 @@ internal class WinUISkikoRenderHost(
 
     val isFrameSchedulerStartedForTest: Boolean
         get() = frameScheduler != null
+
+    fun setAccessibilityProvider(provider: WinUIAccessibilityProvider) {
+        if (!isClosed) {
+            layer.setAccessibilityProvider(provider)
+        }
+    }
+
+    fun notifyAccessibilityChanged(update: WinUIAccessibilityUpdate) {
+        if (!isClosed) {
+            layer.notifyAccessibilityChanged(update)
+        }
+    }
 
     fun requestRender(throttledToVsync: Boolean = true) {
         if (!isClosed) {
@@ -124,6 +137,10 @@ internal interface WinUISkikoLayerAdapter : AutoCloseable {
 
     val renderFailure: String?
 
+    fun setAccessibilityProvider(provider: WinUIAccessibilityProvider)
+
+    fun notifyAccessibilityChanged(update: WinUIAccessibilityUpdate)
+
     fun requestRender(throttledToVsync: Boolean)
 
     fun setSize(size: IntSize)
@@ -170,6 +187,14 @@ private class DefaultWinUISkikoLayerAdapter(
             )
                 .joinToString(separator = ": ")
         }
+
+    override fun setAccessibilityProvider(provider: WinUIAccessibilityProvider) {
+        layer.accessibilityProvider = provider
+    }
+
+    override fun notifyAccessibilityChanged(update: WinUIAccessibilityUpdate) {
+        layer.notifyAccessibilityChanged(update.change)
+    }
 
     override fun requestRender(throttledToVsync: Boolean) {
         layer.needRender(throttledToVsync)

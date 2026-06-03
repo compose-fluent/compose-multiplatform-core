@@ -19,7 +19,28 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.postDelayed as composePostDelayed
 import androidx.compose.ui.removePost as composeRemovePost
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsConfiguration
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
+import org.jetbrains.skiko.winui.WinUIAccessibilityAction
+import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
+import org.jetbrains.skiko.winui.WinUIAccessibilityChange
+import org.jetbrains.skiko.winui.WinUIAccessibilityChangeType
+import org.jetbrains.skiko.winui.WinUIAccessibilityInfo
+import org.jetbrains.skiko.winui.WinUIAccessibilityLiveSetting
+import org.jetbrains.skiko.winui.WinUIAccessibilityNode
+import org.jetbrains.skiko.winui.WinUIAccessibilityProvider
+import org.jetbrains.skiko.winui.WinUIAccessibilityRole
+import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
+import org.jetbrains.skiko.winui.WinUIAccessibilityState
+import org.jetbrains.skiko.winui.WinUIAccessibilityView
+import org.jetbrains.skiko.winui.WinUIRect
 
 internal class WinUIAccessibilityBridge(
     private val postDelayed: (Long, () -> Unit) -> Any = { delayMillis, block ->
@@ -29,9 +50,10 @@ internal class WinUIAccessibilityBridge(
         composeRemovePost(token)
     },
     private val onUpdate: (WinUIAccessibilityUpdate) -> Unit = {},
-) {
+) : WinUIAccessibilityProvider {
     private val changedLayoutNodeIds = linkedSetOf<Int>()
     private var pendingPost: Any? = null
+    private var currentSemanticsOwner: SemanticsOwner? = null
     private var pendingSemanticsOwner: SemanticsOwner? = null
     private var hasPendingSemanticsChange = false
     private var hasPendingScrollChange = false
@@ -64,6 +86,7 @@ internal class WinUIAccessibilityBridge(
     fun onSemanticsChange(semanticsOwner: SemanticsOwner) {
         if (isDisposed) return
         currentSemanticsNodesInvalidated = true
+        currentSemanticsOwner = semanticsOwner
         hasPendingSemanticsChange = true
         pendingSemanticsOwner = semanticsOwner
         scheduleFlushIfNeeded()
@@ -72,6 +95,7 @@ internal class WinUIAccessibilityBridge(
     fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsId: Int) {
         if (isDisposed) return
         currentSemanticsNodesInvalidated = true
+        currentSemanticsOwner = semanticsOwner
         changedLayoutNodeIds += semanticsId
         pendingSemanticsOwner = semanticsOwner
         scheduleFlushIfNeeded()
@@ -88,11 +112,17 @@ internal class WinUIAccessibilityBridge(
         isDisposed = true
         cancelPendingFlush()
         changedLayoutNodeIds.clear()
+        currentSemanticsOwner = null
         pendingSemanticsOwner = null
         hasPendingSemanticsChange = false
         hasPendingScrollChange = false
         pendingScrollDelta = Offset.Zero
     }
+
+    override fun snapshot(): WinUIAccessibilitySnapshot =
+        currentSemanticsOwner?.toWinUIAccessibilitySnapshot() ?: EmptySnapshot
+
+    override fun performAction(request: WinUIAccessibilityActionRequest): Boolean = false
 
     fun stateForTest(): WinUIAccessibilityBridgeState =
         WinUIAccessibilityBridgeState(
@@ -133,6 +163,7 @@ internal class WinUIAccessibilityBridge(
             semanticsChanged = hasPendingSemanticsChange,
             layoutChangedSemanticsIds = changedLayoutNodeIds.toList(),
             scrollDelta = pendingScrollDelta.takeIf { hasPendingScrollChange },
+            change = pendingWinUIAccessibilityChange(),
         )
         changedLayoutNodeIds.clear()
         pendingSemanticsOwner = null
@@ -148,8 +179,28 @@ internal class WinUIAccessibilityBridge(
         pendingPost = null
     }
 
+    private fun pendingWinUIAccessibilityChange(): WinUIAccessibilityChange =
+        WinUIAccessibilityChange(
+            type = when {
+                hasPendingSemanticsChange -> WinUIAccessibilityChangeType.STRUCTURE_CHANGED
+                hasPendingScrollChange -> WinUIAccessibilityChangeType.VALUE_CHANGED
+                else -> WinUIAccessibilityChangeType.NODE_UPDATED
+            },
+            nodeId = changedLayoutNodeIds.firstOrNull()?.toLong(),
+        )
+
     private companion object {
         const val DefaultEventBatchIntervalMillis = 100L
+
+        val EmptySnapshot = WinUIAccessibilitySnapshot(
+            root = WinUIAccessibilityNode(
+                id = 0L,
+                bounds = WinUIRect(0f, 0f, 0f, 0f),
+                info = WinUIAccessibilityInfo(),
+                state = WinUIAccessibilityState(),
+                children = emptyList(),
+            ),
+        )
     }
 }
 
@@ -158,6 +209,7 @@ internal data class WinUIAccessibilityUpdate(
     val semanticsChanged: Boolean,
     val layoutChangedSemanticsIds: List<Int>,
     val scrollDelta: Offset?,
+    val change: WinUIAccessibilityChange,
 )
 
 internal data class WinUIAccessibilityBridgeState(
@@ -170,3 +222,129 @@ internal data class WinUIAccessibilityBridgeState(
     val pendingScrollDelta: Offset,
     val hasPendingScrollChange: Boolean,
 )
+
+private fun SemanticsOwner.toWinUIAccessibilitySnapshot(): WinUIAccessibilitySnapshot {
+    val root = unmergedRootSemanticsNode.toWinUIAccessibilityNode()
+    return WinUIAccessibilitySnapshot(
+        root = root,
+        focusedNodeId = root.findFocusedNodeId(),
+    )
+}
+
+private fun WinUIAccessibilityNode.findFocusedNodeId(): Long? {
+    if (state.focused) return id
+    children.forEach { child ->
+        child.findFocusedNodeId()?.let { return it }
+    }
+    return null
+}
+
+private fun SemanticsNode.toWinUIAccessibilityNode(): WinUIAccessibilityNode {
+    val nodeConfig = config
+    val bounds = boundsInRoot
+    return WinUIAccessibilityNode(
+        id = id.toLong(),
+        bounds = WinUIRect(
+            x = bounds.left,
+            y = bounds.top,
+            width = bounds.width,
+            height = bounds.height,
+        ),
+        info = nodeConfig.toWinUIAccessibilityInfo(),
+        state = nodeConfig.toWinUIAccessibilityState(),
+        value = nodeConfig.accessibilityValue().orEmpty(),
+        actions = nodeConfig.toWinUIAccessibilityActions(),
+        children = children
+            .filterNot { it.config.isHiddenFromAccessibility() }
+            .map { it.toWinUIAccessibilityNode() },
+    )
+}
+
+private fun SemanticsConfiguration.toWinUIAccessibilityInfo(): WinUIAccessibilityInfo =
+    WinUIAccessibilityInfo(
+        name = accessibilityName().orEmpty(),
+        automationId = getOrNull(SemanticsProperties.TestTag).orEmpty(),
+        helpText = (
+            getOrNull(SemanticsProperties.StateDescription)
+                ?: getOrNull(SemanticsProperties.Error)
+            ).orEmpty(),
+        view = WinUIAccessibilityView.CONTENT,
+        liveSetting = when (getOrNull(SemanticsProperties.LiveRegion)) {
+            androidx.compose.ui.semantics.LiveRegionMode.Assertive ->
+                WinUIAccessibilityLiveSetting.ASSERTIVE
+            androidx.compose.ui.semantics.LiveRegionMode.Polite ->
+                WinUIAccessibilityLiveSetting.POLITE
+            else -> WinUIAccessibilityLiveSetting.OFF
+        },
+        role = getOrNull(SemanticsProperties.Role).toWinUIAccessibilityRole(this),
+    )
+
+private fun SemanticsConfiguration.toWinUIAccessibilityState(): WinUIAccessibilityState =
+    WinUIAccessibilityState(
+        enabled = !contains(SemanticsProperties.Disabled),
+        focusable = contains(SemanticsActions.RequestFocus),
+        focused = getOrNull(SemanticsProperties.Focused) == true,
+        selected = getOrNull(SemanticsProperties.Selected) == true,
+        checked = getOrNull(SemanticsProperties.ToggleableState)?.let {
+            when (it) {
+                ToggleableState.On -> true
+                ToggleableState.Off -> false
+                ToggleableState.Indeterminate -> null
+            }
+        },
+        editable = getOrNull(SemanticsProperties.IsEditable) == true ||
+            hasKey(SemanticsActions.SetText),
+        password = contains(SemanticsProperties.Password),
+    )
+
+private fun SemanticsConfiguration.toWinUIAccessibilityActions(): Set<WinUIAccessibilityAction> =
+    buildSet {
+        if (hasKey(SemanticsActions.RequestFocus)) add(WinUIAccessibilityAction.FOCUS)
+        if (hasKey(SemanticsActions.OnClick)) add(WinUIAccessibilityAction.CLICK)
+        if (hasKey(SemanticsActions.Expand)) add(WinUIAccessibilityAction.EXPAND)
+        if (hasKey(SemanticsActions.Collapse)) add(WinUIAccessibilityAction.COLLAPSE)
+        if (hasKey(SemanticsActions.SetProgress)) {
+            add(WinUIAccessibilityAction.INCREMENT)
+            add(WinUIAccessibilityAction.DECREMENT)
+        }
+        if (hasKey(SemanticsActions.SetText)) add(WinUIAccessibilityAction.SET_TEXT)
+    }
+
+private fun SemanticsConfiguration.accessibilityName(): String? =
+    getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ") ?:
+        getOrNull(SemanticsProperties.EditableText)?.text ?:
+        getOrNull(SemanticsProperties.Text)?.joinToString(separator = "\n") { it.text } ?:
+        getOrNull(SemanticsProperties.PaneTitle)
+
+private fun SemanticsConfiguration.accessibilityValue(): String? =
+    getOrNull(SemanticsProperties.EditableText)?.text ?:
+        getOrNull(SemanticsProperties.Text)?.joinToString(separator = "\n") { it.text }
+
+private fun SemanticsConfiguration.isHiddenFromAccessibility(): Boolean =
+    contains(SemanticsProperties.HideFromAccessibility) ||
+        contains(SemanticsProperties.InvisibleToUser)
+
+private fun SemanticsConfiguration.hasKey(key: SemanticsPropertyKey<*>): Boolean =
+    any { it.key == key }
+
+private fun Role?.toWinUIAccessibilityRole(
+    config: SemanticsConfiguration,
+): WinUIAccessibilityRole =
+    when (this) {
+        Role.Button -> WinUIAccessibilityRole.BUTTON
+        Role.Checkbox, Role.Switch -> WinUIAccessibilityRole.CHECK_BOX
+        Role.DropdownList -> WinUIAccessibilityRole.COMBO_BOX
+        Role.Image -> WinUIAccessibilityRole.IMAGE
+        Role.RadioButton -> WinUIAccessibilityRole.CHECK_BOX
+        Role.Tab -> WinUIAccessibilityRole.LIST_ITEM
+        else -> when {
+            config.contains(SemanticsProperties.IsEditable) ||
+                config.hasKey(SemanticsActions.SetText) -> WinUIAccessibilityRole.EDIT
+            config.getOrNull(SemanticsProperties.Text) != null -> WinUIAccessibilityRole.TEXT
+            config.getOrNull(SemanticsProperties.ProgressBarRangeInfo) != null ->
+                WinUIAccessibilityRole.SLIDER
+            config.contains(SemanticsProperties.IsDialog) -> WinUIAccessibilityRole.WINDOW
+            config.contains(SemanticsProperties.PaneTitle) -> WinUIAccessibilityRole.PANE
+            else -> WinUIAccessibilityRole.CUSTOM
+        }
+    }

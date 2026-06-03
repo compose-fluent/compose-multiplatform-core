@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
+import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -119,6 +120,10 @@ class WinUIComposeView internal constructor(
     val isRenderSchedulerStartedForTest: Boolean
         get() = renderHost.isFrameSchedulerStartedForTest
 
+    @InternalComposeUiApi
+    val accessibilitySnapshotForTest: WinUIAccessibilitySnapshot?
+        get() = owner.accessibilityProvider.snapshot()
+
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,
     ).apply {
@@ -151,6 +156,7 @@ class WinUIComposeView internal constructor(
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
         onRootInvalidated = ::invalidateRootLayer,
+        onAccessibilityUpdate = renderHost::notifyAccessibilityChanged,
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
@@ -158,6 +164,9 @@ class WinUIComposeView internal constructor(
         textToolbar = WinUITextToolbar { root },
         pointerIconService = pointerIconService,
     )
+    init {
+        renderHost.setAccessibilityProvider(owner.accessibilityProvider)
+    }
 
     private var recomposer: Recomposer? = null
     private var recomposerJob: Job? = null

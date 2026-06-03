@@ -45,6 +45,13 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
 import androidx.compose.ui.sensitiveContent
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineStart
@@ -53,6 +60,8 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.skiko.winui.WinUIAccessibilityAction
+import org.jetbrains.skiko.winui.WinUIAccessibilityRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -143,6 +152,41 @@ class WinUIOwnerTest {
             assertFalse(state.isAccessibilityForcedForTesting)
             assertFalse(state.hasPendingFlush)
             assertTrue(state.currentSemanticsNodesInvalidated)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderExposesComposeSemanticsSnapshot() {
+        val owner = createOwner()
+        try {
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    contentDescription = "WinUI action"
+                    testTag = "winui-action"
+                    role = Role.Button
+                    focused = true
+                    onClick { true }
+                }
+                it.measurePolicy = fixedMeasurePolicy(40, 20)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(100, 80))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val snapshot = assertNotNull(owner.accessibilityProvider.snapshot())
+            val semanticsNode = snapshot.root.children.single()
+
+            assertEquals(node.semanticsId.toLong(), semanticsNode.id)
+            assertEquals("WinUI action", semanticsNode.info.name)
+            assertEquals("winui-action", semanticsNode.info.automationId)
+            assertEquals(WinUIAccessibilityRole.BUTTON, semanticsNode.info.role)
+            assertTrue(semanticsNode.state.enabled)
+            assertTrue(semanticsNode.state.focused)
+            assertTrue(WinUIAccessibilityAction.CLICK in semanticsNode.actions)
+            assertEquals(semanticsNode.id, snapshot.focusedNodeId)
         } finally {
             owner.dispose()
         }

@@ -95,12 +95,14 @@ baseline, not every retest attempt.
   state, with no pending invalidated render state left after the frame. It also
   verifies both paths report `GraphicsApi.DIRECT3D` from the Skiko WinUI layer.
   The focused sample now records non-empty Compose draw bounds during the
-  attached render and verifies `disposeComposition()` clears the recorded bounds
-  back to `Rect.Zero`. A focused `runWinUISkikoSample` task now runs just those
-  Skiko diagnostics and exits successfully without the full sample's known
-  `KWINRT-024` teardown crash. The current upstream diagnostics expose render
-  state/result metadata but no pixel-read or surface snapshot API, so nonblank
-  frame validation remains blocked on a stable attached-window pixel-read path.
+  attached render, verifies `disposeComposition()` clears the recorded bounds
+  back to `Rect.Zero`, and validates the Skiko WinUI accessibility provider can
+  expose a tagged Compose semantics node from the render surface. A focused
+  `runWinUISkikoSample` task now runs just those Skiko diagnostics and exits
+  successfully without the full sample's known `KWINRT-024` teardown crash. The
+  current upstream diagnostics expose render state/result metadata but no
+  pixel-read or surface snapshot API, so nonblank frame validation remains
+  blocked on a stable attached-window pixel-read path.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

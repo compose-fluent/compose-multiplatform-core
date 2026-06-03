@@ -28,11 +28,15 @@ dependencies {
     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
     def kotlinWinRtVersion = project.findProperty("kotlinWinRt.version") ?: "0.1.0-SNAPSHOT"
+    def composeWinUiSkikoWinUiVersion = providers
+            .gradleProperty("composeWinUi.skikoWinUiVersion")
+            .orElse("0.0.0-SNAPSHOT")
     implementation(project(":compose:runtime:runtime"))
     implementation(project(":compose:ui:ui"))
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
     implementation("io.github.compose-fluent:winrt-runtime-jvm:$kotlinWinRtVersion")
+    implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
 }
 
 configurations {
