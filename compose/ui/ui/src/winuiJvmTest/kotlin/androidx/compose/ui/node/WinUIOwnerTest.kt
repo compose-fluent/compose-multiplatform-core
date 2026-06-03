@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.skiko.winui.WinUIAccessibilityAction
+import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilityRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -187,6 +188,41 @@ class WinUIOwnerTest {
             assertTrue(semanticsNode.state.focused)
             assertTrue(WinUIAccessibilityAction.CLICK in semanticsNode.actions)
             assertEquals(semanticsNode.id, snapshot.focusedNodeId)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun accessibilityProviderInvokesComposeClickAction() {
+        val owner = createOwner()
+        try {
+            var clicked = false
+            val node = LayoutNode().also {
+                it.modifier = Modifier.semantics {
+                    testTag = "winui-click"
+                    onClick {
+                        clicked = true
+                        true
+                    }
+                }
+                it.measurePolicy = fixedMeasurePolicy(24, 24)
+            }
+            owner.root.insertAt(0, node)
+            owner.setWindowContainerSize(IntSize(64, 64))
+            owner.measureAndLayout()
+            owner.onSemanticsChange()
+
+            val actionInvoked = owner.accessibilityProvider.performAction(
+                WinUIAccessibilityActionRequest(
+                    nodeId = node.semanticsId.toLong(),
+                    action = WinUIAccessibilityAction.CLICK,
+                    text = "",
+                ),
+            )
+
+            assertTrue(actionInvoked)
+            assertTrue(clicked)
         } finally {
             owner.dispose()
         }

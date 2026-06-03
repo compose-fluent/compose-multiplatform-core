@@ -26,8 +26,10 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.AnnotatedString
 import org.jetbrains.skiko.winui.WinUIAccessibilityAction
 import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilityChange
@@ -122,7 +124,29 @@ internal class WinUIAccessibilityBridge(
     override fun snapshot(): WinUIAccessibilitySnapshot =
         currentSemanticsOwner?.toWinUIAccessibilitySnapshot() ?: EmptySnapshot
 
-    override fun performAction(request: WinUIAccessibilityActionRequest): Boolean = false
+    override fun performAction(request: WinUIAccessibilityActionRequest): Boolean {
+        val targetNode = currentSemanticsOwner
+            ?.getAllSemanticsNodes(mergingEnabled = false)
+            ?.firstOrNull { it.id.toLong() == request.nodeId }
+            ?: return false
+        val config = targetNode.config
+        return when (request.action) {
+            WinUIAccessibilityAction.FOCUS ->
+                config.getOrNull(SemanticsActions.RequestFocus)?.action?.invoke() == true
+            WinUIAccessibilityAction.CLICK ->
+                config.getOrNull(SemanticsActions.OnClick)?.action?.invoke() == true
+            WinUIAccessibilityAction.EXPAND ->
+                config.getOrNull(SemanticsActions.Expand)?.action?.invoke() == true
+            WinUIAccessibilityAction.COLLAPSE ->
+                config.getOrNull(SemanticsActions.Collapse)?.action?.invoke() == true
+            WinUIAccessibilityAction.SET_TEXT ->
+                config.getOrNull(SemanticsActions.SetText)?.action?.invoke(
+                    AnnotatedString(request.text.orEmpty()),
+                ) == true
+            WinUIAccessibilityAction.INCREMENT,
+            WinUIAccessibilityAction.DECREMENT -> false
+        }
+    }
 
     fun stateForTest(): WinUIAccessibilityBridgeState =
         WinUIAccessibilityBridgeState(
