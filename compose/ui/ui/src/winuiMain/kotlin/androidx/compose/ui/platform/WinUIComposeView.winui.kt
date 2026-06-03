@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
+import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
 
 /**
@@ -123,6 +124,10 @@ class WinUIComposeView internal constructor(
     @InternalComposeUiApi
     val accessibilitySnapshotForTest: WinUIAccessibilitySnapshot?
         get() = owner.accessibilityProvider.snapshot()
+
+    @InternalComposeUiApi
+    fun performAccessibilityActionForTest(request: WinUIAccessibilityActionRequest): Boolean =
+        owner.accessibilityProvider.performAction(request)
 
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,

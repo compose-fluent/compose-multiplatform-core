@@ -94,6 +94,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.sensitiveContent
@@ -136,6 +137,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.skiko.GraphicsApi
+import org.jetbrains.skiko.winui.WinUIAccessibilityAction
+import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilityNode
 
 @Composable
@@ -2627,12 +2630,17 @@ private object ComposeWinUiSmokeApp {
     @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUISkikoRenderDiagnosticsSmoke() {
         val window = XamlWindow()
+        var accessibilityClickInvoked = false
         val currentComposeView = window.setContent {
             Layout(
                 modifier = Modifier
                     .semantics {
                         contentDescription = "WinUI Skiko rendered content"
                         testTag = "winui-skiko-render"
+                        onClick {
+                            accessibilityClickInvoked = true
+                            true
+                        }
                     }
                     .drawBehind {
                         drawRect(Color.Red)
@@ -2684,6 +2692,21 @@ private object ComposeWinUiSmokeApp {
             check(accessibilityNode?.info?.name == "WinUI Skiko rendered content") {
                 "WinUI Skiko accessibility provider did not expose Compose semantics: " +
                     accessibilitySnapshot.root
+            }
+            check(WinUIAccessibilityAction.CLICK in accessibilityNode.actions) {
+                "WinUI Skiko accessibility provider did not expose the Compose click action: " +
+                    accessibilityNode.actions
+            }
+            val actionInvoked = currentComposeView.performAccessibilityActionForTest(
+                WinUIAccessibilityActionRequest(
+                    nodeId = accessibilityNode.id,
+                    action = WinUIAccessibilityAction.CLICK,
+                    text = "",
+                ),
+            )
+            check(actionInvoked && accessibilityClickInvoked) {
+                "WinUI Skiko accessibility click did not dispatch back to Compose: " +
+                    "actionInvoked=$actionInvoked clicked=$accessibilityClickInvoked"
             }
             val drawRect = currentComposeView.lastDrawRectForTest
             check(drawRect.width > 0f && drawRect.height > 0f) {

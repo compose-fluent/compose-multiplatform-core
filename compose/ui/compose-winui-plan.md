@@ -222,7 +222,7 @@
 - [x] Cover WinUI Skiko frame-scheduler startup failure so a failed start is not
   cached as a started scheduler and the host can retry startup.
 - [x] Add repository-local Skiko scheduler/render diagnostics smoke coverage that verifies an unattached `WinUIComposeView` does not start the frame scheduler, and a window-owned `WinUIComposeView` reaches a render frame without `WinUISkikoRenderHost` reporting a render failure.
-- [x] Add a focused repository-local `runWinUISkikoSample` task so Skiko scheduler/render diagnostics can be retested without running the full WinUIView/window/interops smoke suite.
+- [x] Add a focused repository-local `runWinUISkikoSample` task so Skiko scheduler/render diagnostics and Skiko accessibility action dispatch can be retested without running the full WinUIView/window/interops smoke suite.
 - [x] Add repository-local Skiko diagnostics coverage that checks attached
   render state size and platform render result size are both reported and
   consistent, and that no pending invalidated render state remains after the

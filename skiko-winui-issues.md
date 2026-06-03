@@ -97,9 +97,10 @@ baseline, not every retest attempt.
   The focused sample now records non-empty Compose draw bounds during the
   attached render, verifies `disposeComposition()` clears the recorded bounds
   back to `Rect.Zero`, and validates the Skiko WinUI accessibility provider can
-  expose a tagged Compose semantics node from the render surface. Focused unit
-  coverage also validates Skiko accessibility actions dispatching back to
-  Compose semantics for focus, click, expand, collapse, set-text, and progress
+  expose a tagged Compose semantics node from the render surface and dispatch a
+  Skiko click action back to Compose semantics. Focused unit coverage also
+  validates Skiko accessibility actions dispatching back to Compose semantics
+  for focus, click, expand, collapse, set-text, and progress
   increment/decrement. A focused `runWinUISkikoSample` task now runs just those
   Skiko diagnostics and exits successfully without the full sample's known
   `KWINRT-024` teardown crash. The current upstream diagnostics expose render
