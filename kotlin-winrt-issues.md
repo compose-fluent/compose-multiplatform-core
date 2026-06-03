@@ -9,8 +9,8 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** none treated as blocking for current compose-winui
-  work.
+- **Open upstream/runtime:** `KWINRT-026`, not treated as blocking for current
+  compose-winui work.
 - **Open upstream/plugin:** `KWINRT-025`.
 - **Open compose-side workarounds:** `KWINRT-025`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
@@ -537,3 +537,38 @@ baseline, not every retest attempt.
 - **Validation:** reproduced after clearing `out/compose-multiplatform-core`
   module build directories and rerunning the sample with `--no-build-cache
   --rerun-tasks`.
+
+## KWINRT-026: Core text input focus registration fail-fast after full smoke
+
+- **Status:** Open upstream/runtime, non-blocking for current compose-winui
+  Skiko integration.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` after the
+  latest 2026-06-03 Maven snapshot retest. The full sample reaches
+  `compose-winui-sample: text input session cancellation` before the process
+  exits with `NTSTATUS 0xC0000005`. The focused
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` task reaches
+  `compose-winui-sample: skiko unattached scheduler deferred` and
+  `compose-winui-sample: skiko render diagnostics`, then exits successfully
+  without producing a new WER dump.
+- **Snapshot baseline:** `skiko-winui` / `skiko-winui-windows`
+  `0.0.0-20260603.023842-2`, `winrt-runtime` / `winrt-authoring`
+  `0.1.0-20260603.042831-23`, `winrt-gradle-plugin`
+  `0.1.0-20260603.043142-4`, and `winrt-compiler-plugin`
+  `0.1.0-20260603.042831-23`.
+- **Native evidence:** Store CDB `10.0.29547.1002` analyzed
+  `%LOCALAPPDATA%\CrashDumps\java.exe.11048.dmp`; the log is
+  `out/compose-multiplatform-core/windbg-java-11048.log`. The failure bucket is
+  `APPLICATION_FAULT_675_textinputframework.dll!FailFastWithHR`; exception
+  parameter 1 is `HRESULT 0x80004005`. The stack goes through
+  `KERNELBASE!RaiseFailFastException`, `textinputframework!FailFastWithHR`,
+  `textinputframework!TextboxRegistration::SelectionChanged`,
+  `textinputframework!TextInputClient::NotifySelectionChanged`, `msctf`, and
+  `Windows_UI_Core_TextInput!Windows::UI::Text::Core::CEditContext::NotifyFocusEnter`.
+  The loaded `Microsoft.UI.Xaml.dll` is Windows App SDK `3.1.8.2604` from the
+  staged kotlin-winrt/skiko WinUI application package.
+- **Current assessment:** this is a separate bucket from the `KWINRT-024`
+  CoreMessaging/XAML teardown dumps. It points at WinUI core text input focus
+  registration or lifetime during the full sample's text input path, not a
+  Skiko render failure and not a Java/Kotlin managed exception. Do not block
+  skiko-winui integration on this issue; use the focused Skiko sample for
+  Skiko-specific validation until text input teardown is the active work item.
