@@ -501,6 +501,15 @@ baseline, not every retest attempt.
   still reaches `compose-winui-sample: text input session cancellation` and then
   exits with the same `NTSTATUS 0xC0000005`; no newer dump was produced, so the
   latest native evidence remains `java.exe.51408.dmp`.
+- **2026-06-03 kt-winrt fix-claim retest:** direct Sonatype snapshot metadata
+  and Gradle dependency insight still resolve `winrt-runtime` /
+  `winrt-runtime-jvm` to `0.1.0-20260603.042831-23`,
+  `winrt-gradle-plugin` to `0.1.0-20260603.043142-4`, and
+  `winrt-compiler-plugin` to `0.1.0-20260603.042831-23`.
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` still reaches the final
+  `compose-winui-sample: text input session cancellation` log and fails with
+  process exit `NTSTATUS 0xC0000005`. This run did not produce a newer WER dump,
+  so no fresh native bucket was available to analyze.
 - **2026-06-03 Store WinDbg retest evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\javaw.exe.55656.dmp`; the log is
