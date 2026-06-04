@@ -20,7 +20,7 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-internal actual typealias SynchronizedObject = Any
+@PublishedApi internal actual typealias SynchronizedObject = Any
 
 @Suppress("NOTHING_TO_INLINE")
 internal actual inline fun makeSynchronizedObject(ref: Any?) = ref ?: SynchronizedObject()

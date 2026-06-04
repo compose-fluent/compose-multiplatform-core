@@ -37,11 +37,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 
-internal actual class SynchronizedObject
+@PublishedApi internal actual class SynchronizedObject
 
 internal actual inline fun makeSynchronizedObject(ref: Any?): SynchronizedObject = SynchronizedObject()
 
-internal actual inline fun <R> synchronized(lock: SynchronizedObject, block: () -> R): R = block()
+@PublishedApi internal actual inline fun <R> synchronized(
+    lock: SynchronizedObject,
+    block: () -> R,
+): R = block()
 
 internal actual fun ActualStringDelegate(): PlatformStringDelegate = WinUIStringDelegate
 

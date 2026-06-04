@@ -307,7 +307,9 @@ baseline, not every retest attempt.
 
 ## KWINRT-024: WinUI authored/runtime lifetime crash after full smoke
 
-- **Status:** Deferred / non-blocking for current compose-winui work.
+- **Status:** Open in the published kotlin-winrt Maven snapshots consumed by
+  compose-winui; fixed locally in `kotlin-winrt` but not yet validated as fixed
+  from Maven artifacts.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` with
   `external/kotlin-winrt` `1bd45755`, still reproduced after syncing
   `6b1ce387` (`Remove stale interface support merging`). The sample passes
@@ -360,7 +362,7 @@ baseline, not every retest attempt.
   `runWinUIViewSample` reaches the same final smoke log
   `compose-winui-sample: text input session cancellation` and exits with
   `NTSTATUS 0xC0000005`.
-- **2026-06-03 WinDbg evidence:** Store WinDbg
+  - **2026-06-03 WinDbg evidence:** Store WinDbg
   `10.0.29547.1002` analyzed
   `%LOCALAPPDATA%\CrashDumps\java.exe(1).39844.dmp`; the log is
   `out/compose-multiplatform-core/windbg-java-39844.log`. The failure bucket is
@@ -629,11 +631,40 @@ baseline, not every retest attempt.
   with `NTSTATUS 0xC0000005`. No newer WER dump was produced, so the latest
   native evidence remains `%LOCALAPPDATA%\CrashDumps\java.exe.58444.dmp` /
   `%LOCALAPPDATA%\CrashDumps\java.exe(1).58444.dmp`.
-- **Current compose-winui policy:** do not block skiko-winui integration or
-  follow-on compose-winui work on this teardown crash for now. Treat the sample
-  reaching `compose-winui-sample: text input session cancellation` as successful
-  validation of the current skiko-winui integration path, and revisit this issue
-  only when teardown correctness becomes the active focus again.
+  - **Current compose-winui policy:** do not block skiko-winui integration or
+    follow-on compose-winui work on this teardown crash for now. Treat the sample
+    reaching `compose-winui-sample: text input session cancellation` as successful
+    validation of the current skiko-winui integration path, and revisit this issue
+    only when teardown correctness becomes the active focus again.
+  - **2026-06-04 local fix validation:** CDB confirmed the final crash was XAML
+    worker-thread FLS cleanup entering `Microsoft.UI.Xaml.dll` dynamic metadata
+    teardown and releasing a `Controls::IPanel` / `IFrameworkElement` vtable from
+    `Microsoft.UI.Xaml.Controls.dll` after that module was already on an unload
+    path. The local `kotlin-winrt` fix keeps real `CoUninitialize`, clears
+    JVM-held XAML metadata/activation/composable caches before COM uninitialization,
+    wraps generated `Application.Start` in a runtime-owned native module lifetime
+    guard, and uses the generic `NativeModulePins` adapter to keep
+    `Microsoft.UI.Xaml.dll` plus `Microsoft.UI.Xaml.Controls.dll` mapped for the
+    XAML application lifetime. With the fixed local Maven artifacts,
+    `:compose:ui:ui:winui-samples:runWinUIViewSample` reaches
+    `compose-winui-sample: text input session cancellation` and exits successfully.
+- **2026-06-04 Maven snapshot retest:** direct Sonatype metadata and Gradle
+  dependency insight resolve `winrt-runtime`, `winrt-runtime-jvm`,
+  `winrt-authoring`, and `winrt-compiler-plugin` to
+  `0.1.0-20260604.125452-24`, with `winrt-gradle-plugin`
+  `0.1.0-20260604.125740-5`. compose-winui also updated its custom sample
+  `JavaExec` tasks to follow the README guidance by depending on both
+  `stageWinRtRuntimeAssets` and `buildWinRtAuthoringHost`.
+- **2026-06-04 Kotlin 2.4 retest:** after upgrading this repository to Kotlin
+  `2.4.0`, `:compose:ui:ui:compileKotlinWinuiJvm`, the focused WinUI JVM tests,
+  and `:compose:ui:ui:winui-samples:runWinUISkikoSample` pass with the
+  published kotlin-winrt `0.1.0-20260604.125452-24` runtime/compiler artifacts.
+  The full `:compose:ui:ui:winui-samples:runWinUIViewSample` still reaches
+  `compose-winui-sample: text input session cancellation` and exits with
+  `NTSTATUS 0xC0000005`. Fresh WER dumps were produced at
+  `%LOCALAPPDATA%\CrashDumps\java.exe.5868.dmp` and
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).5868.dmp`; CDB confirmed the dump
+  stores an access violation but timed out before producing a useful stack.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 
@@ -688,3 +719,27 @@ baseline, not every retest attempt.
   Skiko render failure and not a Java/Kotlin managed exception. Do not block
   skiko-winui integration on this issue; use the focused Skiko sample for
   Skiko-specific validation until text input teardown is the active work item.
+
+## KWINRT-027: Maven compiler plugin snapshot requires Kotlin 2.4 compiler APIs
+
+- **Status:** Resolved for compose-winui by upgrading this repository to Kotlin
+  `2.4.0`.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` after clearing the
+  targeted Gradle snapshot caches and resolving kotlin-winrt artifacts to
+  `0.1.0-20260604.125452-24` / Gradle plugin `0.1.0-20260604.125740-5`.
+- **Symptom:** the Kotlin compiler plugin fails to load before WinUI runtime
+  validation can run:
+  `NoClassDefFoundError: org/jetbrains/kotlin/extensions/ExtensionPointDescriptor`
+  from
+  `io.github.composefluent.winrt.compiler.KotlinWinRtCompilerPluginRegistrar.registerExtensions`.
+- **Evidence:** the current repository uses Kotlin `2.3.20`; its
+  `kotlin-compiler-embeddable-2.3.20.jar` does not contain
+  `org/jetbrains/kotlin/extensions/ExtensionPointDescriptor.class`. The freshly
+  resolved `winrt-compiler-plugin` POM declares `kotlin-stdlib` and
+  `kotlin-compiler-embeddable` `2.4.0`, and local inspection confirms
+  `kotlin-compiler-embeddable-2.4.0.jar` does contain the missing class.
+- **Resolution:** compose-winui now uses Kotlin `2.4.0`, adds a `KOTLIN_2_4`
+  build target, and applies the small Kotlin 2.4 compatibility fixes needed for
+  `buildSrc`, `compose-ui`, and `ui-text`. `compileKotlinWinuiJvm` now passes and
+  the runtime validation proceeds to the separate `KWINRT-024` full-sample
+  native crash.

@@ -255,12 +255,22 @@
 - [ ] Re-run existing Android, desktop, and iOS compose-ui interop tests to confirm the new WinUI target does not regress existing targets.
 
 ## kotlin-winrt blockers
-- `KWINRT-024`: Deferred / non-blocking after the 2026-06-03 latest snapshot retest.
-  `runWinUIViewSample` still reaches the full current smoke path, then exits with
-  `NTSTATUS 0xC0000005`; Store WinDbg dump evidence points to a XAML
-  fail-fast/stowed exception after the final smoke log, not an FFM upcall frame.
-  Do not block current skiko-winui integration or follow-on compose-winui work
-  on this issue.
+- `KWINRT-024`: Still open in the latest published Maven snapshot retest. After
+  upgrading compose-winui to Kotlin `2.4.0`, `compileKotlinWinuiJvm`, focused
+  WinUI JVM tests, and `runWinUISkikoSample` pass with kotlin-winrt
+  `0.1.0-20260604.125452-24`, but the full `runWinUIViewSample` still reaches
+  `compose-winui-sample: text input session cancellation` and exits with
+  `NTSTATUS 0xC0000005`. Fresh WER dumps were produced at
+  `%LOCALAPPDATA%\CrashDumps\java.exe.5868.dmp` and
+  `%LOCALAPPDATA%\CrashDumps\java.exe(1).5868.dmp`.
+- `KWINRT-027`: Resolved for compose-winui by upgrading this repository to
+  Kotlin `2.4.0`; the kotlin-winrt compiler plugin no longer fails with missing
+  `org.jetbrains.kotlin.extensions.ExtensionPointDescriptor`, and WinUI JVM
+  compilation now reaches runtime validation.
+- The local README-required application initialization chain is still
+  `WinRtWindowsAppSdkBootstrap.initialize()` -> `RuntimeScope.initializeSingleThreaded()`
+  -> `Application.start { ... }`; custom sample `JavaExec` tasks now depend on
+  both `stageWinRtRuntimeAssets` and `buildWinRtAuthoringHost`.
 - Latest cache-clear retest still resolves Sonatype metadata to kotlin-winrt
   runtime/compiler `0.1.0-20260603.042831-23` and Gradle plugin
   `0.1.0-20260603.043142-4`; the full sample still fails at process teardown

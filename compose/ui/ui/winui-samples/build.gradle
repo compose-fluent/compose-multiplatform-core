@@ -98,6 +98,7 @@ tasks.register("runWinUIViewSample", JavaExec) {
     description = "Runs the minimal compose-winui WinUI smoke sample."
     dependsOn("classes")
     dependsOn("stageWinRtRuntimeAssets")
+    dependsOn("buildWinRtAuthoringHost")
     mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     classpath = sourceSets.main.runtimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
@@ -109,6 +110,7 @@ tasks.register("runWinUISkikoSample", JavaExec) {
     description = "Runs the compose-winui Skiko render smoke sample."
     dependsOn("classes")
     dependsOn("stageWinRtRuntimeAssets")
+    dependsOn("buildWinRtAuthoringHost")
     mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     classpath = sourceSets.main.runtimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
