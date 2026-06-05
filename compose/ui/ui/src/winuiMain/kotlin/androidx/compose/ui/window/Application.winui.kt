@@ -26,8 +26,6 @@ import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
-import io.github.composefluent.winrt.runtime.RuntimeScope
-import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.LaunchActivatedEventArgs
 import microsoft.ui.xaml.Application as XamlApplication
@@ -40,12 +38,8 @@ import kotlinx.coroutines.launch
 fun Application(
     content: @Composable ApplicationScope.() -> Unit,
 ) {
-    WinRtWindowsAppSdkBootstrap.initialize().use {
-        RuntimeScope.initializeSingleThreaded().use {
-            XamlApplication.start {
-                WinUIXamlApplication(content)
-            }
-        }
+    XamlApplication.start {
+        WinUIXamlApplication(content)
     }
 }
 

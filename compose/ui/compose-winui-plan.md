@@ -308,6 +308,35 @@
 
 ## skiko-winui status
 
+- `SKIKO-007`: Open upstream/publication ABI. `skiko-winui`
+  `0.0.0-20260605.111531-5` still publishes `microsoft/**` and `windows/**`
+  projection classes in the same packages as compose-winui's generated
+  kotlin-winrt projections. The native host classpath loads `skiko-winui`
+  before `ui-winuijvm`, so these bundled projections can shadow the local
+  generated projections. Observed failures include
+  `InputSystemCursor cannot inherit from final InputCursor`, `UIElement` missing
+  Kotlin `$stable`, `XamlControlsResources` inheriting from a final
+  `ResourceDictionary`, and `WinUISkiaHostPanel` inheriting from a final
+  `Grid` when compose-ui owns the generated `Grid`. Direct WinMD inspection
+  shows `Microsoft.UI.Input.InputCursor` is not sealed while
+  `InputSystemCursor` is sealed and extends `InputCursor`; `Grid` is also not
+  sealed and extends `Panel`. This points to incompatible projection ownership
+  or stale generator shape in the published `skiko-winui` artifact, not WinMD
+  defining the base classes as final. A staged-jar stripping experiment proved
+  this is broader than one class: removing all bundled projections avoids some
+  shadowing but breaks skiko's authored support graph with missing classes such
+  as `microsoft/ui/input/IInputObject`. Upstream should either publish
+  `skiko-winui` without shared WinRT/WinUI projection classes, or republish it
+  with the exact kotlin-winrt snapshot/shape rules used by compose-winui. Do
+  not keep class-by-class stripping as the compose-winui integration path.
+  Validation after cleanup with JDK 25 and
+  `:compose:ui:ui:compileKotlinWinuiJvm`
+  `:compose:ui:ui:winui-samples:runWinRtApplicationHost`
+  (`-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
+  --no-configure-on-demand`) compiles `compose-ui`, starts the native host via
+  `Application.start`, logs `compose-winui-sample: application created`, and
+  then fails with the same `InputSystemCursor` / final `InputCursor`
+  `IncompatibleClassChangeError`.
 - `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
   current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;

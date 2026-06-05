@@ -60,6 +60,7 @@ def composeWinUiWindowsSdkVersion = providers
 
 winRt {
     application {
+        mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
     windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
     nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
