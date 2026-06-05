@@ -2597,6 +2597,17 @@ private object ComposeWinUiSmokeApp {
         check(classpath.any { it.contains("skiko-winui") }) {
             "WinUI sample runtime classpath did not include skiko-winui."
         }
+        val composeProjectionOwnerIndex = classpath.indexOfFirst { entry ->
+            entry.contains("ui-winuijvm")
+        }
+        val skikoWinUiIndex = classpath.indexOfFirst { entry ->
+            entry.contains("skiko-winui")
+        }
+        check(composeProjectionOwnerIndex >= 0 && composeProjectionOwnerIndex < skikoWinUiIndex) {
+            "WinUI sample runtime classpath must load compose-ui WinUI projections before " +
+                "skiko-winui while SKIKO-007 is open.\n" +
+                classpath.joinToString(separator = "\n")
+        }
 
         // SKIKO-006: the current JVM Skiko API jar is still named skiko-awt,
         // so keep this runtime guard focused on Desktop/AWT native runtime artifacts.
