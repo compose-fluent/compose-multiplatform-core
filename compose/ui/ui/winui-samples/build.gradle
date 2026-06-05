@@ -67,6 +67,15 @@ winRt {
     type("Windows.Foundation.Uri")
 }
 
+def composeWinUiProjectionOwnerFirstClasspath = { runtimeClasspath ->
+    // SKIKO-007: JavaExec samples also need compose-ui's generated projection
+    // owner before skiko-winui's overlapping projection classes.
+    files(
+            runtimeClasspath.filter { it.name.startsWith("ui-winuijvm-") },
+            runtimeClasspath.filter { !it.name.startsWith("ui-winuijvm-") },
+    )
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
@@ -135,8 +144,8 @@ tasks.register("runWinUIViewSample", JavaExec) {
     dependsOn("classes")
     dependsOn("stageWinRtRuntimeAssets")
     dependsOn("buildWinRtAuthoringHost")
-    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
-    classpath = sourceSets.main.runtimeClasspath
+    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
+    classpath = composeWinUiProjectionOwnerFirstClasspath(sourceSets.main.runtimeClasspath)
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.sample.autoExit", "true")
 }
@@ -147,8 +156,8 @@ tasks.register("runWinUISkikoSample", JavaExec) {
     dependsOn("classes")
     dependsOn("stageWinRtRuntimeAssets")
     dependsOn("buildWinRtAuthoringHost")
-    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
-    classpath = sourceSets.main.runtimeClasspath
+    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
+    classpath = composeWinUiProjectionOwnerFirstClasspath(sourceSets.main.runtimeClasspath)
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.sample.autoExit", "true")
     args("skiko")

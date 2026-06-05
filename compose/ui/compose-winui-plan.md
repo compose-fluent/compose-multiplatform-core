@@ -343,10 +343,13 @@
   copied `ui-winuijvm` to a lexically earlier jar name, making compose-ui's
   generated projection classes load before the overlapping `skiko-winui`
   classes; the full native host sample then passed through Skiko render
-  diagnostics and the current smoke path. compose-winui keeps this as a narrow
-  sample-host staging workaround until `skiko-winui` stops publishing
-  overlapping projections or kotlin-winrt exposes explicit native-host
-  classpath ownership/order.
+  diagnostics and the current smoke path. The same projection-owner ordering is
+  required for repository-local JavaExec sample tasks such as
+  `runWinUISkikoSample`, where the default runtime classpath can otherwise fail
+  before the focused Skiko render path starts. compose-winui keeps this as a
+  narrow sample-host/JavaExec classpath workaround until `skiko-winui` stops
+  publishing overlapping projections or kotlin-winrt exposes explicit classpath
+  ownership/order.
 - `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
   current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;
