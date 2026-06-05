@@ -86,6 +86,41 @@ tasks.named("generateWinRtProjections").configure {
     authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
 }
 
+tasks.register("prioritizeComposeWinUiProjectionJarForHost") {
+    dependsOn("buildWinRtApplicationHost")
+    outputs.upToDateWhen { false }
+    doLast {
+        def libDirectory = layout.buildDirectory
+                .dir("kotlin-winrt/application-host/bin/lib")
+                .get()
+                .asFile
+        delete(fileTree(libDirectory) {
+            include("00-ui-winuijvm-*.jar")
+        })
+
+        def uiWinUiJars = fileTree(libDirectory) {
+            include("ui-winuijvm-*.jar")
+        }.files
+        if (uiWinUiJars.size() != 1) {
+            throw new GradleException("Expected exactly one ui-winuijvm jar, found ${uiWinUiJars.size()}.")
+        }
+
+        // SKIKO-007: skiko-winui currently bundles overlapping WinRT/WinUI
+        // projections. The native host builds its classpath from staged lib
+        // names, so load compose-ui's projection owner before skiko-winui.
+        def uiWinUiJar = uiWinUiJars.first()
+        copy {
+            from(uiWinUiJar)
+            into(libDirectory)
+            rename { "00-${uiWinUiJar.name}" }
+        }
+    }
+}
+
+tasks.named("runWinRtApplicationHost").configure {
+    dependsOn("prioritizeComposeWinUiProjectionJarForHost")
+}
+
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_25)

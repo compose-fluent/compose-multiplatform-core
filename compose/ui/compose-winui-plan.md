@@ -339,7 +339,14 @@
   `IncompatibleClassChangeError`. Dependency insight confirms this validation
   uses current kotlin-winrt snapshots (`winrt-runtime` / `winrt-runtime-jvm` /
   `winrt-authoring` `0.1.0-20260605.031133-28`) while `skiko-winui` remains
-  `0.0.0-20260605.111531-5`.
+  `0.0.0-20260605.111531-5`. A non-destructive staged classpath experiment
+  copied `ui-winuijvm` to a lexically earlier jar name, making compose-ui's
+  generated projection classes load before the overlapping `skiko-winui`
+  classes; the full native host sample then passed through Skiko render
+  diagnostics and the current smoke path. compose-winui keeps this as a narrow
+  sample-host staging workaround until `skiko-winui` stops publishing
+  overlapping projections or kotlin-winrt exposes explicit native-host
+  classpath ownership/order.
 - `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
   current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;
