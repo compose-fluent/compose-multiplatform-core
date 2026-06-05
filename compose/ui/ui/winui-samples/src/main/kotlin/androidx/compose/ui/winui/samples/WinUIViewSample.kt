@@ -482,6 +482,8 @@ private object ComposeWinUiSmokeApp {
         var secondaryWindowCloseRequestCount by remember { mutableStateOf(0) }
         var mainWindowFocusedOnce by remember { mutableStateOf(false) }
         var mainWindowDeactivatedPassed by remember { mutableStateOf(false) }
+        val skipWindowSmoke = java.lang.Boolean.getBoolean("compose.winui.sample.skipWindowSmoke")
+        val skipSecondaryWindowSmoke = java.lang.Boolean.getBoolean("compose.winui.sample.skipSecondaryWindowSmoke")
         remember {
             println("compose-winui-sample: application created")
             runWinUILifecycleOwnerSmoke()
@@ -490,43 +492,58 @@ private object ComposeWinUiSmokeApp {
             runWinUIViewLifecycleSmoke()
             runWinUIViewZOrderSmoke()
             runWinUIViewUnclippedBoundsSmoke()
-            runWinUIViewControlVarietySmoke()
+            if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipControlVarietySmoke")) {
+                runWinUIViewControlVarietySmoke()
+            }
             true
         }
-        LaunchedEffect(Unit) {
-            runSmoke(applicationScope) {
-                runWinUIViewPlacementSmoke()
-                runWinUIViewDensitySmoke()
-                runWinUIViewReuseSmoke()
-                runWinUIViewStateUpdateSmoke()
-                runWinUILayoutSnapshotInvalidationSmoke()
-                runWinUILayoutCompletedListenerSmoke()
-                runWinUILayoutRectChangedSmoke()
-                runWinUIOwnerLayerTransformSmoke()
-                runWinUIRootKeyEventSmoke()
-                runWinUIRootFocusTraversalKeySmoke()
-                runWinUIViewFocusInputIntegrationSmoke()
-                runWinUIRootSemanticsSmoke()
-                runWinUIOwnerEndApplyChangesSmoke()
-                runWinUIRootUncaughtExceptionHandlerSmoke()
-                runWinUIRootIndirectPointerSmoke()
-                runWinUIPointerInputSmoke()
-                runWinUIPointerMoveSmoke()
-                runWinUIPointerEnterExitSmoke()
-                runWinUIPointerScrollSmoke()
-                runWinUIViewPointerInteropSmoke()
-                runWinUIPointerCancelOnDisposeSmoke()
-                runWinUIViewRelayoutSmoke()
-                runWinUIViewPropertiesUpdateSmoke()
-                runWinUIViewContainerSyncSmoke()
-                runWinUIViewGeneratedEventCleanupSmoke()
-                runWinUISkikoRuntimeClasspathSmoke()
-                runWinUISkikoUnattachedSchedulerSmoke()
-                runWinUISkikoRenderDiagnosticsSmoke()
-                runWinUISaveableStateSmoke()
-                runWinUIRetainedValuesSmoke()
-                runWinUITextInputSessionSmoke()
-                reuseSmokePassed = true
+        if (skipWindowSmoke) {
+            LaunchedEffect(Unit) {
+                println("compose-winui-sample: window smoke skipped")
+                if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
+                    applicationScope.exitApplication()
+                }
+            }
+        } else {
+            LaunchedEffect(Unit) {
+                runSmoke(applicationScope) {
+                    if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipLaunchedSmoke")) {
+                        runWinUIViewPlacementSmoke()
+                        runWinUIViewDensitySmoke()
+                        runWinUIViewReuseSmoke()
+                        runWinUIViewStateUpdateSmoke()
+                        runWinUILayoutSnapshotInvalidationSmoke()
+                        runWinUILayoutCompletedListenerSmoke()
+                        runWinUILayoutRectChangedSmoke()
+                        runWinUIOwnerLayerTransformSmoke()
+                        runWinUIRootKeyEventSmoke()
+                        runWinUIRootFocusTraversalKeySmoke()
+                        runWinUIViewFocusInputIntegrationSmoke()
+                        runWinUIRootSemanticsSmoke()
+                        runWinUIOwnerEndApplyChangesSmoke()
+                        runWinUIRootUncaughtExceptionHandlerSmoke()
+                        runWinUIRootIndirectPointerSmoke()
+                        runWinUIPointerInputSmoke()
+                        runWinUIPointerMoveSmoke()
+                        runWinUIPointerEnterExitSmoke()
+                        runWinUIPointerScrollSmoke()
+                        runWinUIViewPointerInteropSmoke()
+                        runWinUIPointerCancelOnDisposeSmoke()
+                        runWinUIViewRelayoutSmoke()
+                        runWinUIViewPropertiesUpdateSmoke()
+                        runWinUIViewContainerSyncSmoke()
+                        runWinUIViewGeneratedEventCleanupSmoke()
+                        runWinUISkikoRuntimeClasspathSmoke()
+                        runWinUISkikoUnattachedSchedulerSmoke()
+                        runWinUISkikoRenderDiagnosticsSmoke()
+                        runWinUISaveableStateSmoke()
+                        runWinUIRetainedValuesSmoke()
+                        if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipTextInputSmoke")) {
+                            runWinUITextInputSessionSmoke()
+                        }
+                    }
+                    reuseSmokePassed = true
+                }
             }
         }
         LaunchedEffect(reuseSmokePassed, windowSmokePassed, secondaryWindowClosePassed) {
@@ -542,6 +559,13 @@ private object ComposeWinUiSmokeApp {
                 }
                 applicationScope.exitApplication()
             }
+            if (
+                skipSecondaryWindowSmoke &&
+                windowSmokePassed &&
+                java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")
+            ) {
+                applicationScope.exitApplication()
+            }
         }
         LaunchedEffect(secondaryWindowCloseRequested) {
             if (secondaryWindowCloseRequested) {
@@ -552,25 +576,26 @@ private object ComposeWinUiSmokeApp {
                 secondaryWindowVisible = false
             }
         }
-        val windowProbe = remember {
-            println("compose-winui-sample: window created")
-            WinUIViewLifecycleProbe()
-        }
-        var title by remember { mutableStateOf("compose-winui sample") }
-        var extendsContentIntoTitleBar by remember { mutableStateOf(false) }
-        var backdrop: WindowBackdrop by remember { mutableStateOf(WindowBackdrop.Mica) }
-        LaunchedEffect(Unit) {
-            withFrameNanos { }
-            title = "compose-winui sample updated"
-            extendsContentIntoTitleBar = true
-            backdrop = WindowBackdrop.DesktopAcrylic
-        }
-        with(applicationScope) {
-            Window(
-                title = title,
-                extendsContentIntoTitleBar = extendsContentIntoTitleBar,
-                backdrop = backdrop,
-            ) {
+        if (!skipWindowSmoke) {
+            val windowProbe = remember {
+                println("compose-winui-sample: window created")
+                WinUIViewLifecycleProbe()
+            }
+            var title by remember { mutableStateOf("compose-winui sample") }
+            var extendsContentIntoTitleBar by remember { mutableStateOf(false) }
+            var backdrop: WindowBackdrop by remember { mutableStateOf(WindowBackdrop.Mica) }
+            LaunchedEffect(Unit) {
+                withFrameNanos { }
+                title = "compose-winui sample updated"
+                extendsContentIntoTitleBar = true
+                backdrop = WindowBackdrop.DesktopAcrylic
+            }
+            with(applicationScope) {
+                Window(
+                    title = title,
+                    extendsContentIntoTitleBar = extendsContentIntoTitleBar,
+                    backdrop = backdrop,
+                ) {
                 var content by remember { mutableStateOf("Hello from Compose WinUI") }
                 var backdropSmokePassed by remember { mutableStateOf(false) }
                 var backdropClearSmokePassed by remember { mutableStateOf(false) }
@@ -578,7 +603,9 @@ private object ComposeWinUiSmokeApp {
                 var lastTextBox by remember { mutableStateOf<TextBox?>(null) }
                 var lastToggleSwitch by remember { mutableStateOf<ToggleSwitch?>(null) }
                 val nativeFocusRequester = remember { FocusRequester() }
-                var nativeFocusSmokePassed by remember { mutableStateOf(false) }
+                var nativeFocusSmokePassed by remember {
+                    mutableStateOf(java.lang.Boolean.getBoolean("compose.winui.sample.skipNativeFocusSmoke"))
+                }
                 LaunchedEffect(Unit) {
                     withFrameNanos { }
                     content = "Hello from Compose WinUI updated"
@@ -671,35 +698,36 @@ private object ComposeWinUiSmokeApp {
                     },
                 )
             }
-            if (secondaryWindowVisible) {
-                Window(
-                    onCloseRequest = {
-                        secondaryWindowCloseRequestCount += 1
-                        check(mainWindowFocusedOnce) {
-                            "Primary WinUI window did not report an activated state."
+                if (secondaryWindowVisible && !skipSecondaryWindowSmoke) {
+                    Window(
+                        onCloseRequest = {
+                            secondaryWindowCloseRequestCount += 1
+                            check(mainWindowFocusedOnce) {
+                                "Primary WinUI window did not report an activated state."
+                            }
+                            check(mainWindowDeactivatedPassed) {
+                                "Primary WinUI window did not report deactivation for secondary activation."
+                            }
+                            secondaryWindowCloseRequested = true
+                            println("compose-winui-sample: secondary window close request")
+                        },
+                        title = "compose-winui secondary",
+                    ) {
+                        check(window.title == "compose-winui secondary") {
+                            "Secondary WinUI window title was not applied."
                         }
-                        check(mainWindowDeactivatedPassed) {
-                            "Primary WinUI window did not report deactivation for secondary activation."
+                        LaunchedEffect(Unit) {
+                            withFrameNanos { }
+                            awaitCondition("primary WinUI window activation") {
+                                mainWindowFocusedOnce
+                            }
+                            awaitCondition("primary WinUI window deactivation") {
+                                mainWindowDeactivatedPassed
+                            }
+                            window.close()
+                            secondaryWindowCloseReturnedWhileComposed = true
+                            println("compose-winui-sample: secondary window pre-close canceled")
                         }
-                        secondaryWindowCloseRequested = true
-                        println("compose-winui-sample: secondary window close request")
-                    },
-                    title = "compose-winui secondary",
-                ) {
-                    check(window.title == "compose-winui secondary") {
-                        "Secondary WinUI window title was not applied."
-                    }
-                    LaunchedEffect(Unit) {
-                        withFrameNanos { }
-                        awaitCondition("primary WinUI window activation") {
-                            mainWindowFocusedOnce
-                        }
-                        awaitCondition("primary WinUI window deactivation") {
-                            mainWindowDeactivatedPassed
-                        }
-                        window.close()
-                        secondaryWindowCloseReturnedWhileComposed = true
-                        println("compose-winui-sample: secondary window pre-close canceled")
                     }
                 }
             }
