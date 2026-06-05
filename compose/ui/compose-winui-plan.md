@@ -336,7 +336,10 @@
   --no-configure-on-demand`) compiles `compose-ui`, starts the native host via
   `Application.start`, logs `compose-winui-sample: application created`, and
   then fails with the same `InputSystemCursor` / final `InputCursor`
-  `IncompatibleClassChangeError`.
+  `IncompatibleClassChangeError`. Dependency insight confirms this validation
+  uses current kotlin-winrt snapshots (`winrt-runtime` / `winrt-runtime-jvm` /
+  `winrt-authoring` `0.1.0-20260605.031133-28`) while `skiko-winui` remains
+  `0.0.0-20260605.111531-5`.
 - `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
   current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;
