@@ -719,6 +719,22 @@ baseline, not every retest attempt.
   Skiko render failure and not a Java/Kotlin managed exception. Do not block
   skiko-winui integration on this issue; use the focused Skiko sample for
   Skiko-specific validation until text input teardown is the active work item.
+- **2026-06-05 SkiaWinUISample dump:** Store WinDbg
+  `Microsoft.WinDbg_1.2603.20001.0` was available but its `WinDbgX.exe`
+  command-line launch did not produce a headless log; the same dump was then
+  analyzed with local CDB and symbols. The latest
+  `%LOCALAPPDATA%\CrashDumps\SkiaWinUISample.exe.13612.dmp` is the same
+  fail-fast bucket: exception code `0x675` at
+  `KERNELBASE!RaiseFailFastException`, stack through
+  `textinputframework!FailFastWithHR` with `HRESULT 0x80004005`,
+  `TextboxRegistration::SelectionChanged`,
+  `TextInputClient::NotifySelectionChanged`,
+  `TextInputClient::EditControlRegister`, `msctf`, and
+  `Windows_UI_Core_TextInput!Windows::UI::Text::Core::CEditContext::NotifyFocusEnter`.
+  The process was the upstream skiko sample host
+  `compose-fluent-skiko\samples\SkiaWinUISample`, loaded Windows App SDK
+  `Microsoft.UI.Xaml.dll` `3.1.8.2604`, and is evidence that this native
+  text-input fail-fast is not specific to compose-winui's full smoke sample.
 
 ## KWINRT-027: Maven compiler plugin snapshot requires Kotlin 2.4 compiler APIs
 
