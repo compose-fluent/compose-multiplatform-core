@@ -349,7 +349,24 @@
   before the focused Skiko render path starts. compose-winui keeps this as a
   narrow sample-host/JavaExec classpath workaround until `skiko-winui` stops
   publishing overlapping projections or kotlin-winrt exposes explicit classpath
-  ownership/order.
+  ownership/order. Retest on 2026-06-06 after refreshing to kotlin-winrt
+  snapshots `winrt-runtime-jvm` `0.1.0-20260605.202352-37` and
+  `winrt-gradle-plugin` `0.1.0-20260605.202635-18` still resolves
+  `skiko-winui` / `skiko-winui-windows` to `0.0.0-20260605.111531-5`.
+  The new plugin DSL requires
+  `windowsSdk(version, includeExtensions, generateProjection)` and
+  `nugetPackage("Microsoft.WindowsAppSDK", version) { generateProjection =
+  true }` for the existing explicit WinUI type projection path. With that
+  shape fixed, `:compose:ui:ui:compileKotlinWinuiJvm` passes. Running
+  `:compose:ui:ui:winui-samples:runWinRtApplicationHost` with
+  `--no-configuration-cache --no-configure-on-demand
+  -x :compose:ui:ui:winui-samples:prioritizeComposeWinUiProjectionJarForHost`
+  still fails after `compose-winui-sample: application created` with the same
+  `IncompatibleClassChangeError: class microsoft.ui.input.InputSystemCursor
+  cannot inherit from final class microsoft.ui.input.InputCursor`, so the
+  projection shadowing issue is not fixed by the latest available snapshots.
+  The normal native host path with the staged `00-ui-winuijvm` workaround still
+  passes the full smoke path.
 - `SKIKO-004`: Mitigated locally; not an active upstream/open issue for the
   current compose-winui path. An unattached
   `WinUIComposeView` render smoke can hang in `DirectContext.flushAndSubmit`;

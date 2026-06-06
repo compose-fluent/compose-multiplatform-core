@@ -74,8 +74,10 @@ if (composeWinUiGradlePluginAvailable) {
     apply plugin: "io.github.composefluent.winrt"
 
     winRt {
-        windowsSdk(composeWinUiWindowsSdkVersion.get(), false)
-        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
+        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
+        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
+            generateProjection = true
+        }
         type("Windows.Foundation.IStringable")
         type("Windows.Foundation.Uri")
         type("Windows.ApplicationModel.DataTransfer.Clipboard")
