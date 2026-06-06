@@ -55,7 +55,7 @@ def composeWinUiWindowsSdkVersion = providers
 def composeWinUiWindowsAppSdkVersion = providers
         .gradleProperty("composeWinUi.windowsAppSdkVersion")
         .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
-        .orElse("1.8.260416003")
+        .orElse("2.1.3")
 def kotlinWinRtVersion = providers
         .gradleProperty("kotlinWinRt.version")
         .orElse("0.1.0-SNAPSHOT")
@@ -74,10 +74,8 @@ if (composeWinUiGradlePluginAvailable) {
     apply plugin: "io.github.composefluent.winrt"
 
     winRt {
-        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
-        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
-            generateProjection = true
-        }
+        windowsSdk(composeWinUiWindowsSdkVersion.get(), true, false)
+        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
         type("Windows.Foundation.IStringable")
         type("Windows.Foundation.Uri")
         type("Windows.ApplicationModel.DataTransfer.Clipboard")
@@ -439,6 +437,8 @@ kotlin {
                     implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-authoring:${kotlinWinRtVersion.get()}")
+                    implementation("io.github.compose-fluent:winrt-projections-windows-sdk:${composeWinUiWindowsSdkVersion.get()}-kotlin-winrt-${kotlinWinRtVersion.get()}")
+                    implementation("io.github.compose-fluent:winrt-projections-windows-app-sdk:${composeWinUiWindowsAppSdkVersion.get()}-kotlin-winrt-${kotlinWinRtVersion.get()}")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")

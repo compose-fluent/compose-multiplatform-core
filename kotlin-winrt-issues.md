@@ -759,3 +759,44 @@ baseline, not every retest attempt.
   `buildSrc`, `compose-ui`, and `ui-text`. `compileKotlinWinuiJvm` now passes and
   the runtime validation proceeds to the separate `KWINRT-024` full-sample
   native crash.
+
+## KWINRT-028: Prebuilt WinUI projection Application.start callback hang
+
+- **Status:** Open upstream/projection runtime, blocking full compose-winui
+  runtime validation on the prebuilt projection path.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinRtApplicationHost` and
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` after switching
+  compose-winui from local Windows App SDK NuGet projection generation to
+  prebuilt projection artifacts.
+- **Snapshot baseline:** `skiko-winui` / `skiko-winui-windows`
+  `0.0.0-20260606.031302-6`, `winrt-runtime-jvm`
+  `0.1.0-20260605.202352-37`, `winrt-gradle-plugin`
+  `0.1.0-20260605.202635-18`,
+  `winrt-projections-windows-sdk`
+  `10.0.26100.0-kotlin-winrt-0.1.0-20260605.210602-1`, and
+  `winrt-projections-windows-app-sdk`
+  `2.1.3-kotlin-winrt-0.1.0-20260605.211043-1`.
+- **Symptom:** the process does not throw the former
+  `InputSystemCursor cannot inherit from final InputCursor`
+  `IncompatibleClassChangeError`; instead it remains alive until killed. The
+  JavaExec thread dump for the focused Skiko sample shows the main thread
+  running inside `microsoft.ui.xaml.Application$Metadata.start`
+  (`microsoft_ui_xaml.kt:561`) through the FFM downcall, with no Compose
+  sample progress beyond the call into `Application.start`.
+- **Evidence:** direct inspection of the new `skiko-winui` jar reports zero
+  `microsoft/**` or `windows/**` projection classes, so `SKIKO-007` projection
+  ownership shadowing is fixed. The focused JavaExec classpath contains
+  `skiko-winui` followed by
+  `winrt-projections-windows-app-sdk` and
+  `winrt-projections-windows-sdk`, and no overlapping projection classes from
+  skiko. A temporary compose-winui change that retained the created
+  `WinUIXamlApplication` in a module-level variable did not change the hang;
+  the callback still did not reach the sample launch path.
+- **Expected behavior:** `Application.start { ... }` should invoke the
+  initialization callback, create the authored `Application` subclass, and then
+  dispatch `onLaunched`, matching the current kotlin-winrt README and upstream
+  samples.
+- **compose-winui workaround:** none yet. Keep the prebuilt projection
+  dependency wiring, but do not treat runtime validation as complete until this
+  startup callback issue is fixed or a narrow compose-winui workaround is
+  validated.

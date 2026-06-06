@@ -308,7 +308,28 @@
 
 ## skiko-winui status
 
-- `SKIKO-007`: Open upstream/publication ABI. `skiko-winui`
+- `SKIKO-007`: Closed in `skiko-winui` `0.0.0-20260606.031302-6`.
+  The latest `skiko-winui` jar no longer publishes `microsoft/**` or
+  `windows/**` projection classes; direct jar inspection reports zero entries
+  under those package roots, including no
+  `microsoft/ui/input/InputCursor`, `InputSystemCursor`, `UIElement`, or
+  `Grid` classes. compose-winui now consumes the kotlin-winrt prebuilt
+  projection artifacts
+  `winrt-projections-windows-sdk:10.0.26100.0-kotlin-winrt-0.1.0-SNAPSHOT`
+  and
+  `winrt-projections-windows-app-sdk:2.1.3-kotlin-winrt-0.1.0-SNAPSHOT`
+  instead of generating WinUI projections from the Windows App SDK NuGet
+  package. After deleting local generated `kotlin-winrt` output,
+  `:compose:ui:ui:compileKotlinWinuiJvm`
+  (`-PcomposeWinUi.enableJvmTarget=true --refresh-dependencies
+  --no-configuration-cache --no-configure-on-demand`) passes, so the original
+  overlapping-projection classpath shadowing issue is fixed. Full runtime
+  validation is currently blocked by `KWINRT-028`: with prebuilt projections,
+  `Application.start` enters the native message loop but the initialization
+  callback does not invoke the compose-winui application, so the sample hangs
+  before reaching the former `InputSystemCursor` failure path.
+
+  Historical context: `skiko-winui`
   `0.0.0-20260605.111531-5` still publishes `microsoft/**` and `windows/**`
   projection classes in the same packages as compose-winui's generated
   kotlin-winrt projections. The native host classpath loads `skiko-winui`

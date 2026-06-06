@@ -53,29 +53,24 @@ dependencies {
 def composeWinUiWindowsAppSdkVersion = providers
         .gradleProperty("composeWinUi.windowsAppSdkVersion")
         .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
-        .orElse("1.8.260416003")
+        .orElse("2.1.3")
 def composeWinUiWindowsSdkVersion = providers
         .gradleProperty("composeWinUi.windowsSdkVersion")
         .orElse("10.0.26100.0")
+
+dependencies {
+    def kotlinWinRtVersion = project.findProperty("kotlinWinRt.version") ?: "0.1.0-SNAPSHOT"
+    implementation("io.github.compose-fluent:winrt-projections-windows-sdk:${composeWinUiWindowsSdkVersion.get()}-kotlin-winrt-$kotlinWinRtVersion")
+    implementation("io.github.compose-fluent:winrt-projections-windows-app-sdk:${composeWinUiWindowsAppSdkVersion.get()}-kotlin-winrt-$kotlinWinRtVersion")
+}
 
 winRt {
     application {
         mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
-    windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
-    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
-        generateProjection = true
-    }
+    windowsSdk(composeWinUiWindowsSdkVersion.get(), true, false)
+    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
     type("Windows.Foundation.Uri")
-}
-
-def composeWinUiProjectionOwnerFirstClasspath = { runtimeClasspath ->
-    // SKIKO-007: JavaExec samples also need compose-ui's generated projection
-    // owner before skiko-winui's overlapping projection classes.
-    files(
-            runtimeClasspath.filter { it.name.startsWith("ui-winuijvm-") },
-            runtimeClasspath.filter { !it.name.startsWith("ui-winuijvm-") },
-    )
 }
 
 java {
@@ -97,41 +92,6 @@ tasks.named("generateWinRtProjections").configure {
     authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
 }
 
-tasks.register("prioritizeComposeWinUiProjectionJarForHost") {
-    dependsOn("buildWinRtApplicationHost")
-    outputs.upToDateWhen { false }
-    doLast {
-        def libDirectory = layout.buildDirectory
-                .dir("kotlin-winrt/application-host/bin/lib")
-                .get()
-                .asFile
-        delete(fileTree(libDirectory) {
-            include("00-ui-winuijvm-*.jar")
-        })
-
-        def uiWinUiJars = fileTree(libDirectory) {
-            include("ui-winuijvm-*.jar")
-        }.files
-        if (uiWinUiJars.size() != 1) {
-            throw new GradleException("Expected exactly one ui-winuijvm jar, found ${uiWinUiJars.size()}.")
-        }
-
-        // SKIKO-007: skiko-winui currently bundles overlapping WinRT/WinUI
-        // projections. The native host builds its classpath from staged lib
-        // names, so load compose-ui's projection owner before skiko-winui.
-        def uiWinUiJar = uiWinUiJars.first()
-        copy {
-            from(uiWinUiJar)
-            into(libDirectory)
-            rename { "00-${uiWinUiJar.name}" }
-        }
-    }
-}
-
-tasks.named("runWinRtApplicationHost").configure {
-    dependsOn("prioritizeComposeWinUiProjectionJarForHost")
-}
-
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_25)
@@ -147,7 +107,7 @@ tasks.register("runWinUIViewSample", JavaExec) {
     dependsOn("stageWinRtRuntimeAssets")
     dependsOn("buildWinRtAuthoringHost")
     mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
-    classpath = composeWinUiProjectionOwnerFirstClasspath(sourceSets.main.runtimeClasspath)
+    classpath = sourceSets.main.runtimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.sample.autoExit", "true")
 }
@@ -159,7 +119,7 @@ tasks.register("runWinUISkikoSample", JavaExec) {
     dependsOn("stageWinRtRuntimeAssets")
     dependsOn("buildWinRtAuthoringHost")
     mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
-    classpath = composeWinUiProjectionOwnerFirstClasspath(sourceSets.main.runtimeClasspath)
+    classpath = sourceSets.main.runtimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.sample.autoExit", "true")
     args("skiko")
