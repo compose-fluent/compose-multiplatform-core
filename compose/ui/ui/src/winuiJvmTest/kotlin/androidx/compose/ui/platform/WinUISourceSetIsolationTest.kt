@@ -83,6 +83,42 @@ class WinUISourceSetIsolationTest {
     }
 
     @Test
+    fun winuiMainDoesNotReferenceTargetSpecificRuntimeDetails() {
+        val moduleRoot = findUiModuleRoot()
+        val forbiddenReferences = listOf(
+            "java.",
+            "javax.",
+            "java.lang.foreign.",
+            "WinRtWindowsAppSdkBootstrap",
+            "RuntimeScope",
+            "JavaExec",
+            "stageWinRt",
+            "buildWinRt",
+            "System.getProperty",
+            "System.load",
+            "Class.forName",
+        )
+        val offenders = kotlinFiles(moduleRoot.resolve("src/winuiMain/kotlin")).flatMap { file ->
+            val text = file.readText()
+            forbiddenReferences.mapNotNull { reference ->
+                if (text.contains(reference)) {
+                    "${moduleRoot.relativize(file)} references $reference"
+                } else {
+                    null
+                }
+            }
+        }
+
+        assertTrue(
+            offenders.isEmpty(),
+            "winuiMain must keep shared Compose/WinUI behavior only; target-specific " +
+                "runtime, JVM, FFM, JavaExec, and host-staging details belong in " +
+                "winuiJvmMain or sample launchers:\n" +
+                offenders.joinToString(separator = "\n"),
+        )
+    }
+
+    @Test
     fun winuiJvmCompileSourceBridgeOnlyCompilesSelectedSkikoSharedSource() {
         val moduleRoot = findUiModuleRoot()
         val buildScript = moduleRoot.resolve("build.gradle").readText()
