@@ -89,85 +89,29 @@
 - [ ] Define the exact original MPP sample scope that must run on WinUI,
   including its modules, resources, image/font assets, navigation paths, and
   desktop-specific APIs that need WinUI equivalents or source-set guards.
-  - [ ] Record the initial WinUI scope as `compose/mpp/demo` `commonMain`
-    plus the existing desktop entry's top-level `App`/`MainScreen` path,
-    excluding platform-only web, iOS, macOS, tray/menu, and desktop window
-    APIs until equivalent WinUI abstractions exist.
-  - [ ] List every `expect` declaration used by the selected path and add a
-    `winuiMain` or `winuiJvmMain` actual for each one, starting with
-    `TestInteropView`, `DragAndDropExample`, and `loadResource`.
-  - [ ] List all bundled resources required by the selected path, including
-    common fonts, desktop fonts, images, and generated resource metadata, and
-    decide which are copied, reused, or guarded out for the first WinUI run.
 - [ ] Add Gradle wiring for a `runWinUIMppSample` task that uses the same
   kotlin-winrt initialization chain as `runWinUIViewSample`, stages WinRT
   runtime assets, builds the authoring host, and keeps explicit `type(...)`
   declarations rather than full projection dependencies.
-  - [ ] Add a `winuiJvm` target/source set to `compose/mpp/demo` only when
-    `-PcomposeWinUi.enableJvmTarget=true` is set, matching the compose-ui
-    WinUI target gate.
-  - [ ] Wire `winuiJvmMain` to depend on the shared MPP sample source set and
-    on `:compose:ui:ui` WinUI artifacts without depending on `desktopMain`,
-    Swing, AWT, `SkiaLayer`, or desktop Skiko native runtime artifacts.
-  - [ ] Add a WinUI sample entry point that bootstraps Windows App SDK,
-    creates the WinUI `Application`/`Window`, calls the Compose WinUI
-    `setContent` path, and renders the selected original MPP sample content.
-  - [ ] Reuse the repository-local WinUI runtime staging helpers from
-    `compose/ui/ui/winui-samples` for Windows App SDK, projection support
-    artifacts, support-jar merging, and classpath checks.
 - [ ] Replace the temporary `compileKotlinWinuiJvm` source override with a
   principled source-set split before treating the MPP sample as representative;
   shared Skiko rendering sources should come from normal source-set
   dependencies, not from an ad hoc file list.
-  - [ ] Move every source currently injected through the
-    `compileKotlinWinuiJvm` override into a real shared source set, or split it
-    into a small common declaration plus `winuiJvmMain` / existing platform
-    actuals when generic Skiko actuals conflict.
-  - [ ] Add a source-set isolation test that fails if WinUI JVM compilation is
-    still configured through manual source-file overrides.
 - [ ] Inventory the original MPP sample's Compose UI API surface against WinUI
   actuals and add missing implementations or guarded fallbacks for graphics,
   text, pointer, keyboard, clipboard, URI, window info, density, focus, popup,
   dialog, drag-and-drop, and accessibility hooks.
-  - [ ] Generate or maintain a checked-in inventory of referenced Compose UI
-    packages/classes from the selected sample scope and map each entry to
-    `implemented`, `stubbed`, `guarded`, or `blocked`.
-  - [ ] For every `stubbed` or `blocked` entry that affects visible behavior,
-    add a narrow implementation task in this plan and, when caused by
-    kotlin-winrt/skiko behavior, link it to a `KWINRT-###` or `SKIKO-###`
-    issue entry.
 - [ ] Replace current `ui-graphics` WinUI stubs that affect visible sample
   output with real Skia-backed implementations or explicit tracked gaps,
   including path/effect/image/brush/layer behavior used by the sample.
-  - [ ] Implement image loading/decoding for bundled MPP resources and verify
-    decoded dimensions reach the draw pipeline.
-  - [ ] Implement or delegate path, clip, shadow, blend mode, brush, and image
-    shader behavior required by the selected graphics demos.
-  - [ ] Add render diagnostics that report skipped draw operations caused by
-    missing WinUI graphics actuals so remaining stubs are visible in sample
-    validation.
 - [ ] Replace current `ui-text` WinUI stubs that affect visible sample output
   with real text measurement/rendering/font behavior or explicit tracked gaps,
   including font resolution, paragraph layout, selection geometry, and text
   input integration used by the sample.
-  - [ ] Load bundled font resources through WinUI resource staging and connect
-    them to the WinUI font resolver used by paragraph layout.
-  - [ ] Replace paragraph/text measurement stubs used by Material and sample
-    text demos with Skia-backed measurement and draw paths.
-  - [ ] Implement selection geometry, cursor rect, and text layout result data
-    needed by selectable text and text-field demos.
 - [ ] Expand `WinUISkikoRenderHost` from the current narrow adapter into the
   production rendering host shape needed by a real sample: surface lifecycle,
   resize, invalidation coalescing, frame pacing, draw submission, render
   diagnostics, interop transaction ordering, and deterministic disposal.
-  - [ ] Introduce an explicit WinUI scene/render host object that owns the
-    skiko-winui surface, frame scheduling, resize state, draw callbacks,
-    interop transaction drain points, diagnostics, and disposal ordering.
-  - [ ] Move the remaining render-surface lifecycle work out of
-    `WinUIComposeView` once the host has the same ownership boundary.
-  - [ ] Add focused tests for resize-before-attach, attach-after-compose,
-    invalidation coalescing, transaction-before-draw ordering, and idempotent
-    disposal.
 - [ ] Add visible-output validation for the WinUI MPP sample, not just smoke
   logs: verify attached Direct3D rendering, positive render sizes, non-empty
   draw bounds, and at least one nonblank rendered frame or equivalent
@@ -179,43 +123,18 @@
   replacement, composing text, committed text, selection updates, edit menu
   actions, and keyboard-driven focus order. Keep software keyboard behavior
   tracked separately if WinUI desktop cannot expose it directly.
-  - [ ] Map WinUI key events and text input events into Compose edit commands
-    for committed characters, deletion, navigation, and selection changes.
-  - [ ] Track active text-input sessions per focused Compose node and replace
-    or close sessions deterministically on focus movement and node disposal.
-  - [ ] Connect text-toolbar copy, cut, paste, select-all, and edit-menu
-    actions to the active text-input session.
 - [ ] Complete enough WinUI accessibility for sample use: semantics tree
   projection, bounds updates, focus, click/custom actions, scroll actions,
   live-region-like notifications, and native interop accessibility inclusion
   or exclusion.
-  - [ ] Project Compose semantics nodes into UI Automation peers with stable
-    automation ids, names, roles/control types, enabled state, and bounds.
-  - [ ] Implement UI Automation invoke, scroll, range/value, text, and focus
-    patterns needed by the selected Material/navigation/text sample paths.
-  - [ ] Include or suppress hosted native `WinUIView` accessibility according
-    to `WinUIInteropProperties` and verify the merged tree order.
 - [ ] Add resource and packaging validation for the original MPP sample:
   bundled images, fonts, strings, Windows App SDK PRI/resource staging, default
   language, and unpackaged app runtime assets must all load from the WinUI run
   task.
-  - [ ] Stage common and WinUI JVM resources into the same runtime directory
-    used by the WinUI sample launcher.
-  - [ ] Validate Windows App SDK PRI inputs and generated outputs for default
-    language, manifest metadata, duplicate filtering, and unpackaged runtime
-    lookup.
-  - [ ] Add a resource-loading smoke path that reads one font, one image, and
-    one generated resource from the launched WinUI MPP sample.
 - [ ] Remove or guard desktop/AWT/Swing-only sample code paths, including
   desktop window APIs, Skiko AWT layer assumptions, file/dialog helpers, tray or
   menu APIs, and any JVM desktop dependencies that would pull AWT runtime
   artifacts into the WinUI classpath.
-  - [ ] Move desktop-only entry/window code from `desktopMain` behind
-    desktop-specific actuals and add WinUI actuals for the selected entry path.
-  - [ ] Guard or replace file dialog, tray/menu, and desktop window-size APIs
-    with WinUI equivalents only where the selected sample path reaches them.
-  - [ ] Add a dependency/classpath assertion that fails if Swing, AWT, or
-    Skiko desktop runtime artifacts enter the WinUI MPP sample runtime.
 - [ ] Add classpath assertions to the MPP sample run task matching the existing
   WinUI smoke guards: require `skiko-winui`, reject Skiko AWT/Desktop native
   runtime artifacts, and reject duplicated `microsoft/**` or `windows/**`
