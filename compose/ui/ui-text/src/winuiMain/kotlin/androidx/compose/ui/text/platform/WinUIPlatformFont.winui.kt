@@ -21,6 +21,12 @@ import androidx.compose.ui.text.font.FontLoadingStrategy
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import org.jetbrains.skia.Data
+import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontSlant
+import org.jetbrains.skia.FontStyle as SkFontStyle
+import org.jetbrains.skia.FontWidth
+import org.jetbrains.skia.Typeface as SkTypeface
 
 class LoadedFont internal constructor(
     val identity: String,
@@ -80,3 +86,22 @@ fun Font(
     style = style,
     variationSettings = variationSettings,
 )
+
+internal fun LoadedFont.loadTypeface(): SkTypeface {
+    val skStyle = SkFontStyle(
+        weight = weight.weight,
+        width = FontWidth.NORMAL,
+        slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+    )
+    val typeface = FontMgr.default.makeFromData(Data.makeFromBytes(data))
+        ?: FontMgr.default.legacyMakeTypeface(identity, skStyle)
+        ?: FontMgr.default.matchFamilyStyle("Segoe UI", skStyle)
+        ?: FontMgr.default.matchFamilyStyle("Arial", skStyle)
+        ?: error("Unable to load WinUI font '$identity'.")
+    if (variationSettings.settings.isEmpty()) return typeface
+    return typeface.makeClone(
+        variationSettings.settings.map { setting ->
+            org.jetbrains.skia.FontVariation(setting.axisName, setting.toVariationValue(null))
+        }.toTypedArray()
+    )
+}

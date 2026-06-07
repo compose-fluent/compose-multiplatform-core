@@ -16,6 +16,14 @@
 
 package androidx.compose.ui.text.font
 
+import androidx.compose.ui.text.platform.LoadedFont
+import androidx.compose.ui.text.platform.loadTypeface
+import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontSlant
+import org.jetbrains.skia.FontStyle as SkFontStyle
+import org.jetbrains.skia.FontWidth
+import org.jetbrains.skia.Typeface as SkTypeface
+
 /**
  * Create a WinUI font family resolver for use by WinUI compose owners.
  */
@@ -35,7 +43,11 @@ private class WinUIPlatformFontLoader(
     private val resourceLoader: Font.ResourceLoader? = null,
 ) : PlatformFontLoader {
     @Suppress("DEPRECATION")
-    override fun loadBlocking(font: Font): Any? = resourceLoader?.load(font) ?: Any()
+    override fun loadBlocking(font: Font): Any? =
+        when (font) {
+            is LoadedFont -> font.loadTypeface()
+            else -> resourceLoader?.load(font) ?: defaultTypeface()
+        }
 
     override suspend fun awaitLoad(font: Font): Any? = loadBlocking(font)
 
@@ -49,7 +61,14 @@ internal actual class PlatformFontFamilyTypefaceAdapter actual constructor() :
         platformFontLoader: PlatformFontLoader,
         onAsyncCompletion: (TypefaceResult.Immutable) -> Unit,
         createDefaultTypeface: (TypefaceRequest) -> Any,
-    ): TypefaceResult? = TypefaceResult.Immutable(Any())
+    ): TypefaceResult? =
+        TypefaceResult.Immutable(
+            defaultTypeface(
+                family = typefaceRequest.fontFamily,
+                weight = typefaceRequest.fontWeight,
+                style = typefaceRequest.fontStyle,
+            )
+        )
 }
 
 internal actual fun FontSynthesis.synthesizeTypeface(
@@ -58,3 +77,26 @@ internal actual fun FontSynthesis.synthesizeTypeface(
     requestedWeight: FontWeight,
     requestedStyle: FontStyle,
 ): Any = typeface
+
+private fun defaultTypeface(
+    family: FontFamily? = null,
+    weight: FontWeight = FontWeight.Normal,
+    style: FontStyle = FontStyle.Normal,
+): SkTypeface {
+    val familyName = when (family) {
+        FontFamily.Serif -> "Times New Roman"
+        FontFamily.Monospace -> "Consolas"
+        FontFamily.Cursive -> "Comic Sans MS"
+        else -> "Segoe UI"
+    }
+    val skStyle = SkFontStyle(
+        weight = weight.weight,
+        width = FontWidth.NORMAL,
+        slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+    )
+    return FontMgr.default.matchFamilyStyle(familyName, skStyle)
+        ?: FontMgr.default.legacyMakeTypeface(familyName, skStyle)
+        ?: FontMgr.default.matchFamilyStyle("Segoe UI", skStyle)
+        ?: FontMgr.default.matchFamilyStyle("Arial", skStyle)
+        ?: error("Unable to load WinUI platform font '$familyName'.")
+}
