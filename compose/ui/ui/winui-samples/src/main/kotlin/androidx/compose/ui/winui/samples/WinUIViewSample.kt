@@ -91,11 +91,22 @@ import androidx.compose.ui.platform.establishTextInputSession
 import androidx.compose.ui.platform.sendPointerEventForTest
 import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.spatial.RelativeLayoutBounds
@@ -142,6 +153,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.winui.WinUIAccessibilityAction
 import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
+import org.jetbrains.skiko.winui.WinUIAccessibilityLiveSetting
 import org.jetbrains.skiko.winui.WinUIAccessibilityNode
 
 @Composable
@@ -2175,14 +2187,47 @@ private object ComposeWinUiSmokeApp {
     private suspend fun runWinUIAccessibilityProviderSmoke() {
         val currentComposeView = WinUIComposeView()
         var clicked = false
+        var focusRequested = false
+        var expanded = false
+        var collapsed = false
+        var textSet: AnnotatedString? = null
+        val progressValues = mutableListOf<Float>()
         currentComposeView.setWindowContainerSizeForTest(IntSize(96, 64))
         currentComposeView.setContent {
             Layout(
                 modifier = Modifier.semantics {
                     testTag = "winui-accessibility"
                     contentDescription = "WinUI accessible node"
+                    liveRegion = LiveRegionMode.Polite
+                    focused = true
+                    editableText = AnnotatedString("initial")
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = 0.5f,
+                        range = 0f..1f,
+                        steps = 4,
+                    )
+                    requestFocus {
+                        focusRequested = true
+                        true
+                    }
                     onClick {
                         clicked = true
+                        true
+                    }
+                    expand {
+                        expanded = true
+                        true
+                    }
+                    collapse {
+                        collapsed = true
+                        true
+                    }
+                    setText {
+                        textSet = it
+                        true
+                    }
+                    setProgress {
+                        progressValues += it
                         true
                     }
                 },
@@ -2208,22 +2253,66 @@ private object ComposeWinUiSmokeApp {
         check(accessibilityNode.info.name == "WinUI accessible node") {
             "WinUI accessibility provider exposed incorrect name: ${accessibilityNode.info.name}."
         }
+        check(accessibilityNode.info.liveSetting == WinUIAccessibilityLiveSetting.POLITE) {
+            "WinUI accessibility provider exposed incorrect live-region metadata: " +
+                accessibilityNode.info.liveSetting
+        }
         check(accessibilityNode.bounds.width == 48f && accessibilityNode.bounds.height == 32f) {
             "WinUI accessibility provider exposed incorrect bounds: ${accessibilityNode.bounds}."
         }
-        check(WinUIAccessibilityAction.CLICK in accessibilityNode.actions) {
-            "WinUI accessibility provider did not expose click action: ${accessibilityNode.actions}."
+        check(accessibilityNode.state.focusable && accessibilityNode.state.focused) {
+            "WinUI accessibility provider exposed incorrect focus state: ${accessibilityNode.state}."
         }
-        val actionInvoked = currentComposeView.performAccessibilityActionForTest(
-            WinUIAccessibilityActionRequest(
-                nodeId = accessibilityNode.id,
-                action = WinUIAccessibilityAction.CLICK,
-                text = "",
-            ),
+        check(accessibilityNode.state.editable) {
+            "WinUI accessibility provider did not expose editable text state: ${accessibilityNode.state}."
+        }
+        val expectedActions = setOf(
+            WinUIAccessibilityAction.FOCUS,
+            WinUIAccessibilityAction.CLICK,
+            WinUIAccessibilityAction.EXPAND,
+            WinUIAccessibilityAction.COLLAPSE,
+            WinUIAccessibilityAction.SET_TEXT,
+            WinUIAccessibilityAction.INCREMENT,
+            WinUIAccessibilityAction.DECREMENT,
         )
-        check(actionInvoked && clicked) {
-            "WinUI accessibility provider click did not dispatch: " +
-                "actionInvoked=$actionInvoked clicked=$clicked."
+        check(accessibilityNode.actions.containsAll(expectedActions)) {
+            "WinUI accessibility provider did not expose expected actions $expectedActions: " +
+                accessibilityNode.actions
+        }
+        fun perform(action: WinUIAccessibilityAction, text: String = ""): Boolean =
+            currentComposeView.performAccessibilityActionForTest(
+                WinUIAccessibilityActionRequest(
+                    nodeId = accessibilityNode.id,
+                    action = action,
+                    text = text,
+                ),
+            )
+
+        check(perform(WinUIAccessibilityAction.FOCUS) && focusRequested) {
+            "WinUI accessibility provider focus action did not dispatch."
+        }
+        check(perform(WinUIAccessibilityAction.CLICK) && clicked) {
+            "WinUI accessibility provider click action did not dispatch."
+        }
+        check(perform(WinUIAccessibilityAction.EXPAND) && expanded) {
+            "WinUI accessibility provider expand action did not dispatch."
+        }
+        check(perform(WinUIAccessibilityAction.COLLAPSE) && collapsed) {
+            "WinUI accessibility provider collapse action did not dispatch."
+        }
+        check(perform(WinUIAccessibilityAction.SET_TEXT, "WinUI text") &&
+            textSet == AnnotatedString("WinUI text")
+        ) {
+            "WinUI accessibility provider set-text action did not dispatch: $textSet."
+        }
+        check(perform(WinUIAccessibilityAction.INCREMENT)) {
+            "WinUI accessibility provider increment action did not dispatch."
+        }
+        check(perform(WinUIAccessibilityAction.DECREMENT)) {
+            "WinUI accessibility provider decrement action did not dispatch."
+        }
+        check(progressValues == listOf(0.7f, 0.3f)) {
+            "WinUI accessibility provider progress actions produced $progressValues."
         }
         currentComposeView.dispose()
         println("compose-winui-sample: accessibility provider")

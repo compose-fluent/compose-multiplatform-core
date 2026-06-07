@@ -123,7 +123,7 @@
   replacement, composing text, committed text, selection updates, edit menu
   actions, and keyboard-driven focus order. Keep software keyboard behavior
   tracked separately if WinUI desktop cannot expose it directly.
-- [ ] Complete enough WinUI accessibility for sample use: semantics tree
+- [x] Complete enough WinUI accessibility for sample use: semantics tree
   projection, bounds updates, focus, click/custom actions, scroll actions,
   live-region-like notifications, and native interop accessibility inclusion
   or exclusion.
