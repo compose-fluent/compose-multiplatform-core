@@ -81,6 +81,74 @@
 - [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work. `WinUIComposeView` now starts the Skiko frame scheduler only after the WinUI root is loaded, so unattached roots can compose and run owner/interops tests without starting presentation callbacks.
 - [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
+## Skiko full integration and MPP sample readiness
+- [ ] Add a repository-local WinUI JVM variant of the original MPP sample instead
+  of relying only on `compose/ui/ui/winui-samples`; keep the original sample
+  source shared as much as possible and isolate only the app entry/window
+  bootstrap behind WinUI-specific source sets.
+- [ ] Define the exact original MPP sample scope that must run on WinUI,
+  including its modules, resources, image/font assets, navigation paths, and
+  desktop-specific APIs that need WinUI equivalents or source-set guards.
+- [ ] Add Gradle wiring for a `runWinUIMppSample` task that uses the same
+  kotlin-winrt initialization chain as `runWinUIViewSample`, stages WinRT
+  runtime assets, builds the authoring host, and keeps explicit `type(...)`
+  declarations rather than full projection dependencies.
+- [ ] Replace the temporary `compileKotlinWinuiJvm` source override with a
+  principled source-set split before treating the MPP sample as representative;
+  shared Skiko rendering sources should come from normal source-set
+  dependencies, not from an ad hoc file list.
+- [ ] Inventory the original MPP sample's Compose UI API surface against WinUI
+  actuals and add missing implementations or guarded fallbacks for graphics,
+  text, pointer, keyboard, clipboard, URI, window info, density, focus, popup,
+  dialog, drag-and-drop, and accessibility hooks.
+- [ ] Replace current `ui-graphics` WinUI stubs that affect visible sample
+  output with real Skia-backed implementations or explicit tracked gaps,
+  including path/effect/image/brush/layer behavior used by the sample.
+- [ ] Replace current `ui-text` WinUI stubs that affect visible sample output
+  with real text measurement/rendering/font behavior or explicit tracked gaps,
+  including font resolution, paragraph layout, selection geometry, and text
+  input integration used by the sample.
+- [ ] Expand `WinUISkikoRenderHost` from the current narrow adapter into the
+  production rendering host shape needed by a real sample: surface lifecycle,
+  resize, invalidation coalescing, frame pacing, draw submission, render
+  diagnostics, interop transaction ordering, and deterministic disposal.
+- [ ] Add visible-output validation for the WinUI MPP sample, not just smoke
+  logs: verify attached Direct3D rendering, positive render sizes, non-empty
+  draw bounds, and at least one nonblank rendered frame or equivalent
+  skiko-winui pixel/readback diagnostic once available.
+- [ ] Move WinUI native child insertion/removal/z-order/layout/clipping updates
+  fully behind the render-synchronized interop transaction queue before using
+  the original sample as an interop correctness baseline.
+- [ ] Complete enough native text input for sample use: focus entry, session
+  replacement, composing text, committed text, selection updates, edit menu
+  actions, and keyboard-driven focus order. Keep software keyboard behavior
+  tracked separately if WinUI desktop cannot expose it directly.
+- [ ] Complete enough WinUI accessibility for sample use: semantics tree
+  projection, bounds updates, focus, click/custom actions, scroll actions,
+  live-region-like notifications, and native interop accessibility inclusion
+  or exclusion.
+- [ ] Add resource and packaging validation for the original MPP sample:
+  bundled images, fonts, strings, Windows App SDK PRI/resource staging, default
+  language, and unpackaged app runtime assets must all load from the WinUI run
+  task.
+- [ ] Remove or guard desktop/AWT/Swing-only sample code paths, including
+  desktop window APIs, Skiko AWT layer assumptions, file/dialog helpers, tray or
+  menu APIs, and any JVM desktop dependencies that would pull AWT runtime
+  artifacts into the WinUI classpath.
+- [ ] Add classpath assertions to the MPP sample run task matching the existing
+  WinUI smoke guards: require `skiko-winui`, reject Skiko AWT/Desktop native
+  runtime artifacts, and reject duplicated `microsoft/**` or `windows/**`
+  projection classes from third-party jars.
+- [ ] Split the first MPP sample validation into focused tasks: compile-only
+  sample, launch/window smoke, render-output smoke, input/focus smoke,
+  resource-loading smoke, and shutdown/disposal smoke.
+- [ ] Re-run Android/Desktop versions of the original MPP sample after sharing
+  code with WinUI to ensure source-set guards did not regress existing sample
+  platforms.
+- [ ] Keep unresolved kotlin-winrt/skiko blockers tied to this sample as stable
+  `KWINRT-###` or `SKIKO-###` entries, and do not hide generator/runtime issues
+  by excluding legitimate WinMD dependency-chain types.
+
 ## WinUIView interop
 - [x] Add public `WinUIView` composable API for embedding a WinUI `UIElement` in Compose UI.
 - [x] Match Android `AndroidView` lifecycle semantics: `factory` creates the view, `update` runs after creation and on recomposition, `onReset` opts into reuse, and `onRelease` runs once when the instance is permanently discarded.
