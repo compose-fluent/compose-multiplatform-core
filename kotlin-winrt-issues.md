@@ -884,6 +884,16 @@ baseline, not every retest attempt.
   `kmpPartiallyResolvedDependenciesChecker` only when the WinUI JVM target and
   kotlin-winrt Gradle plugin are enabled. This is a narrow validation unblocker;
   normal projection shape remains explicit `type(...)` declarations.
+- **2026-06-08 navigation WinUI variant retest:** after adding repository-local
+  WinUI JVM recompile variants for `navigation-compose` and `navigation3-ui`,
+  `:compose:ui:ui:compileKotlinWinuiJvm` still passes, but
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` can also trigger the same
+  early-resolution failure while resolving the sample `runtimeClasspath` for its
+  `project(:compose:ui:ui)` dependency. The symptom remains
+  `Cannot mutate the dependencies of configuration
+  ':compose:ui:ui:kotlinWinRtLibraryDependencyIdentity' after the configuration
+  was resolved`; this extends `KWINRT-030` beyond the partially-resolved
+  dependency checker into WinUI sample classpath resolution order.
 
 ## KWINRT-031: Generated authoring TypeDetails use projection-unsafe runtime casts
 
