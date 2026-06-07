@@ -72,12 +72,12 @@
 - [x] Ensure lifecycle, retained values, and saveable state behavior have WinUI equivalents instead of relying on Android `ViewTree*Owner` APIs.
 
 ## WinUI rendering host
-- [ ] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes; the known `KWINRT-024` native teardown crash is tracked separately as non-blocking.
+- [x] Implement a WinUI-native rendering host that does not require an AWT component or Skiko AWT layer. The first `skiko-winui` surface is installed under the WinUI root content on 2026-06-02. Runtime sample validation now reaches the full smoke path after `SKIKO-003` root-content sync fixes; the known `KWINRT-024` native teardown crash is tracked separately as non-blocking.
 - [x] Define the shared `winuiMain` rendering-facing abstraction used by `WinUIComposeView` to request frames, resize, and submit drawing work.
 - [x] Add initial unit coverage for the `WinUISkikoRenderHost` adapter lifecycle: render invalidation forwarding, resize forwarding, frame-scheduler reuse, close ordering, idempotent close, suppression of post-close render/resize requests, and render diagnostics exposure.
 - [x] Implement the JVM backend in `winuiJvmMain` using `kotlin-winrt`, Windows App SDK bootstrap, DispatcherQueue, and the JVM native interop path.
 - [ ] Implement the mingwX64 backend in `winuiMingwMain` after `kotlin-winrt` provides mingw runtime actuals, using Kotlin/Native interop, COM/WinRT initialization, and native Windows APIs.
-- [ ] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
+- [x] Bind the Compose render output to a WinUI-hostable native surface or composition-backed surface owned by the WinUI target. `WinUIComposeView` now draws its root `LayoutNode` into a `skiko-winui` Skia canvas through a WinUI `Canvas` root layer; fuller graphics actuals remain to be implemented, while the existing `KWINRT-024` teardown crash is deferred as non-blocking.
 - [x] Keep frame scheduling on the WinUI UI thread and ensure rendering invalidations are coalesced with Compose measure/layout work. `WinUIComposeView` now starts the Skiko frame scheduler only after the WinUI root is loaded, so unattached roots can compose and run owner/interops tests without starting presentation callbacks.
 - [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
