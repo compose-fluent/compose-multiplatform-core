@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputSession: WinUITextInputSessionState? = null
     private var activeInputMethodSession: WinUITextInputMethodSessionState? = null
+    internal val nativeBridge: WinUINativeTextInputBridge = WinUINativeTextInputBridge(this)
 
     internal val isInputActive: Boolean
         get() = activeInputSession != null
@@ -46,6 +47,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     internal val isSoftwareKeyboardVisible: Boolean
         get() = activeInputSession?.isSoftwareKeyboardVisible == true ||
             activeInputMethodSession?.isSoftwareKeyboardVisible == true
+
+    internal val isNativeTextInputFocused: Boolean
+        get() = activeInputSession?.isNativeTextInputFocused == true
 
     internal val currentValue: TextFieldValue?
         get() = activeInputSession?.value
@@ -110,6 +114,21 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         )
     }
 
+    internal fun enterNativeTextInputFocus(): Boolean {
+        val session = activeInputSession ?: return false
+        activeInputSession = session.copy(isNativeTextInputFocused = true)
+        return true
+    }
+
+    internal fun exitNativeTextInputFocus(): Boolean {
+        val session = activeInputSession ?: return false
+        activeInputSession = session.copy(
+            isNativeTextInputFocused = false,
+            isSoftwareKeyboardVisible = false,
+        )
+        return true
+    }
+
     internal fun sendEditCommands(commands: List<EditCommand>): Boolean {
         val session = activeInputSession ?: return false
         session.onEditCommand(commands)
@@ -164,6 +183,43 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 }
 
+internal class WinUINativeTextInputBridge(
+    private val textInputService: WinUIPlatformTextInputService,
+) {
+    val isFocused: Boolean
+        get() = textInputService.isNativeTextInputFocused
+
+    fun enterFocus(): Boolean =
+        textInputService.enterNativeTextInputFocus()
+
+    fun exitFocus(): Boolean =
+        textInputService.exitNativeTextInputFocus()
+
+    fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
+        textInputService.commitText(text, newCursorPosition)
+
+    fun setComposingText(text: String, newCursorPosition: Int = 1): Boolean =
+        textInputService.setComposingText(text, newCursorPosition)
+
+    fun setComposingRegion(start: Int, end: Int): Boolean =
+        textInputService.setComposingRegion(start, end)
+
+    fun finishComposingText(): Boolean =
+        textInputService.finishComposingText()
+
+    fun setSelection(start: Int, end: Int): Boolean =
+        textInputService.setSelection(start, end)
+
+    fun deleteSurroundingText(lengthBeforeCursor: Int, lengthAfterCursor: Int): Boolean =
+        textInputService.deleteSurroundingText(lengthBeforeCursor, lengthAfterCursor)
+
+    fun backspace(): Boolean =
+        textInputService.backspace()
+
+    fun performImeAction(action: ImeAction): Boolean =
+        textInputService.performImeAction(action)
+}
+
 private data class WinUITextInputSessionState(
     val value: TextFieldValue,
     val imeOptions: ImeOptions,
@@ -171,6 +227,7 @@ private data class WinUITextInputSessionState(
     val onImeActionPerformed: (ImeAction) -> Unit,
     val oldValue: TextFieldValue? = null,
     val isSoftwareKeyboardVisible: Boolean = false,
+    val isNativeTextInputFocused: Boolean = false,
     val textFieldValue: TextFieldValue? = null,
     val offsetMapping: OffsetMapping? = null,
     val textLayoutResult: TextLayoutResult? = null,

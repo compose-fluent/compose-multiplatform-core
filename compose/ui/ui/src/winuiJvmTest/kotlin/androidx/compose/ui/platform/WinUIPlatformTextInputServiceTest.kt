@@ -178,6 +178,82 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
+    fun nativeTextInputBridgeTracksFocusAndDelegatesEditingEvents() {
+        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val imeActions = mutableListOf<ImeAction>()
+        val bridge = WinUIPlatformTextInputService.nativeBridge
+
+        assertFalse(bridge.enterFocus())
+        assertFalse(bridge.commitText("ignored"))
+        assertFalse(bridge.performImeAction(ImeAction.Done))
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue(""),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { editCommandBatches += it },
+            onImeActionPerformed = { imeActions += it },
+        )
+
+        assertFalse(bridge.isFocused)
+        assertTrue(bridge.enterFocus())
+        assertTrue(bridge.isFocused)
+        assertTrue(WinUIPlatformTextInputService.isNativeTextInputFocused)
+
+        assertTrue(bridge.setComposingText("draft", newCursorPosition = 2))
+        assertTrue(bridge.setComposingRegion(0, 5))
+        assertTrue(bridge.commitText("done"))
+        assertTrue(bridge.setSelection(1, 3))
+        assertTrue(bridge.deleteSurroundingText(1, 0))
+        assertTrue(bridge.backspace())
+        assertTrue(bridge.finishComposingText())
+        assertTrue(bridge.performImeAction(ImeAction.Search))
+
+        assertEquals(
+            listOf(
+                listOf(SetComposingTextCommand("draft", 2)),
+                listOf(SetComposingRegionCommand(0, 5)),
+                listOf(CommitTextCommand("done", 1)),
+                listOf(SetSelectionCommand(1, 3)),
+                listOf(DeleteSurroundingTextCommand(1, 0)),
+                listOf(BackspaceCommand()),
+                listOf(FinishComposingTextCommand()),
+            ),
+            editCommandBatches,
+        )
+        assertEquals(listOf(ImeAction.Search), imeActions)
+
+        WinUISoftwareKeyboardController.show()
+        assertTrue(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
+        assertTrue(bridge.exitFocus())
+        assertFalse(bridge.isFocused)
+        assertFalse(WinUIPlatformTextInputService.isSoftwareKeyboardVisible)
+    }
+
+    @Test
+    fun startInputReplacesNativeTextInputBridgeFocusState() {
+        val bridge = WinUIPlatformTextInputService.nativeBridge
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("first"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+        assertTrue(bridge.enterFocus())
+        assertTrue(bridge.isFocused)
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("second"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+
+        assertFalse(bridge.isFocused)
+        assertEquals(TextFieldValue("second"), WinUIPlatformTextInputService.currentValue)
+    }
+
+    @Test
     fun startInputReplacesPreviousSessionCallbacks() {
         val firstCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
         val secondCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
