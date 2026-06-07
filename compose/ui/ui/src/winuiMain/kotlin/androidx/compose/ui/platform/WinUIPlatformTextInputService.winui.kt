@@ -43,6 +43,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     internal val currentValue: TextFieldValue?
         get() = activeInputSession?.value
 
+    internal val previousValue: TextFieldValue?
+        get() = activeInputSession?.oldValue
+
     internal val currentInputMethodRequest: PlatformTextInputMethodRequest?
         get() = activeInputMethodSession?.request
 
@@ -98,6 +101,18 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             innerTextFieldBounds = innerTextFieldBounds,
             decorationBoxBounds = decorationBoxBounds,
         )
+    }
+
+    internal fun sendEditCommands(commands: List<EditCommand>): Boolean {
+        val session = activeInputSession ?: return false
+        session.onEditCommand(commands)
+        return true
+    }
+
+    internal fun performImeAction(action: ImeAction): Boolean {
+        val session = activeInputSession ?: return false
+        session.onImeActionPerformed(action)
+        return true
     }
 
     internal fun resetForTest() {

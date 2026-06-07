@@ -17,7 +17,11 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -28,6 +32,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class WinUIPlatformTextInputServiceTest {
@@ -39,26 +44,89 @@ class WinUIPlatformTextInputServiceTest {
     @Test
     fun startUpdateAndStopInputTracksCurrentSessionState() {
         WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("initial"),
+            value = TextFieldValue(
+                text = "initial",
+                selection = TextRange(1, 3),
+                composition = TextRange(0, 2),
+            ),
             imeOptions = ImeOptions.Default,
             onEditCommand = {},
             onImeActionPerformed = {},
         )
 
         assertTrue(WinUIPlatformTextInputService.isInputActive)
-        assertEquals(TextFieldValue("initial"), WinUIPlatformTextInputService.currentValue)
-
-        WinUIPlatformTextInputService.updateState(
-            oldValue = TextFieldValue("initial"),
-            newValue = TextFieldValue("updated"),
+        assertEquals(
+            TextFieldValue(
+                text = "initial",
+                selection = TextRange(1, 3),
+                composition = TextRange(0, 2),
+            ),
+            WinUIPlatformTextInputService.currentValue,
         )
 
-        assertEquals(TextFieldValue("updated"), WinUIPlatformTextInputService.currentValue)
+        WinUIPlatformTextInputService.updateState(
+            oldValue = TextFieldValue(
+                text = "initial",
+                selection = TextRange(1, 3),
+                composition = TextRange(0, 2),
+            ),
+            newValue = TextFieldValue(
+                text = "updated",
+                selection = TextRange(2),
+                composition = TextRange(1, 4),
+            ),
+        )
+
+        assertEquals(
+            TextFieldValue(
+                text = "initial",
+                selection = TextRange(1, 3),
+                composition = TextRange(0, 2),
+            ),
+            WinUIPlatformTextInputService.previousValue,
+        )
+        assertEquals(
+            TextFieldValue(
+                text = "updated",
+                selection = TextRange(2),
+                composition = TextRange(1, 4),
+            ),
+            WinUIPlatformTextInputService.currentValue,
+        )
 
         WinUIPlatformTextInputService.stopInput()
 
         assertFalse(WinUIPlatformTextInputService.isInputActive)
         assertEquals(null, WinUIPlatformTextInputService.currentValue)
+        assertEquals(null, WinUIPlatformTextInputService.previousValue)
+    }
+
+    @Test
+    fun editCommandsAndImeActionsDelegateToActiveSessionCallbacks() {
+        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val imeActions = mutableListOf<ImeAction>()
+        val commit = CommitTextCommand("hello", 1)
+        val selection = SetSelectionCommand(1, 3)
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue(""),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { editCommandBatches += it },
+            onImeActionPerformed = { imeActions += it },
+        )
+
+        assertTrue(WinUIPlatformTextInputService.sendEditCommands(listOf(commit, selection)))
+        assertTrue(WinUIPlatformTextInputService.performImeAction(ImeAction.Done))
+
+        assertEquals(1, editCommandBatches.size)
+        assertSame(commit, editCommandBatches.single()[0])
+        assertSame(selection, editCommandBatches.single()[1])
+        assertEquals(listOf(ImeAction.Done), imeActions)
+
+        WinUIPlatformTextInputService.stopInput()
+
+        assertFalse(WinUIPlatformTextInputService.sendEditCommands(listOf(commit)))
+        assertFalse(WinUIPlatformTextInputService.performImeAction(ImeAction.Search))
     }
 
     @Test

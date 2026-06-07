@@ -802,6 +802,9 @@ class WinUIOwnerTest {
             val toolbar = owner.textToolbar as WinUITextToolbar
             var copyRequests = 0
             var pasteRequests = 0
+            var cutRequests = 0
+            var selectAllRequests = 0
+            var autofillRequests = 0
 
             assertEquals(TextToolbarStatus.Hidden, toolbar.status)
 
@@ -809,19 +812,28 @@ class WinUIOwnerTest {
                 rect = Rect(1f, 2f, 3f, 4f),
                 onCopyRequested = { copyRequests += 1 },
                 onPasteRequested = { pasteRequests += 1 },
-                onCutRequested = null,
-                onSelectAllRequested = null,
-                onAutofillRequested = null,
+                onCutRequested = { cutRequests += 1 },
+                onSelectAllRequested = { selectAllRequests += 1 },
+                onAutofillRequested = { autofillRequests += 1 },
             )
 
             assertEquals(TextToolbarStatus.Shown, toolbar.status)
             assertEquals(Rect(1f, 2f, 3f, 4f), toolbar.menuForTest()?.rect)
-            assertEquals(listOf("Copy", "Paste"), toolbar.menuForTest()?.itemLabels)
+            assertEquals(
+                listOf("Copy", "Paste", "Cut", "Select all", "Autofill"),
+                toolbar.menuForTest()?.itemLabels,
+            )
 
             toolbar.menuForTest()?.onCopyRequested?.invoke()
             toolbar.menuForTest()?.onPasteRequested?.invoke()
+            toolbar.menuForTest()?.onCutRequested?.invoke()
+            toolbar.menuForTest()?.onSelectAllRequested?.invoke()
+            toolbar.menuForTest()?.onAutofillRequested?.invoke()
             assertEquals(1, copyRequests)
             assertEquals(1, pasteRequests)
+            assertEquals(1, cutRequests)
+            assertEquals(1, selectAllRequests)
+            assertEquals(1, autofillRequests)
 
             toolbar.hide()
 
