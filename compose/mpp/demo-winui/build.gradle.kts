@@ -58,6 +58,17 @@ val localWinUiJarProjects = listOf(
     ":compose:ui:ui-graphics",
     ":compose:ui:ui-text",
 )
+val navigationWinUiCompileTasks = listOf(
+    ":navigation:navigation-compose-winui:compileKotlinWinuiJvm",
+    ":navigation3:navigation3-ui-winui:compileKotlinWinuiJvm",
+)
+val gradleWrapper = rootProject.layout.projectDirectory.file(
+    if (System.getProperty("os.name").startsWith("Windows")) {
+        "gradlew.bat"
+    } else {
+        "gradlew"
+    }
+)
 val winUiMppSampleResourcesDir = layout.buildDirectory.dir("winui-mpp-sample-resources")
 val winUiMppSampleResourceFiles = listOf(
     project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf"),
@@ -405,10 +416,25 @@ tasks.register("validateWinUIMppSampleSourceIsolation") {
     }
 }
 
+val validateWinUINavigationCompileOnly = tasks.register<Exec>("validateWinUINavigationCompileOnly") {
+    group = "verification"
+    description = "Compiles the Navigation Compose and Navigation3 UI WinUI JVM targets."
+    commandLine(
+        gradleWrapper.asFile.absolutePath,
+        *navigationWinUiCompileTasks.toTypedArray(),
+        "-PcomposeWinUi.enableJvmTarget=true",
+        "--no-configuration-cache",
+        "--no-configure-on-demand",
+        "--no-build-cache",
+        "--console=plain",
+    )
+}
+
 tasks.register("validateWinUIMppSampleCompileOnly") {
     group = "verification"
     description = "Compiles the original MPP demo through the compose-winui JVM target."
     dependsOn("compileKotlinWinuiJvm")
+    dependsOn(validateWinUINavigationCompileOnly)
 }
 
 val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSampleLaunchWindow") {
