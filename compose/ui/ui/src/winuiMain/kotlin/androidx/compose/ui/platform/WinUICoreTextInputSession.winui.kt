@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import windows.foundation.TypedEventHandler
@@ -46,6 +47,7 @@ internal class WinUICoreTextInputSession private constructor(
 ) {
     private val eventTokens = mutableListOf<WinUICoreTextEventToken>()
     private var value: TextFieldValue = initialValue
+    private var compositionActive = false
 
     init {
         editContext.name = "Compose WinUI text input"
@@ -100,7 +102,9 @@ internal class WinUICoreTextInputSession private constructor(
             }
             val commands = buildList {
                 add(SetSelectionCommand(event.range.startCaretPosition, event.range.endCaretPosition))
-                if (event.text.isNotEmpty()) {
+                if (compositionActive) {
+                    add(SetComposingTextCommand(event.text, 1))
+                } else if (event.text.isNotEmpty()) {
                     add(CommitTextCommand(event.text, 1))
                 }
                 add(SetSelectionCommand(
@@ -128,8 +132,11 @@ internal class WinUICoreTextInputSession private constructor(
                 CoreTextSelectionUpdatingResult.Failed
             }
         }
-        eventTokens += editContext.addCompositionStarted {}
+        eventTokens += editContext.addCompositionStarted {
+            compositionActive = true
+        }
         eventTokens += editContext.addCompositionCompleted {
+            compositionActive = false
             dispatchEditCommands(listOf(FinishComposingTextCommand()))
         }
     }

@@ -310,6 +310,61 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
+    fun coreTextBridgeDispatchesComposingUpdatesUntilCompositionCompletes() {
+        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val bridge = WinUIPlatformTextInputService.nativeBridge
+        val editContext = FakeCoreTextEditContext()
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("input", selection = TextRange(2)),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { editCommandBatches += it },
+            onImeActionPerformed = {},
+        )
+
+        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
+
+        editContext.dispatchCompositionStarted()
+        val composingUpdate = FakeCoreTextTextUpdatingEvent(
+            range = CoreTextRange(2, 2),
+            text = "draft",
+            newSelection = CoreTextRange(7, 7),
+        )
+        editContext.dispatchTextUpdating(composingUpdate)
+
+        assertEquals(CoreTextTextUpdatingResult.Succeeded, composingUpdate.result)
+        assertEquals(
+            listOf(
+                SetSelectionCommand(2, 2),
+                SetComposingTextCommand("draft", 1),
+                SetSelectionCommand(7, 7),
+            ),
+            editCommandBatches.single(),
+        )
+
+        editContext.dispatchCompositionCompleted()
+
+        assertEquals(listOf(FinishComposingTextCommand()), editCommandBatches.last())
+
+        val committedUpdate = FakeCoreTextTextUpdatingEvent(
+            range = CoreTextRange(0, 5),
+            text = "final",
+            newSelection = CoreTextRange(5, 5),
+        )
+        editContext.dispatchTextUpdating(committedUpdate)
+
+        assertEquals(CoreTextTextUpdatingResult.Succeeded, committedUpdate.result)
+        assertEquals(
+            listOf(
+                SetSelectionCommand(0, 5),
+                CommitTextCommand("final", 1),
+                SetSelectionCommand(5, 5),
+            ),
+            editCommandBatches.last(),
+        )
+    }
+
+    @Test
     fun coreTextBridgeNotifiesNativeStateChangesAfterAttach() {
         val bridge = WinUIPlatformTextInputService.nativeBridge
         val editContext = FakeCoreTextEditContext()
@@ -546,6 +601,14 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     fun dispatchSelectionUpdating(event: WinUICoreTextSelectionUpdatingEvent) {
         selectionUpdating?.invoke(event)
+    }
+
+    fun dispatchCompositionStarted() {
+        compositionStarted?.invoke()
+    }
+
+    fun dispatchCompositionCompleted() {
+        compositionCompleted?.invoke()
     }
 
     private fun token(): WinUICoreTextEventToken =

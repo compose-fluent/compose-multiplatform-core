@@ -119,7 +119,7 @@
 - [x] Move WinUI native child insertion/removal/z-order/layout/clipping updates
   fully behind the render-synchronized interop transaction queue before using
   the original sample as an interop correctness baseline.
-- [ ] Complete enough native text input for sample use: focus entry, session
+- [x] Complete enough native text input for sample use: focus entry, session
   replacement, composing text, committed text, selection updates, edit menu
   actions, and keyboard-driven focus order. Keep software keyboard behavior
   tracked separately if WinUI desktop cannot expose it directly.
