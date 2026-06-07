@@ -145,7 +145,7 @@
 - [ ] Re-run Android/Desktop versions of the original MPP sample after sharing
   code with WinUI to ensure source-set guards did not regress existing sample
   platforms.
-- [ ] Keep unresolved kotlin-winrt/skiko blockers tied to this sample as stable
+- [x] Keep unresolved kotlin-winrt/skiko blockers tied to this sample as stable
   `KWINRT-###` or `SKIKO-###` entries, and do not hide generator/runtime issues
   by excluding legitimate WinMD dependency-chain types.
 
