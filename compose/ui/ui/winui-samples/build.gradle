@@ -118,6 +118,11 @@ registerWinUISampleTask(
     "Runs the minimal compose-winui WinUI smoke sample."
 )
 registerWinUISampleTask(
+    "runWinUIAccessibilitySample",
+    "Runs the compose-winui accessibility and UI Automation smoke sample.",
+    "accessibility"
+)
+registerWinUISampleTask(
     "runWinUIWindowSample",
     "Runs the compose-winui WinUI window/lifecycle smoke sample.",
     "window"

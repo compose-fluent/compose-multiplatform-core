@@ -439,6 +439,7 @@ private enum class WinUIViewSampleMode(
     val id: String,
 ) {
     Full("full"),
+    Accessibility("accessibility"),
     Window("window"),
     Interop("interop"),
     Owner("owner"),
@@ -485,6 +486,7 @@ private object ComposeWinUiSmokeApp {
             LaunchedEffect(Unit) {
                 runSmoke(applicationScope) {
                     when (sampleMode) {
+                        WinUIViewSampleMode.Accessibility -> runAccessibilitySmokeSuite()
                         WinUIViewSampleMode.Interop -> runInteropSmokeSuite()
                         WinUIViewSampleMode.Owner -> runOwnerSmokeSuite()
                         WinUIViewSampleMode.Pointer -> runPointerSmokeSuite()
@@ -766,6 +768,13 @@ private object ComposeWinUiSmokeApp {
                 }
             }
         }
+    }
+
+    private suspend fun runAccessibilitySmokeSuite() {
+        runWinUIViewLifecycleSmoke()
+        runWinUIRootSemanticsSmoke()
+        runWinUIAccessibilityProviderSmoke()
+        println("compose-winui-sample: accessibility suite")
     }
 
     private suspend fun runInteropSmokeSuite() {
@@ -2148,6 +2157,64 @@ private object ComposeWinUiSmokeApp {
         }
         currentComposeView.dispose()
         println("compose-winui-sample: root semantics")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUIAccessibilityProviderSmoke() {
+        val currentComposeView = WinUIComposeView()
+        var clicked = false
+        currentComposeView.setWindowContainerSizeForTest(IntSize(96, 64))
+        currentComposeView.setContent {
+            Layout(
+                modifier = Modifier.semantics {
+                    testTag = "winui-accessibility"
+                    contentDescription = "WinUI accessible node"
+                    onClick {
+                        clicked = true
+                        true
+                    }
+                },
+                content = {},
+            ) { _, _ ->
+                layout(48, 32) {}
+            }
+        }
+        currentComposeView.rootForTest().measureAndLayoutForTest()
+        awaitCondition("WinUI accessibility provider node") {
+            currentComposeView.accessibilitySnapshotForTest
+                ?.root
+                ?.findAccessibilityNode("winui-accessibility") != null
+        }
+        val accessibilitySnapshot = checkNotNull(currentComposeView.accessibilitySnapshotForTest) {
+            "WinUI accessibility provider did not expose a semantics snapshot."
+        }
+        val accessibilityNode = checkNotNull(
+            accessibilitySnapshot.root.findAccessibilityNode("winui-accessibility")
+        ) {
+            "WinUI accessibility provider did not expose the accessibility smoke node."
+        }
+        check(accessibilityNode.info.name == "WinUI accessible node") {
+            "WinUI accessibility provider exposed incorrect name: ${accessibilityNode.info.name}."
+        }
+        check(accessibilityNode.bounds.width == 48f && accessibilityNode.bounds.height == 32f) {
+            "WinUI accessibility provider exposed incorrect bounds: ${accessibilityNode.bounds}."
+        }
+        check(WinUIAccessibilityAction.CLICK in accessibilityNode.actions) {
+            "WinUI accessibility provider did not expose click action: ${accessibilityNode.actions}."
+        }
+        val actionInvoked = currentComposeView.performAccessibilityActionForTest(
+            WinUIAccessibilityActionRequest(
+                nodeId = accessibilityNode.id,
+                action = WinUIAccessibilityAction.CLICK,
+                text = "",
+            ),
+        )
+        check(actionInvoked && clicked) {
+            "WinUI accessibility provider click did not dispatch: " +
+                "actionInvoked=$actionInvoked clicked=$clicked."
+        }
+        currentComposeView.dispose()
+        println("compose-winui-sample: accessibility provider")
     }
 
     private suspend fun runWinUIOwnerEndApplyChangesSmoke() {

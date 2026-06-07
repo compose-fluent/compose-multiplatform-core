@@ -309,7 +309,7 @@
   non-empty draws update bounds, empty subsequent renders report zero bounds,
   negative-area draws retain their negative bounds, and a closed recorder still
   forwards rendering without updating diagnostics.
-- [ ] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
+- [x] Add WinUI UI Automation tests comparable to UIKit accessibility tests: semantics tree projection, accessibility focus, custom actions, scroll actions, live-region notifications, interop native accessibility inclusion/exclusion, and geometry updates after layout.
 - [x] Add initial WinUI Skiko accessibility-provider tests for semantics
   snapshot projection, render-host provider/change forwarding, and basic
   action dispatch from the Skiko provider back to Compose semantics, including
