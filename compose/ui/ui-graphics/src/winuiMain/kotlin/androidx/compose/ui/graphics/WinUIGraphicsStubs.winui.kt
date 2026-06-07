@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.graphics
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
@@ -786,18 +787,59 @@ internal actual fun actualLightingColorFilter(multiply: Color, add: Color): Nati
 internal actual fun actualColorMatrixFromFilter(filter: NativeColorFilter): ColorMatrix =
     ColorMatrix()
 
+@Immutable
 actual sealed class RenderEffect actual constructor() {
     actual open fun isSupported(): Boolean = false
 }
 
+@Immutable
 actual class BlurEffect actual constructor(
     val renderEffect: RenderEffect?,
     val radiusX: Float,
     val radiusY: Float,
     val edgeTreatment: TileMode,
-) : RenderEffect()
+) : RenderEffect() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is BlurEffect) return false
 
+        return renderEffect == other.renderEffect &&
+            radiusX == other.radiusX &&
+            radiusY == other.radiusY &&
+            edgeTreatment == other.edgeTreatment
+    }
+
+    override fun hashCode(): Int {
+        var result = renderEffect?.hashCode() ?: 0
+        result = 31 * result + radiusX.hashCode()
+        result = 31 * result + radiusY.hashCode()
+        result = 31 * result + edgeTreatment.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "BlurEffect(renderEffect=$renderEffect, radiusX=$radiusX, " +
+            "radiusY=$radiusY, edgeTreatment=$edgeTreatment)"
+}
+
+@Immutable
 actual class OffsetEffect actual constructor(
     val renderEffect: RenderEffect?,
     val offset: Offset,
-) : RenderEffect()
+) : RenderEffect() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is OffsetEffect) return false
+
+        return renderEffect == other.renderEffect && offset == other.offset
+    }
+
+    override fun hashCode(): Int {
+        var result = renderEffect?.hashCode() ?: 0
+        result = 31 * result + offset.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "OffsetEffect(renderEffect=$renderEffect, offset=$offset)"
+}
