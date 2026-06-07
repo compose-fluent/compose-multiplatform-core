@@ -10,11 +10,39 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** `SKIKO-006`.
+- **Open upstream/publication/API:** `SKIKO-006` and `SKIKO-007`.
 - **Open compose-side integration:** none.
 - **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
   `SKIKO-004`, `SKIKO-005`.
+
+## SKIKO-007: Published skiko-winui jar contains WinRT projection classes
+
+- **Status:** Open upstream/publication.
+- **Observed in:** `:compose:mpp:demo-winui:runWinUIMppSample` with
+  `skiko-winui` Maven snapshot `0.0.0-20260607.101016-8`.
+- **Failure:** the WinUI MPP sample runtime classpath contains duplicate
+  `microsoft/**` and `windows/**` projection classes owned by both
+  `ui-winuijvm-9999.0.0-SNAPSHOT.jar` and
+  `skiko-winui-0.0.0-SNAPSHOT.jar`.
+- **Evidence:** direct download from Sonatype Central snapshots for
+  `io.github.compose-fluent:skiko-winui:0.0.0-20260607.101016-8` contains
+  2854 classes under `microsoft/**` or `windows/**`. The matching Maven metadata
+  reports `lastUpdated=20260607101016`; no newer snapshot is currently
+  published.
+- **Expected behavior:** `skiko-winui` should publish only the Skiko WinUI API
+  and implementation classes, leaving WinRT/WinUI projection ownership to the
+  consuming kotlin-winrt projection graph or to a single compatible projection
+  artifact.
+- **Current compose-winui action:** `:compose:mpp:demo-winui:runWinUIMppSample`
+  stages a filtered copy of the `skiko-winui` jar for the JavaExec runtime
+  classpath while keeping the duplicate-projection classpath assertion enabled.
+  The staged jar removes bundled projection classes already owned by other
+  runtime jars and keeps skiko-unique support projections needed by skiko's
+  authored `WinUISkiaHostPanel`. The related generated final projection shape
+  is tracked separately as `KWINRT-032`. Remove this workaround once the
+  published snapshot no longer contains shared projection classes and
+  compose-winui can own the required projection surface normally.
 
 ## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
 

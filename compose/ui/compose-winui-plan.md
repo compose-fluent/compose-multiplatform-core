@@ -82,14 +82,14 @@
 - [x] Release native rendering resources, DispatcherQueue handles, COM references, and Windows App SDK registrations when the host is disposed.
 
 ## Skiko full integration and MPP sample readiness
-- [ ] Add a repository-local WinUI JVM variant of the original MPP sample instead
+- [x] Add a repository-local WinUI JVM variant of the original MPP sample instead
   of relying only on `compose/ui/ui/winui-samples`; keep the original sample
   source shared as much as possible and isolate only the app entry/window
   bootstrap behind WinUI-specific source sets.
 - [x] Define the exact original MPP sample scope that must run on WinUI,
   including its modules, resources, image/font assets, navigation paths, and
   desktop-specific APIs that need WinUI equivalents or source-set guards.
-- [ ] Add Gradle wiring for a `runWinUIMppSample` task that uses the same
+- [x] Add Gradle wiring for a `runWinUIMppSample` task that uses the same
   kotlin-winrt initialization chain as `runWinUIViewSample`, stages WinRT
   runtime assets, builds the authoring host, and keeps explicit `type(...)`
   declarations rather than full projection dependencies.
@@ -135,7 +135,7 @@
   desktop window APIs, Skiko AWT layer assumptions, file/dialog helpers, tray or
   menu APIs, and any JVM desktop dependencies that would pull AWT runtime
   artifacts into the WinUI classpath.
-- [ ] Add classpath assertions to the MPP sample run task matching the existing
+- [x] Add classpath assertions to the MPP sample run task matching the existing
   WinUI smoke guards: require `skiko-winui`, reject Skiko AWT/Desktop native
   runtime artifacts, and reject duplicated `microsoft/**` or `windows/**`
   projection classes from third-party jars.
