@@ -427,6 +427,7 @@ val smokeWinUIMppSampleRenderOutput = tasks.register<JavaExec>("smokeWinUIMppSam
         taskDescription = "Runs the WinUI MPP sample until the image viewer reaches a laid-out frame.",
         reportName = "winui-mpp-sample-render-output",
         requiredEvents = listOf(
+            "image-bitmap-drawn",
             "positive-layout-size",
             "image-viewer-composed",
             "frame-observed",
@@ -480,6 +481,7 @@ tasks.register<JavaExec>("runWinUIMppSample") {
             "window-composed",
             "window-positive-size",
             "font-resource-loaded",
+            "image-bitmap-drawn",
             "positive-layout-size",
             "image-viewer-composed",
             "input-handlers-composed",

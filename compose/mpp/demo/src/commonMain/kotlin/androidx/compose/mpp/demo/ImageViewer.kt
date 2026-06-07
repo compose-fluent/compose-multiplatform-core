@@ -50,7 +50,7 @@ import kotlin.math.pow
 fun ImageViewer(
     onValidationEvent: (String) -> Unit = {},
 ) {
-    ImageViewer(remember {
+    val image = remember {
         ImageBitmap(500, 1000).apply {
             Canvas(this).apply {
                 drawRect(0f, 0f, size.width, size.height, Paint().apply {
@@ -62,7 +62,21 @@ fun ImageViewer(
                 })
             }
         }
-    }, onValidationEvent)
+    }
+    SideEffect {
+        val pixels = IntArray(4)
+        image.readPixels(
+            buffer = pixels,
+            startX = 0,
+            startY = 0,
+            width = 2,
+            height = 2,
+        )
+        if (pixels.any { it != 0 }) {
+            onValidationEvent("image-bitmap-drawn")
+        }
+    }
+    ImageViewer(image, onValidationEvent)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)

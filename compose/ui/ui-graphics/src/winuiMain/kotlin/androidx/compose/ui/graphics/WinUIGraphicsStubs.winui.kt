@@ -23,6 +23,19 @@ import androidx.compose.ui.graphics.colorspace.ColorSpace
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.abs
+import org.jetbrains.skia.Bitmap
+import org.jetbrains.skia.Color4f
+import org.jetbrains.skia.ColorAlphaType
+import org.jetbrains.skia.ColorInfo
+import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.FilterTileMode
+import org.jetbrains.skia.Gradient
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.SamplingMode
 import org.jetbrains.skia.Canvas as SkCanvas
 import org.jetbrains.skia.Paint as SkPaint
 import org.jetbrains.skia.PaintMode as SkPaintMode
@@ -32,6 +45,7 @@ import org.jetbrains.skia.Path as SkPath
 import org.jetbrains.skia.PathBuilder
 import org.jetbrains.skia.PathDirection
 import org.jetbrains.skia.Rect as SkRect
+import org.jetbrains.skia.Shader as SkShader
 import org.jetbrains.skia.impl.use
 
 @Deprecated("Use direct reference to platform type instead of typealias")
@@ -60,6 +74,7 @@ private class WinUIPaint : Paint {
     fun asSkiaPaint(): SkPaint = SkPaint().also {
         it.color = color.copy(alpha = color.alpha * alpha).toArgb()
         it.isAntiAlias = isAntiAlias
+        it.shader = shader?.skiaShader
         it.mode = when (style) {
             PaintingStyle.Fill -> SkPaintMode.FILL
             PaintingStyle.Stroke -> SkPaintMode.STROKE
@@ -89,7 +104,13 @@ actual fun TileMode.isSupported(): Boolean = true
 @Deprecated("Use direct reference to platform type instead of typealias")
 actual class NativeCanvas
 
-internal actual fun ActualCanvas(image: ImageBitmap): Canvas = WinUICanvas()
+internal actual fun ActualCanvas(image: ImageBitmap): Canvas {
+    val skiaBitmap = image.asWinUISkiaBitmap()
+    require(!skiaBitmap.isImmutable) {
+        "Cannot draw on immutable ImageBitmap"
+    }
+    return WinUICanvas(SkCanvas(skiaBitmap))
+}
 
 fun SkCanvas.asComposeCanvas(): Canvas = WinUICanvas(this)
 
@@ -208,7 +229,21 @@ private class WinUICanvas(
         }
     }
 
-    override fun drawImage(image: ImageBitmap, topLeftOffset: Offset, paint: Paint) = Unit
+    override fun drawImage(image: ImageBitmap, topLeftOffset: Offset, paint: Paint) {
+        drawImageRect(
+            image = image,
+            srcLeft = 0f,
+            srcTop = 0f,
+            srcRight = image.width.toFloat(),
+            srcBottom = image.height.toFloat(),
+            dstLeft = topLeftOffset.x,
+            dstTop = topLeftOffset.y,
+            dstRight = topLeftOffset.x + image.width.toFloat(),
+            dstBottom = topLeftOffset.y + image.height.toFloat(),
+            paint = paint,
+        )
+    }
+
     override fun drawImageRect(
         image: ImageBitmap,
         srcOffset: IntOffset,
@@ -216,7 +251,21 @@ private class WinUICanvas(
         dstOffset: IntOffset,
         dstSize: IntSize,
         paint: Paint,
-    ) = Unit
+    ) {
+        drawImageRect(
+            image = image,
+            srcLeft = srcOffset.x.toFloat(),
+            srcTop = srcOffset.y.toFloat(),
+            srcRight = srcOffset.x.toFloat() + srcSize.width.toFloat(),
+            srcBottom = srcOffset.y.toFloat() + srcSize.height.toFloat(),
+            dstLeft = dstOffset.x.toFloat(),
+            dstTop = dstOffset.y.toFloat(),
+            dstRight = dstOffset.x.toFloat() + dstSize.width.toFloat(),
+            dstBottom = dstOffset.y.toFloat() + dstSize.height.toFloat(),
+            paint = paint,
+        )
+    }
+
     override fun drawPoints(pointMode: PointMode, points: List<Offset>, paint: Paint) = Unit
     override fun drawRawPoints(pointMode: PointMode, points: FloatArray, paint: Paint) = Unit
     override fun drawVertices(vertices: Vertices, blendMode: BlendMode, paint: Paint) = Unit
@@ -225,6 +274,36 @@ private class WinUICanvas(
 
     private fun Paint.asSkiaPaint(): SkPaint =
         (this as? WinUIPaint)?.asSkiaPaint() ?: SkPaint()
+
+    private fun drawImageRect(
+        image: ImageBitmap,
+        srcLeft: Float,
+        srcTop: Float,
+        srcRight: Float,
+        srcBottom: Float,
+        dstLeft: Float,
+        dstTop: Float,
+        dstRight: Float,
+        dstBottom: Float,
+        paint: Paint,
+    ) {
+        Image.makeFromBitmap(image.asWinUISkiaBitmap()).use { skiaImage ->
+            skiaCanvas?.drawImageRect(
+                image = skiaImage,
+                srcLeft = srcLeft,
+                srcTop = srcTop,
+                srcRight = srcRight,
+                srcBottom = srcBottom,
+                dstLeft = dstLeft,
+                dstTop = dstTop,
+                dstRight = dstRight,
+                dstBottom = dstBottom,
+                samplingMode = SamplingMode.DEFAULT,
+                paint = paint.asSkiaPaint(),
+                strict = true,
+            )
+        }
+    }
 }
 
 actual fun Path(): Path = WinUIPath()
@@ -417,15 +496,27 @@ internal actual fun ActualImageBitmap(
     config: ImageBitmapConfig,
     hasAlpha: Boolean,
     colorSpace: ColorSpace,
-): ImageBitmap = WinUIImageBitmap(width, height, config, hasAlpha, colorSpace)
+): ImageBitmap {
+    require(width > 0 && height > 0) { "width and height must be > 0" }
+    val colorInfo = ColorInfo(
+        colorType = config.toSkiaColorType(),
+        alphaType = if (hasAlpha) ColorAlphaType.PREMUL else ColorAlphaType.OPAQUE,
+        colorSpace = colorSpace.toSkiaColorSpace(),
+    )
+    return WinUIImageBitmap(Bitmap().apply {
+        allocPixels(ImageInfo(colorInfo, width, height))
+    })
+}
 
 private class WinUIImageBitmap(
-    override val width: Int,
-    override val height: Int,
-    override val config: ImageBitmapConfig,
-    override val hasAlpha: Boolean,
-    override val colorSpace: ColorSpace,
+    val bitmap: Bitmap,
 ) : ImageBitmap {
+    override val width: Int get() = bitmap.width
+    override val height: Int get() = bitmap.height
+    override val config: ImageBitmapConfig get() = bitmap.colorType.toComposeConfig()
+    override val hasAlpha: Boolean get() = !bitmap.isOpaque
+    override val colorSpace: ColorSpace get() = bitmap.colorSpace.toComposeColorSpace()
+
     override fun readPixels(
         buffer: IntArray,
         startX: Int,
@@ -434,15 +525,86 @@ private class WinUIImageBitmap(
         height: Int,
         bufferOffset: Int,
         stride: Int,
-    ) = Unit
+    ) {
+        val lastScanline = bufferOffset + (height - 1) * stride
+        require(startX >= 0 && startY >= 0)
+        require(width > 0 && startX + width <= this.width)
+        require(height > 0 && startY + height <= this.height)
+        require(abs(stride) >= width)
+        require(bufferOffset >= 0 && bufferOffset + width <= buffer.size)
+        require(lastScanline >= 0 && lastScanline + width <= buffer.size)
+
+        val colorInfo = ColorInfo(
+            ColorType.BGRA_8888,
+            ColorAlphaType.UNPREMUL,
+            org.jetbrains.skia.ColorSpace.sRGB,
+        )
+        val imageInfo = ImageInfo(colorInfo, width, height)
+        val bytesPerPixel = 4
+        val bytes = bitmap.readPixels(imageInfo, stride * bytesPerPixel, startX, startY)
+            ?: return
+        ByteBuffer.wrap(bytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asIntBuffer()
+            .get(buffer, bufferOffset, bytes.size / bytesPerPixel)
+    }
 
     override fun prepareToDraw() = Unit
 }
 
 internal actual fun createImageBitmap(bytes: ByteArray): ImageBitmap =
-    ActualImageBitmap(1, 1, ImageBitmapConfig.Argb8888, true, ColorSpaces.Srgb)
+    Image.makeFromEncoded(bytes).use { image ->
+        WinUIImageBitmap(image.toBitmap())
+    }
 
-actual class Shader
+private fun Image.toBitmap(): Bitmap {
+    val bitmap = Bitmap()
+    bitmap.allocPixels(imageInfo)
+    readPixels(bitmap, 0, 0)
+    return bitmap
+}
+
+private fun ImageBitmap.asWinUISkiaBitmap(): Bitmap =
+    (this as? WinUIImageBitmap)?.bitmap
+        ?: throw UnsupportedOperationException("Unable to obtain org.jetbrains.skia.Bitmap")
+
+private fun ImageBitmapConfig.toSkiaColorType(): ColorType =
+    when (this) {
+        ImageBitmapConfig.Argb8888 -> ColorType.N32
+        ImageBitmapConfig.Alpha8 -> ColorType.ALPHA_8
+        ImageBitmapConfig.Rgb565 -> ColorType.RGB_565
+        ImageBitmapConfig.F16 -> ColorType.RGBA_F16
+        else -> ColorType.N32
+    }
+
+private fun ColorType.toComposeConfig(): ImageBitmapConfig =
+    when (this) {
+        ColorType.N32 -> ImageBitmapConfig.Argb8888
+        ColorType.ALPHA_8 -> ImageBitmapConfig.Alpha8
+        ColorType.RGB_565 -> ImageBitmapConfig.Rgb565
+        ColorType.RGBA_F16 -> ImageBitmapConfig.F16
+        else -> ImageBitmapConfig.Argb8888
+    }
+
+private fun org.jetbrains.skia.ColorSpace?.toComposeColorSpace(): ColorSpace =
+    when (this) {
+        org.jetbrains.skia.ColorSpace.sRGB -> ColorSpaces.Srgb
+        org.jetbrains.skia.ColorSpace.sRGBLinear -> ColorSpaces.LinearSrgb
+        org.jetbrains.skia.ColorSpace.displayP3 -> ColorSpaces.DisplayP3
+        else -> ColorSpaces.Srgb
+    }
+
+private fun ColorSpace.toSkiaColorSpace(): org.jetbrains.skia.ColorSpace =
+    when (this) {
+        ColorSpaces.Srgb -> org.jetbrains.skia.ColorSpace.sRGB
+        ColorSpaces.LinearSrgb -> org.jetbrains.skia.ColorSpace.sRGBLinear
+        ColorSpaces.DisplayP3 -> org.jetbrains.skia.ColorSpace.displayP3
+        else -> org.jetbrains.skia.ColorSpace.sRGB
+    }
+
+actual class Shader internal constructor(
+    val skiaShader: SkShader,
+)
 
 internal actual class TransformShader actual constructor() {
     actual var shader: Shader? = null
@@ -455,7 +617,18 @@ internal actual fun ActualLinearGradientShader(
     colors: List<Color>,
     colorStops: List<Float>?,
     tileMode: TileMode,
-): Shader = Shader()
+): Shader {
+    validateColorStops(colors, colorStops)
+    return Shader(
+        SkShader.makeLinearGradient(
+            x0 = from.x,
+            y0 = from.y,
+            x1 = to.x,
+            y1 = to.y,
+            gradient = colors.toSkiaGradient(colorStops, tileMode),
+        )
+    )
+}
 
 internal actual fun ActualRadialGradientShader(
     center: Offset,
@@ -463,22 +636,124 @@ internal actual fun ActualRadialGradientShader(
     colors: List<Color>,
     colorStops: List<Float>?,
     tileMode: TileMode,
-): Shader = Shader()
+): Shader {
+    validateColorStops(colors, colorStops)
+    return Shader(
+        SkShader.makeRadialGradient(
+            x = center.x,
+            y = center.y,
+            radius = radius,
+            gradient = colors.toSkiaGradient(colorStops, tileMode),
+        )
+    )
+}
 
 internal actual fun ActualSweepGradientShader(
     center: Offset,
     colors: List<Color>,
     colorStops: List<Float>?,
-): Shader = Shader()
+): Shader {
+    validateColorStops(colors, colorStops)
+    return Shader(
+        SkShader.makeSweepGradient(
+            x = center.x,
+            y = center.y,
+            gradient = colors.toSkiaGradient(colorStops),
+        )
+    )
+}
 
 internal actual fun ActualImageShader(
     image: ImageBitmap,
     tileModeX: TileMode,
     tileModeY: TileMode,
-): Shader = Shader()
+): Shader = Shader(
+    image.asWinUISkiaBitmap().makeShader(
+        tmx = tileModeX.toSkiaTileMode(),
+        tmy = tileModeY.toSkiaTileMode(),
+    )
+)
 
 internal actual fun ActualCompositeShader(dst: Shader, src: Shader, blendMode: BlendMode): Shader =
-    Shader()
+    Shader(
+        SkShader.makeBlend(
+            mode = blendMode.toSkiaBlendMode(),
+            dst = dst.skiaShader,
+            src = src.skiaShader,
+        )
+    )
+
+private fun List<Color>.toSkiaGradient(
+    colorStops: List<Float>?,
+    tileMode: TileMode = TileMode.Clamp,
+): Gradient = Gradient(
+    colors = Gradient.Colors(
+        colors = Array(size) { index ->
+            val color = this[index]
+            Color4f(color.red, color.green, color.blue, color.alpha)
+        },
+        positions = colorStops?.toFloatArray(),
+        tileMode = tileMode.toSkiaTileMode(),
+    ),
+    interpolation = Gradient.Interpolation(
+        inPremul = Gradient.Interpolation.InPremul.YES,
+    ),
+)
+
+private fun validateColorStops(colors: List<Color>, colorStops: List<Float>?) {
+    if (colorStops == null) {
+        require(colors.size >= 2) {
+            "colors must have length of at least 2 if colorStops is omitted."
+        }
+    } else {
+        require(colors.size == colorStops.size) {
+            "colors and colorStops arguments must have equal length."
+        }
+    }
+}
+
+private fun TileMode.toSkiaTileMode(): FilterTileMode =
+    when (this) {
+        TileMode.Clamp -> FilterTileMode.CLAMP
+        TileMode.Repeated -> FilterTileMode.REPEAT
+        TileMode.Mirror -> FilterTileMode.MIRROR
+        TileMode.Decal -> FilterTileMode.DECAL
+        else -> FilterTileMode.CLAMP
+    }
+
+private fun BlendMode.toSkiaBlendMode(): org.jetbrains.skia.BlendMode =
+    when (this) {
+        BlendMode.Clear -> org.jetbrains.skia.BlendMode.CLEAR
+        BlendMode.Src -> org.jetbrains.skia.BlendMode.SRC
+        BlendMode.Dst -> org.jetbrains.skia.BlendMode.DST
+        BlendMode.SrcOver -> org.jetbrains.skia.BlendMode.SRC_OVER
+        BlendMode.DstOver -> org.jetbrains.skia.BlendMode.DST_OVER
+        BlendMode.SrcIn -> org.jetbrains.skia.BlendMode.SRC_IN
+        BlendMode.DstIn -> org.jetbrains.skia.BlendMode.DST_IN
+        BlendMode.SrcOut -> org.jetbrains.skia.BlendMode.SRC_OUT
+        BlendMode.DstOut -> org.jetbrains.skia.BlendMode.DST_OUT
+        BlendMode.SrcAtop -> org.jetbrains.skia.BlendMode.SRC_ATOP
+        BlendMode.DstAtop -> org.jetbrains.skia.BlendMode.DST_ATOP
+        BlendMode.Xor -> org.jetbrains.skia.BlendMode.XOR
+        BlendMode.Plus -> org.jetbrains.skia.BlendMode.PLUS
+        BlendMode.Modulate -> org.jetbrains.skia.BlendMode.MODULATE
+        BlendMode.Screen -> org.jetbrains.skia.BlendMode.SCREEN
+        BlendMode.Overlay -> org.jetbrains.skia.BlendMode.OVERLAY
+        BlendMode.Darken -> org.jetbrains.skia.BlendMode.DARKEN
+        BlendMode.Lighten -> org.jetbrains.skia.BlendMode.LIGHTEN
+        BlendMode.ColorDodge -> org.jetbrains.skia.BlendMode.COLOR_DODGE
+        BlendMode.ColorBurn -> org.jetbrains.skia.BlendMode.COLOR_BURN
+        BlendMode.Hardlight -> org.jetbrains.skia.BlendMode.HARD_LIGHT
+        BlendMode.Softlight -> org.jetbrains.skia.BlendMode.SOFT_LIGHT
+        BlendMode.Difference -> org.jetbrains.skia.BlendMode.DIFFERENCE
+        BlendMode.Exclusion -> org.jetbrains.skia.BlendMode.EXCLUSION
+        BlendMode.Multiply -> org.jetbrains.skia.BlendMode.MULTIPLY
+        BlendMode.Hue -> org.jetbrains.skia.BlendMode.HUE
+        BlendMode.Saturation -> org.jetbrains.skia.BlendMode.SATURATION
+        BlendMode.Color -> org.jetbrains.skia.BlendMode.COLOR
+        BlendMode.Luminosity -> org.jetbrains.skia.BlendMode.LUMINOSITY
+        else -> org.jetbrains.skia.BlendMode.SRC_OVER
+    }
 
 private object WinUIPathEffect : PathEffect
 

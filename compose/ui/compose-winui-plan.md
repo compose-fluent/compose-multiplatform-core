@@ -101,7 +101,7 @@
   actuals and add missing implementations or guarded fallbacks for graphics,
   text, pointer, keyboard, clipboard, URI, window info, density, focus, popup,
   dialog, drag-and-drop, and accessibility hooks.
-- [ ] Replace current `ui-graphics` WinUI stubs that affect visible sample
+- [x] Replace current `ui-graphics` WinUI stubs that affect visible sample
   output with real Skia-backed implementations or explicit tracked gaps,
   including path/effect/image/brush/layer behavior used by the sample.
 - [ ] Replace current `ui-text` WinUI stubs that affect visible sample output
