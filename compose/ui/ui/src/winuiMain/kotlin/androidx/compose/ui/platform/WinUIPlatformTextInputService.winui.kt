@@ -76,6 +76,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             onEditCommand = onEditCommand,
             onImeActionPerformed = onImeActionPerformed,
         )
+        nativeBridge.attachCoreTextForCurrentInputIfAvailable()
     }
 
     override fun stopInput() {
@@ -239,6 +240,15 @@ internal class WinUINativeTextInputBridge(
         )
     }
 
+    internal fun attachCoreTextForCurrentInputIfAvailable(): Boolean =
+        if (!java.lang.Boolean.getBoolean(CoreTextInputEnabledProperty)) {
+            false
+        } else {
+            runCatching {
+                attachCoreTextForCurrentInput()
+            }.getOrDefault(false)
+        }
+
     private fun attachCoreTextForCurrentInput(
         editContext: WinUICoreTextEditContext?,
         initialValue: TextFieldValue,
@@ -265,6 +275,10 @@ internal class WinUINativeTextInputBridge(
             coreTextSession?.notifyFocusEnter()
         }
         return true
+    }
+
+    private companion object {
+        const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
     }
 
     internal fun updateCoreTextState(oldValue: TextFieldValue?, newValue: TextFieldValue) {

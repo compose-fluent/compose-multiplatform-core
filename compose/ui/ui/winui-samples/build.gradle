@@ -107,6 +107,7 @@ def registerWinUISampleTask = { String taskName, String descriptionText, String 
         classpath = sourceSets.main.runtimeClasspath
         jvmArgs("--enable-native-access=ALL-UNNAMED")
         systemProperty("compose.winui.sample.autoExit", "true")
+        systemProperty("compose.winui.textInput.coreText.enabled", "true")
         if (mode != null) {
             args(mode)
         }

@@ -329,6 +329,7 @@ fun JavaExec.configureWinUIMppSampleJavaExec(
     )
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     systemProperty("compose.winui.mpp.sample.autoExit", "true")
+    systemProperty("compose.winui.textInput.coreText.enabled", "true")
     val reportFile = layout.buildDirectory.file("validation/$reportName-events.txt")
     outputs.file(reportFile)
     doFirst {

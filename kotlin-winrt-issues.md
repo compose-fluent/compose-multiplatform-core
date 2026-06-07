@@ -737,6 +737,14 @@ baseline, not every retest attempt.
   `compose-fluent-skiko\samples\SkiaWinUISample`, loaded Windows App SDK
   `Microsoft.UI.Xaml.dll` `3.1.8.2604`, and is evidence that this native
   text-input fail-fast is not specific to compose-winui's full smoke sample.
+- **2026-06-08 compose-winui mitigation retest:** compose-winui now creates a
+  CoreText edit context/session only when
+  `compose.winui.textInput.coreText.enabled=true` and keeps
+  `CoreTextEditContext.notifyFocusEnter()` opt-in. With that path enabled,
+  `:compose:ui:ui:winui-samples:runWinUITextInputSample` and
+  `:compose:mpp:demo-winui:runWinUIMppSample` pass without reproducing this
+  fail-fast. Keep this issue open until native focus registration itself is
+  safe.
 
 ## KWINRT-027: Maven compiler plugin snapshot requires Kotlin 2.4 compiler APIs
 
