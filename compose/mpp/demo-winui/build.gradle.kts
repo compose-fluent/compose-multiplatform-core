@@ -206,6 +206,81 @@ fun projectionClassEntries(files: Iterable<File>): Set<String> =
             }
     }
 
+fun JavaExec.configureWinUIMppSampleJavaExec(
+    taskDescription: String,
+    reportName: String,
+    requiredEvents: List<String>,
+) {
+    group = "verification"
+    description = taskDescription
+    dependsOn("compileKotlinWinuiJvm")
+    dependsOn("stageWinRtRuntimeAssets")
+    dependsOn("buildWinRtAuthoringHost")
+    dependsOn("validateWinUIMppSamplePackaging")
+    dependsOn(stripSkikoWinUiProjectionClasses)
+    mainClass.set("androidx.compose.mpp.demo.MainJavaExec_winuiKt")
+    classpath(
+        winUiMppSampleResourcesDir,
+        layout.buildDirectory.dir("classes/kotlin/winuiJvm/main"),
+        configurations.named("winuiJvmRuntimeClasspath").map { runtimeClasspath ->
+            runtimeClasspath.filter { file ->
+                !file.name.startsWith("skiko-winui-") ||
+                    file.name.startsWith("skiko-winui-windows-")
+            }
+        },
+        stripSkikoWinUiProjectionClasses.flatMap {
+            layout.buildDirectory.file("skiko-winui-projection-free/skiko-winui-projection-free.jar")
+        },
+    )
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    systemProperty("compose.winui.mpp.sample.autoExit", "true")
+    val reportFile = layout.buildDirectory.file("validation/$reportName-events.txt")
+    outputs.file(reportFile)
+    doFirst {
+        val report = reportFile.get().asFile
+        report.delete()
+        systemProperty("compose.winui.mpp.sample.validationReport", report.absolutePath)
+
+        val classpathNames = classpath.files.map { it.name }
+        winUiMppSampleResourceFiles.forEach { resource ->
+            check(classpath.files.any { file ->
+                file.isDirectory && file.resolve(resource.name).isFile
+            }) {
+                "WinUI MPP sample runtime classpath did not include staged resource ${resource.name}."
+            }
+        }
+        check(classpathNames.any { it.contains("skiko-winui") }) {
+            "WinUI MPP sample runtime classpath did not include skiko-winui."
+        }
+        check(classpathNames.none { it.contains("skiko-awt-runtime") }) {
+            "WinUI MPP sample runtime classpath must not include Skiko AWT runtime artifacts: $classpathNames"
+        }
+        val projectionOwners = linkedMapMapOfProjectionOwners(classpath.files)
+        val duplicates = projectionOwners
+            .filterValues { it.size > 1 }
+            .entries
+            .sortedBy { it.key }
+        check(duplicates.isEmpty()) {
+            val sample = duplicates.take(50).joinToString(separator = "\n") { (entry, owners) ->
+                "  $entry: ${owners.joinToString()}"
+            }
+            "WinUI MPP sample runtime classpath contains ${duplicates.size} duplicate WinRT projection classes:\n$sample"
+        }
+    }
+    doLast {
+        val report = reportFile.get().asFile
+        check(report.isFile) {
+            "WinUI MPP sample did not write validation report: ${report.absolutePath}"
+        }
+        val events = report.readLines().toSet()
+        val missing = requiredEvents.filterNot(events::contains)
+        check(missing.isEmpty()) {
+            "WinUI MPP sample validation report ${report.absolutePath} is missing events: $missing. " +
+                "Observed events: ${events.sorted()}"
+        }
+    }
+}
+
 val stageWinUIMppSampleResources = tasks.register<Copy>("stageWinUIMppSampleResources") {
     from(project.file("../demo/src/commonMain/resources"))
     from(project.file("../demo/src/desktopMain/resources"))
@@ -272,57 +347,88 @@ tasks.register("validateWinUIMppSamplePackaging") {
     }
 }
 
-tasks.register<JavaExec>("runWinUIMppSample") {
+tasks.register("validateWinUIMppSampleCompileOnly") {
     group = "verification"
-    description = "Runs the original MPP demo through the compose-winui JVM target."
+    description = "Compiles the original MPP demo through the compose-winui JVM target."
     dependsOn("compileKotlinWinuiJvm")
-    dependsOn("stageWinRtRuntimeAssets")
-    dependsOn("buildWinRtAuthoringHost")
-    dependsOn("validateWinUIMppSamplePackaging")
-    dependsOn(stripSkikoWinUiProjectionClasses)
-    mainClass.set("androidx.compose.mpp.demo.MainJavaExec_winuiKt")
-    classpath(
-        winUiMppSampleResourcesDir,
-        layout.buildDirectory.dir("classes/kotlin/winuiJvm/main"),
-        configurations.named("winuiJvmRuntimeClasspath").map { runtimeClasspath ->
-            runtimeClasspath.filter { file ->
-                !file.name.startsWith("skiko-winui-") ||
-                    file.name.startsWith("skiko-winui-windows-")
-            }
-        },
-        stripSkikoWinUiProjectionClasses.flatMap {
-            layout.buildDirectory.file("skiko-winui-projection-free/skiko-winui-projection-free.jar")
-        },
+}
+
+val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSampleLaunchWindow") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the WinUI MPP sample until the application window composes.",
+        reportName = "winui-mpp-sample-launch-window",
+        requiredEvents = listOf(
+            "window-content-composed",
+            "window-composed",
+        ),
     )
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-    systemProperty("compose.winui.mpp.sample.autoExit", "true")
-    doFirst {
-        val classpathNames = classpath.files.map { it.name }
-        winUiMppSampleResourceFiles.forEach { resource ->
-            check(classpath.files.any { file ->
-                file.isDirectory && file.resolve(resource.name).isFile
-            }) {
-                "WinUI MPP sample runtime classpath did not include staged resource ${resource.name}."
-            }
-        }
-        check(classpathNames.any { it.contains("skiko-winui") }) {
-            "WinUI MPP sample runtime classpath did not include skiko-winui."
-        }
-        check(classpathNames.none { it.contains("skiko-awt-runtime") }) {
-            "WinUI MPP sample runtime classpath must not include Skiko AWT runtime artifacts: $classpathNames"
-        }
-        val projectionOwners = linkedMapMapOfProjectionOwners(classpath.files)
-        val duplicates = projectionOwners
-            .filterValues { it.size > 1 }
-            .entries
-            .sortedBy { it.key }
-        check(duplicates.isEmpty()) {
-            val sample = duplicates.take(50).joinToString(separator = "\n") { (entry, owners) ->
-                "  $entry: ${owners.joinToString()}"
-            }
-            "WinUI MPP sample runtime classpath contains ${duplicates.size} duplicate WinRT projection classes:\n$sample"
-        }
-    }
+}
+
+val smokeWinUIMppSampleRenderOutput = tasks.register<JavaExec>("smokeWinUIMppSampleRenderOutput") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the WinUI MPP sample until the image viewer reaches a laid-out frame.",
+        reportName = "winui-mpp-sample-render-output",
+        requiredEvents = listOf(
+            "positive-layout-size",
+            "image-viewer-composed",
+            "frame-observed",
+        ),
+    )
+}
+
+val smokeWinUIMppSampleInputFocus = tasks.register<JavaExec>("smokeWinUIMppSampleInputFocus") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the WinUI MPP sample until pointer/input handlers compose on a live window.",
+        reportName = "winui-mpp-sample-input-focus",
+        requiredEvents = listOf(
+            "window-positive-size",
+            "input-handlers-composed",
+        ),
+    )
+}
+
+val smokeWinUIMppSampleResourceLoading = tasks.register<JavaExec>("smokeWinUIMppSampleResourceLoading") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the WinUI MPP sample until bundled resources load through the runtime classpath.",
+        reportName = "winui-mpp-sample-resource-loading",
+        requiredEvents = listOf("font-resource-loaded"),
+    )
+}
+
+val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMppSampleShutdownDisposal") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the WinUI MPP sample until auto-exit disposes the window content.",
+        reportName = "winui-mpp-sample-shutdown-disposal",
+        requiredEvents = listOf(
+            "exit-requested",
+            "window-content-disposed",
+        ),
+    )
+}
+
+tasks.register<JavaExec>("runWinUIMppSample") {
+    dependsOn("validateWinUIMppSampleCompileOnly")
+    dependsOn(smokeWinUIMppSampleLaunchWindow)
+    dependsOn(smokeWinUIMppSampleRenderOutput)
+    dependsOn(smokeWinUIMppSampleInputFocus)
+    dependsOn(smokeWinUIMppSampleResourceLoading)
+    dependsOn(smokeWinUIMppSampleShutdownDisposal)
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the original MPP demo through the compose-winui JVM target.",
+        reportName = "winui-mpp-sample",
+        requiredEvents = listOf(
+            "window-content-composed",
+            "window-composed",
+            "window-positive-size",
+            "font-resource-loaded",
+            "positive-layout-size",
+            "image-viewer-composed",
+            "input-handlers-composed",
+            "frame-observed",
+            "exit-requested",
+            "window-content-disposed",
+        ),
+    )
 }
 
 fun linkedMapMapOfProjectionOwners(files: Set<File>): Map<String, Set<String>> {

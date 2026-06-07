@@ -16,7 +16,9 @@
 
 package androidx.compose.mpp.demo
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -26,22 +28,37 @@ import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.Window
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 fun main(args: Array<String>) {
+    val validation = WinUIMppSampleValidationReport.fromSystemProperties()
     Application {
         val applicationScope = this
         Window(
             title = "Compose MPP demo",
             onCloseRequest = { exitApplication() },
         ) {
+            DisposableEffect(Unit) {
+                validation.record("window-content-composed")
+                onDispose {
+                    validation.record("window-content-disposed")
+                }
+            }
+            SideEffect {
+                val size = appWindow.size
+                validation.record("window-composed")
+                if (size.width > 0 && size.height > 0) {
+                    validation.record("window-positive-size")
+                }
+            }
             val fontFamilyResolver = LocalFontFamilyResolver.current
             val fontsLoaded = remember { mutableStateOf(false) }
 
             if (fontsLoaded.value) {
-                ImageViewer()
+                ImageViewer(onValidationEvent = validation::record)
             }
 
             LaunchedEffect(Unit) {
@@ -49,10 +66,15 @@ fun main(args: Array<String>) {
                 if (fontBytes != null) {
                     val fontFamily = FontFamily(listOf(Font("NotoColorEmoji", fontBytes)))
                     fontFamilyResolver.preload(fontFamily)
+                    validation.record("font-resource-loaded")
                 }
                 fontsLoaded.value = true
                 if (java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoExit")) {
-                    withFrameNanos { }
+                    repeat(3) {
+                        withFrameNanos { }
+                    }
+                    validation.record("frame-observed")
+                    validation.record("exit-requested")
                     applicationScope.exitApplication()
                 }
             }
@@ -69,5 +91,29 @@ suspend fun getResourceBytes(resourceName: String): ByteArray? = withContext(Dis
     } catch (e: IOException) {
         e.printStackTrace()
         return@withContext null
+    }
+}
+
+private class WinUIMppSampleValidationReport(
+    private val file: File?,
+) {
+    private val events = linkedSetOf<String>()
+
+    fun record(event: String) {
+        if (file == null) return
+        synchronized(events) {
+            if (!events.add(event)) return
+            file.parentFile?.mkdirs()
+            file.writeText(events.joinToString(separator = System.lineSeparator()))
+        }
+    }
+
+    companion object {
+        fun fromSystemProperties(): WinUIMppSampleValidationReport =
+            WinUIMppSampleValidationReport(
+                System.getProperty("compose.winui.mpp.sample.validationReport")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::File)
+            )
     }
 }

@@ -47,7 +47,9 @@ import kotlin.math.min
 import kotlin.math.pow
 
 @Composable
-fun ImageViewer() {
+fun ImageViewer(
+    onValidationEvent: (String) -> Unit = {},
+) {
     ImageViewer(remember {
         ImageBitmap(500, 1000).apply {
             Canvas(this).apply {
@@ -60,12 +62,15 @@ fun ImageViewer() {
                 })
             }
         }
-    })
+    }, onValidationEvent)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ImageViewer(image: ImageBitmap) {
+fun ImageViewer(
+    image: ImageBitmap,
+    onValidationEvent: (String) -> Unit = {},
+) {
     val cameraState = remember { CameraState() }
 
     BoxWithConstraints {
@@ -75,6 +80,9 @@ fun ImageViewer(image: ImageBitmap) {
         val areaCenter = Offset(areaSize.width / 2f, areaSize.height / 2f)
 
         if (areaSize.width > 0 && areaSize.height > 0) {
+            SideEffect {
+                onValidationEvent("positive-layout-size")
+            }
             DisposableEffect(Unit) {
                 cameraState.setScale(
                     min(areaSize.width / imageSize.width, areaSize.height / imageSize.height),
@@ -88,6 +96,7 @@ fun ImageViewer(image: ImageBitmap) {
             Modifier
                 .fillMaxSize()
                 .drawWithContent {
+                    onValidationEvent("draw-content")
                     drawIntoCanvas {
                         it.withSave {
                             it.translate(areaCenter.x, areaCenter.y)
@@ -125,6 +134,8 @@ fun ImageViewer(image: ImageBitmap) {
         )
 
         SideEffect {
+            onValidationEvent("image-viewer-composed")
+            onValidationEvent("input-handlers-composed")
             cameraState.limitTargetInsideArea(areaSize, imageSize)
         }
     }

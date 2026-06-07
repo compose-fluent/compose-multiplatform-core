@@ -139,7 +139,7 @@
   WinUI smoke guards: require `skiko-winui`, reject Skiko AWT/Desktop native
   runtime artifacts, and reject duplicated `microsoft/**` or `windows/**`
   projection classes from third-party jars.
-- [ ] Split the first MPP sample validation into focused tasks: compile-only
+- [x] Split the first MPP sample validation into focused tasks: compile-only
   sample, launch/window smoke, render-output smoke, input/focus smoke,
   resource-loading smoke, and shutdown/disposal smoke.
 - [ ] Re-run Android/Desktop versions of the original MPP sample after sharing
