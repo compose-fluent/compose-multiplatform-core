@@ -122,6 +122,10 @@ class WinUIComposeView internal constructor(
         get() = renderHost.isFrameSchedulerStartedForTest
 
     @InternalComposeUiApi
+    val isLoadedRenderSchedulerRegistrationPendingForTest: Boolean
+        get() = loadedRenderSchedulerToken != null
+
+    @InternalComposeUiApi
     val accessibilitySnapshotForTest: WinUIAccessibilitySnapshot?
         get() = owner.accessibilityProvider.snapshot()
 

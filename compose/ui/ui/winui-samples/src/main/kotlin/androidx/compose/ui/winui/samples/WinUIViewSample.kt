@@ -443,6 +443,7 @@ private enum class WinUIViewSampleMode(
     Interop("interop"),
     Owner("owner"),
     Pointer("pointer"),
+    Shutdown("shutdown"),
     TextInput("text-input"),
     Skiko("skiko");
 
@@ -487,6 +488,7 @@ private object ComposeWinUiSmokeApp {
                         WinUIViewSampleMode.Interop -> runInteropSmokeSuite()
                         WinUIViewSampleMode.Owner -> runOwnerSmokeSuite()
                         WinUIViewSampleMode.Pointer -> runPointerSmokeSuite()
+                        WinUIViewSampleMode.Shutdown -> runShutdownSmokeSuite()
                         WinUIViewSampleMode.TextInput -> runTextInputSmokeSuite()
                         WinUIViewSampleMode.Full,
                         WinUIViewSampleMode.Window,
@@ -808,6 +810,14 @@ private object ComposeWinUiSmokeApp {
         runWinUIPointerScrollSmoke()
         runWinUIViewPointerInteropSmoke()
         runWinUIPointerCancelOnDisposeSmoke()
+    }
+
+    private suspend fun runShutdownSmokeSuite() {
+        runWinUIViewLifecycleSmoke()
+        runWinUIViewGeneratedEventCleanupSmoke()
+        runWinUICompositionShutdownSmoke()
+        runWinUISkikoUnattachedSchedulerSmoke()
+        println("compose-winui-sample: shutdown suite")
     }
 
     private suspend fun runTextInputSmokeSuite() {
@@ -1307,6 +1317,90 @@ private object ComposeWinUiSmokeApp {
             "WinUIView generated event cleanup smoke unexpectedly handled $clickCount clicks."
         }
         println("compose-winui-sample: generated event cleanup")
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private suspend fun runWinUICompositionShutdownSmoke() {
+        val disposeEvents = mutableListOf<String>()
+        var token: EventRegistrationToken? = null
+        var eventRegistered = false
+        var eventRemoved = false
+        val currentComposeView = WinUIComposeView()
+        val rootHost = currentComposeView.requiredRootHost()
+
+        check(currentComposeView.root.allowDrop) {
+            "WinUIComposeView did not enable root drag/drop registration."
+        }
+        currentComposeView.setContent {
+            DisposableEffect(Unit) {
+                disposeEvents += "entered"
+                onDispose {
+                    disposeEvents += "disposed"
+                }
+            }
+            Layout(
+                content = {
+                    WinUIView(
+                        factory = { Button() },
+                        update = { button ->
+                            if (!eventRegistered) {
+                                token = button.click.add(RoutedEventHandler { _, _ -> })
+                                eventRegistered = true
+                            }
+                        },
+                        onRelease = { button ->
+                            button.click.remove(checkNotNull(token) {
+                                "WinUI shutdown smoke did not register a click token."
+                            })
+                            eventRemoved = true
+                        },
+                    )
+                },
+            ) { measurables, _ ->
+                val placeable = measurables.single().measure(Constraints.fixed(32, 24))
+                layout(32, 24) {
+                    placeable.place(0, 0)
+                }
+            }
+        }
+        currentComposeView.setWindowContainerSizeForTest(IntSize(64, 48))
+        awaitCondition("WinUI shutdown composition entered") {
+            disposeEvents == listOf("entered") &&
+                eventRegistered &&
+                (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull() != null
+        }
+        check(currentComposeView.isLoadedRenderSchedulerRegistrationPendingForTest) {
+            "WinUIComposeView did not keep a loaded render-scheduler registration before disposal."
+        }
+
+        currentComposeView.dispose()
+
+        check(disposeEvents == listOf("entered", "disposed")) {
+            "WinUI shutdown smoke did not dispose composition content: $disposeEvents."
+        }
+        check(eventRemoved) {
+            "WinUI shutdown smoke did not remove the native event token on disposal."
+        }
+        check((rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()) {
+            "WinUI shutdown smoke did not clear interop children on disposal."
+        }
+        check(!currentComposeView.root.allowDrop) {
+            "WinUIComposeView did not clear root drag/drop runtime state on disposal."
+        }
+        check(!currentComposeView.isLoadedRenderSchedulerRegistrationPendingForTest) {
+            "WinUIComposeView did not clear the loaded render-scheduler registration on disposal."
+        }
+        check(!currentComposeView.isRenderSchedulerStartedForTest) {
+            "WinUIComposeView left the render scheduler running after disposal."
+        }
+        check(
+            runCatching {
+                currentComposeView.setContent {}
+            }.exceptionOrNull() is IllegalStateException
+        ) {
+            "Disposed WinUIComposeView accepted new content after shutdown."
+        }
+        println("compose-winui-sample: composition shutdown")
     }
 
     private fun runWinUIViewControlVarietySmoke() {
