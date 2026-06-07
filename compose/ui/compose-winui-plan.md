@@ -112,7 +112,7 @@
   production rendering host shape needed by a real sample: surface lifecycle,
   resize, invalidation coalescing, frame pacing, draw submission, render
   diagnostics, interop transaction ordering, and deterministic disposal.
-- [ ] Add visible-output validation for the WinUI MPP sample, not just smoke
+- [x] Add visible-output validation for the WinUI MPP sample, not just smoke
   logs: verify attached Direct3D rendering, positive render sizes, non-empty
   draw bounds, and at least one nonblank rendered frame or equivalent
   skiko-winui pixel/readback diagnostic once available.

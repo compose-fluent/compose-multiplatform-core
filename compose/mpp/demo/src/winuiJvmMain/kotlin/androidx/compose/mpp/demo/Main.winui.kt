@@ -22,17 +22,23 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.currentComposeViewForTest
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.jetbrains.skiko.GraphicsApi
 
+@OptIn(InternalComposeUiApi::class)
 fun main(args: Array<String>) {
     val validation = WinUIMppSampleValidationReport.fromSystemProperties()
     Application {
@@ -56,6 +62,7 @@ fun main(args: Array<String>) {
             }
             val fontFamilyResolver = LocalFontFamilyResolver.current
             val fontsLoaded = remember { mutableStateOf(false) }
+            val composeView = currentComposeViewForTest
 
             if (fontsLoaded.value) {
                 ImageViewer(onValidationEvent = validation::record)
@@ -70,8 +77,14 @@ fun main(args: Array<String>) {
                 }
                 fontsLoaded.value = true
                 if (java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoExit")) {
+                    if (composeView != null) {
+                        validation.awaitRenderDiagnostics(composeView)
+                    }
                     repeat(3) {
                         withFrameNanos { }
+                        if (composeView != null) {
+                            validation.recordRenderDiagnostics(composeView)
+                        }
                     }
                     validation.record("frame-observed")
                     validation.record("exit-requested")
@@ -80,6 +93,49 @@ fun main(args: Array<String>) {
             }
         }
     }
+}
+
+@OptIn(InternalComposeUiApi::class)
+private suspend fun WinUIMppSampleValidationReport.awaitRenderDiagnostics(
+    composeView: WinUIComposeView,
+): Boolean {
+    repeat(100) {
+        withFrameNanos { }
+        if (recordRenderDiagnostics(composeView)) return true
+        delay(50)
+    }
+    return recordRenderDiagnostics(composeView)
+}
+
+@OptIn(InternalComposeUiApi::class)
+private fun WinUIMppSampleValidationReport.recordRenderDiagnostics(
+    composeView: WinUIComposeView,
+): Boolean {
+    if (composeView.renderApiForTest == GraphicsApi.DIRECT3D) {
+        record("render-direct3d")
+    }
+    val platformSize = composeView.lastRenderSizeForTest
+    if (platformSize != null && platformSize.width > 0 && platformSize.height > 0) {
+        record("render-positive-size")
+    }
+    if (platformSize != null && composeView.lastRenderedStateSizeForTest == platformSize) {
+        record("render-state-size-matched")
+    }
+    val drawRect = composeView.lastDrawRectForTest
+    if (drawRect.width > 0f && drawRect.height > 0f) {
+        record("non-empty-draw-bounds")
+    }
+    if (composeView.renderFailureForTest != null) {
+        record("render-failure")
+    }
+    return composeView.renderApiForTest == GraphicsApi.DIRECT3D &&
+        platformSize != null &&
+        platformSize.width > 0 &&
+        platformSize.height > 0 &&
+        composeView.lastRenderedStateSizeForTest == platformSize &&
+        drawRect.width > 0f &&
+        drawRect.height > 0f &&
+        composeView.renderFailureForTest == null
 }
 
 suspend fun getResourceBytes(resourceName: String): ByteArray? = withContext(Dispatchers.IO) {

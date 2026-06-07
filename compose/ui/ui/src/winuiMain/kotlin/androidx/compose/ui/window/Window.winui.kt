@@ -19,6 +19,7 @@ package androidx.compose.ui.window
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.unit.IntSize
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
@@ -65,6 +66,14 @@ interface WindowScope {
     val dispatcherQueue: DispatcherQueue
 }
 
+@InternalComposeUiApi
+val WindowScope.currentComposeViewForTest: WinUIComposeView?
+    get() = (this as? WinUIWindowScopeTestAccess)?.composeViewForTest
+
+private interface WinUIWindowScopeTestAccess {
+    val composeViewForTest: WinUIComposeView?
+}
+
 @Composable
 fun ApplicationScope.Window(
     onCloseRequest: () -> Unit = { exitApplication() },
@@ -90,7 +99,7 @@ fun ApplicationScope.Window(
 
 private class WinUIWindowNode(
     applicationContext: WinUIApplicationContext?,
-) : WinUIApplicationNode(), WindowScope {
+) : WinUIApplicationNode(), WindowScope, WinUIWindowScopeTestAccess {
     override val window: XamlWindow = XamlWindow()
     override val appWindow: AppWindow
         get() = window.requiredAppWindow()
@@ -117,6 +126,8 @@ private class WinUIWindowNode(
         TypedEventHandler { _, args -> handleClosing(args) }
     private var appWindowClosingToken: EventRegistrationToken? = null
     private var isCaptureProtected = false
+    override val composeViewForTest: WinUIComposeView?
+        get() = composeView
 
     var onCloseRequest: () -> Unit = {}
 
