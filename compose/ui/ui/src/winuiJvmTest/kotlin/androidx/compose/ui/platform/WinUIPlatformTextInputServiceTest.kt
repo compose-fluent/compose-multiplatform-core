@@ -17,8 +17,13 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.SetComposingRegionCommand
+import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -127,6 +132,75 @@ class WinUIPlatformTextInputServiceTest {
 
         assertFalse(WinUIPlatformTextInputService.sendEditCommands(listOf(commit)))
         assertFalse(WinUIPlatformTextInputService.performImeAction(ImeAction.Search))
+    }
+
+    @Test
+    fun nativeTextInputHelpersDelegateStandardEditCommands() {
+        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue(""),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { editCommandBatches += it },
+            onImeActionPerformed = {},
+        )
+
+        assertTrue(WinUIPlatformTextInputService.setComposingText("draft"))
+        assertTrue(WinUIPlatformTextInputService.setComposingRegion(1, 4))
+        assertTrue(WinUIPlatformTextInputService.commitText("done"))
+        assertTrue(WinUIPlatformTextInputService.setSelection(2, 5))
+        assertTrue(WinUIPlatformTextInputService.deleteSurroundingText(1, 2))
+        assertTrue(WinUIPlatformTextInputService.backspace())
+        assertTrue(WinUIPlatformTextInputService.finishComposingText())
+
+        assertEquals(
+            listOf(
+                listOf(SetComposingTextCommand("draft", 1)),
+                listOf(SetComposingRegionCommand(1, 4)),
+                listOf(CommitTextCommand("done", 1)),
+                listOf(SetSelectionCommand(2, 5)),
+                listOf(DeleteSurroundingTextCommand(1, 2)),
+                listOf(BackspaceCommand()),
+                listOf(FinishComposingTextCommand()),
+            ),
+            editCommandBatches,
+        )
+
+        WinUIPlatformTextInputService.stopInput()
+
+        assertFalse(WinUIPlatformTextInputService.commitText("ignored"))
+        assertFalse(WinUIPlatformTextInputService.setComposingText("ignored"))
+        assertFalse(WinUIPlatformTextInputService.setComposingRegion(0, 1))
+        assertFalse(WinUIPlatformTextInputService.finishComposingText())
+        assertFalse(WinUIPlatformTextInputService.setSelection(0, 1))
+        assertFalse(WinUIPlatformTextInputService.deleteSurroundingText(1, 0))
+        assertFalse(WinUIPlatformTextInputService.backspace())
+    }
+
+    @Test
+    fun startInputReplacesPreviousSessionCallbacks() {
+        val firstCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val secondCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("first"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { firstCommands += it },
+            onImeActionPerformed = {},
+        )
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("second"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = { secondCommands += it },
+            onImeActionPerformed = {},
+        )
+
+        assertTrue(WinUIPlatformTextInputService.commitText("new"))
+
+        assertEquals(emptyList(), firstCommands)
+        assertEquals(1, secondCommands.size)
+        assertEquals(listOf(CommitTextCommand("new", 1)), secondCommands.single())
+        assertEquals(TextFieldValue("second"), WinUIPlatformTextInputService.currentValue)
     }
 
     @Test

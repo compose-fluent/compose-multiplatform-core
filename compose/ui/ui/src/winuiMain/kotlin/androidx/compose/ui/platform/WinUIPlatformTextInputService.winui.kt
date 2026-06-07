@@ -19,11 +19,18 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.BackspaceCommand
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.PlatformTextInputService
+import androidx.compose.ui.text.input.SetComposingRegionCommand
+import androidx.compose.ui.text.input.SetComposingTextCommand
+import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
@@ -108,6 +115,29 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         session.onEditCommand(commands)
         return true
     }
+
+    internal fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
+        sendEditCommands(listOf(CommitTextCommand(text, newCursorPosition)))
+
+    internal fun setComposingText(text: String, newCursorPosition: Int = 1): Boolean =
+        sendEditCommands(listOf(SetComposingTextCommand(text, newCursorPosition)))
+
+    internal fun setComposingRegion(start: Int, end: Int): Boolean =
+        sendEditCommands(listOf(SetComposingRegionCommand(start, end)))
+
+    internal fun finishComposingText(): Boolean =
+        sendEditCommands(listOf(FinishComposingTextCommand()))
+
+    internal fun setSelection(start: Int, end: Int): Boolean =
+        sendEditCommands(listOf(SetSelectionCommand(start, end)))
+
+    internal fun deleteSurroundingText(lengthBeforeCursor: Int, lengthAfterCursor: Int): Boolean =
+        sendEditCommands(
+            listOf(DeleteSurroundingTextCommand(lengthBeforeCursor, lengthAfterCursor))
+        )
+
+    internal fun backspace(): Boolean =
+        sendEditCommands(listOf(BackspaceCommand()))
 
     internal fun performImeAction(action: ImeAction): Boolean {
         val session = activeInputSession ?: return false
