@@ -155,7 +155,10 @@ class WinUIComposeView internal constructor(
         },
         onDrawRectChange = { lastDrawRect = it },
     )
-    private val renderHost = WinUISkikoRenderHost(renderDelegate)
+    private val renderHost = WinUISkikoRenderHost(
+        renderDelegate = renderDelegate,
+        beforeDrawSubmission = ::drainPendingInteropTransactions,
+    )
     init {
         setRenderContent(renderHost.component)
     }
@@ -248,6 +251,7 @@ class WinUIComposeView internal constructor(
         frameClock = null
         content = null
         clearLoadedRenderSchedulerRequest()
+        renderHost.detachSurface()
         updateRootContent(emptyList())
         rootNode.removeAll()
         displayRequestController.setKeepScreenOn(false)
@@ -313,10 +317,12 @@ class WinUIComposeView internal constructor(
     }
 
     private fun render(canvas: Canvas) {
-        if (isDisposed) return
-        owner.measureAndLayout(sendPointerUpdate = false)
-        updateRootContent(rootNode.collectWinUIInteropRoots())
-        rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+        renderHost.performDrawSubmission {
+            if (isDisposed) return@performDrawSubmission
+            owner.measureAndLayout(sendPointerUpdate = false)
+            updateRootContent(rootNode.collectWinUIInteropRoots())
+            rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+        }
     }
 
     private fun invalidateRootLayer() {
@@ -342,6 +348,7 @@ class WinUIComposeView internal constructor(
 
     private fun startRenderScheduler() {
         if (!isDisposed && content != null) {
+            renderHost.attachSurface()
             renderHost.startFrameScheduler()
         }
     }

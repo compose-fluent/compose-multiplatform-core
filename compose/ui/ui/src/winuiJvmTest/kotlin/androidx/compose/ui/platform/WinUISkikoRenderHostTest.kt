@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
 
 class WinUISkikoRenderHostTest {
     @Test
-    fun delegatesRenderRequestsAndResizeToLayer() {
+    fun coalescesRenderRequestsAndDelegatesResizeToLayer() {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
 
@@ -46,8 +46,41 @@ class WinUISkikoRenderHostTest {
         host.requestRender(throttledToVsync = false)
         host.setSize(IntSize(30, 40))
 
-        assertEquals(listOf(true, false), layer.renderRequests)
+        assertEquals(listOf(true), layer.renderRequests)
         assertEquals(listOf(IntSize(30, 40)), layer.sizes)
+        assertEquals(
+            2,
+            host.diagnosticsForTest.renderInvalidationCount,
+        )
+        assertEquals(
+            1,
+            host.diagnosticsForTest.delegatedRenderInvalidationCount,
+        )
+        assertTrue(host.diagnosticsForTest.pendingRenderInvalidation)
+    }
+
+    @Test
+    fun drawSubmissionDrainsInteropBeforeDrawingAndAllowsNextRenderRequest() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val events = mutableListOf<String>()
+        val host = WinUISkikoRenderHost(
+            layer = layer,
+            beforeDrawSubmission = { events += "drainInterop" },
+        )
+
+        host.requestRender()
+        host.requestRender()
+        host.performDrawSubmission {
+            events += "draw"
+        }
+        assertFalse(host.diagnosticsForTest.pendingRenderInvalidation)
+        host.requestRender(throttledToVsync = false)
+
+        assertEquals(listOf("drainInterop", "draw"), events)
+        assertEquals(listOf(true, false), layer.renderRequests)
+        assertEquals(1, host.diagnosticsForTest.drawSubmissionCount)
+        assertEquals(1, host.diagnosticsForTest.interopTransactionDrainCount)
+        assertTrue(host.diagnosticsForTest.pendingRenderInvalidation)
     }
 
     @Test
@@ -67,6 +100,27 @@ class WinUISkikoRenderHostTest {
         assertEquals(IntSize(80, 60), host.lastRenderedStateSizeForTest)
         assertEquals(IntSize(120, 90), host.pendingRenderStateSizeForTest)
         assertEquals("render failed", host.renderFailureForTest)
+        assertEquals(
+            WinUISkikoRenderHostDiagnostics(
+                isClosed = false,
+                isSurfaceAttached = false,
+                isFrameSchedulerStarted = false,
+                requestedSurfaceSize = null,
+                appliedSurfaceSize = null,
+                pendingRenderInvalidation = false,
+                renderInvalidationCount = 0,
+                delegatedRenderInvalidationCount = 0,
+                drawSubmissionCount = 0,
+                interopTransactionDrainCount = 0,
+                renderApi = GraphicsApi.DIRECT3D,
+                renderVersion = 7L,
+                lastRenderSize = IntSize(80, 60),
+                lastRenderedStateSize = IntSize(80, 60),
+                pendingRenderStateSize = IntSize(120, 90),
+                renderFailure = "render failed",
+            ),
+            host.diagnosticsForTest,
+        )
     }
 
     @Test
@@ -104,6 +158,7 @@ class WinUISkikoRenderHostTest {
         val secondScheduler = host.startFrameScheduler()
 
         assertTrue(host.isFrameSchedulerStartedForTest)
+        assertTrue(host.diagnosticsForTest.isSurfaceAttached)
         assertSame(firstScheduler, secondScheduler)
         assertEquals(1, layer.startFrameSchedulerCount)
 
@@ -117,6 +172,38 @@ class WinUISkikoRenderHostTest {
     }
 
     @Test
+    fun surfaceDetachStopsFrameSchedulerWithoutClosingLayer() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+
+        host.attachSurface()
+        host.startFrameScheduler()
+        host.detachSurface()
+
+        assertFalse(host.diagnosticsForTest.isSurfaceAttached)
+        assertFalse(host.isFrameSchedulerStartedForTest)
+        assertEquals(0, layer.closeCount)
+        assertEquals(
+            listOf("startFrameScheduler", "closeFrameScheduler"),
+            layer.events,
+        )
+    }
+
+    @Test
+    fun repeatedSizeRequestsOnlyApplyChangedSurfaceSize() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+
+        host.setSize(IntSize(20, 10))
+        host.setSize(IntSize(20, 10))
+        host.setSize(IntSize(30, 10))
+
+        assertEquals(listOf(IntSize(20, 10), IntSize(30, 10)), layer.sizes)
+        assertEquals(IntSize(30, 10), host.diagnosticsForTest.requestedSurfaceSize)
+        assertEquals(IntSize(30, 10), host.diagnosticsForTest.appliedSurfaceSize)
+    }
+
+    @Test
     fun ignoresRenderAndResizeAfterClose() {
         val layer = FakeWinUISkikoLayerAdapter()
         val host = WinUISkikoRenderHost(layer)
@@ -124,10 +211,14 @@ class WinUISkikoRenderHostTest {
         host.close()
         host.requestRender()
         host.setSize(IntSize(10, 20))
+        host.performDrawSubmission {
+            error("Draw submission should not run after close.")
+        }
 
         assertEquals(emptyList(), layer.renderRequests)
         assertEquals(emptyList(), layer.sizes)
         assertEquals(1, layer.closeCount)
+        assertTrue(host.diagnosticsForTest.isClosed)
     }
 
     @Test

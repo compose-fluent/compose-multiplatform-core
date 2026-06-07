@@ -108,7 +108,7 @@
   with real text measurement/rendering/font behavior or explicit tracked gaps,
   including font resolution, paragraph layout, selection geometry, and text
   input integration used by the sample.
-- [ ] Expand `WinUISkikoRenderHost` from the current narrow adapter into the
+- [x] Expand `WinUISkikoRenderHost` from the current narrow adapter into the
   production rendering host shape needed by a real sample: surface lifecycle,
   resize, invalidation coalescing, frame pacing, draw submission, render
   diagnostics, interop transaction ordering, and deterministic disposal.
