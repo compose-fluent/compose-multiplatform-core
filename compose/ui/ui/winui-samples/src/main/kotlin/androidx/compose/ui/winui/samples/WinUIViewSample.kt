@@ -439,6 +439,11 @@ private enum class WinUIViewSampleMode(
     val id: String,
 ) {
     Full("full"),
+    Window("window"),
+    Interop("interop"),
+    Owner("owner"),
+    Pointer("pointer"),
+    TextInput("text-input"),
     Skiko("skiko");
 
     companion object {
@@ -475,8 +480,27 @@ private object ComposeWinUiSmokeApp {
             }
             return
         }
+        if (sampleMode != WinUIViewSampleMode.Full && sampleMode != WinUIViewSampleMode.Window) {
+            LaunchedEffect(Unit) {
+                runSmoke(applicationScope) {
+                    when (sampleMode) {
+                        WinUIViewSampleMode.Interop -> runInteropSmokeSuite()
+                        WinUIViewSampleMode.Owner -> runOwnerSmokeSuite()
+                        WinUIViewSampleMode.Pointer -> runPointerSmokeSuite()
+                        WinUIViewSampleMode.TextInput -> runTextInputSmokeSuite()
+                        WinUIViewSampleMode.Full,
+                        WinUIViewSampleMode.Window,
+                        WinUIViewSampleMode.Skiko -> error("Unexpected focused sample mode $sampleMode.")
+                    }
+                    if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
+                        applicationScope.exitApplication()
+                    }
+                }
+            }
+            return
+        }
 
-        var reuseSmokePassed by remember { mutableStateOf(false) }
+        var reuseSmokePassed by remember { mutableStateOf(sampleMode == WinUIViewSampleMode.Window) }
         var windowSmokePassed by remember { mutableStateOf(false) }
         var secondaryWindowVisible by remember { mutableStateOf(true) }
         var secondaryWindowClosePassed by remember { mutableStateOf(false) }
@@ -487,18 +511,20 @@ private object ComposeWinUiSmokeApp {
         var mainWindowDeactivatedPassed by remember { mutableStateOf(false) }
         val skipWindowSmoke = java.lang.Boolean.getBoolean("compose.winui.sample.skipWindowSmoke")
         val skipSecondaryWindowSmoke = java.lang.Boolean.getBoolean("compose.winui.sample.skipSecondaryWindowSmoke")
-        remember {
-            println("compose-winui-sample: application created")
-            runWinUILifecycleOwnerSmoke()
-            runWinUIViewModelOwnerSmoke()
-            runWinUINavigationEventOwnerSmoke()
-            runWinUIViewLifecycleSmoke()
-            runWinUIViewZOrderSmoke()
-            runWinUIViewUnclippedBoundsSmoke()
-            if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipControlVarietySmoke")) {
-                runWinUIViewControlVarietySmoke()
+        if (sampleMode == WinUIViewSampleMode.Full) {
+            remember {
+                println("compose-winui-sample: application created")
+                runWinUILifecycleOwnerSmoke()
+                runWinUIViewModelOwnerSmoke()
+                runWinUINavigationEventOwnerSmoke()
+                runWinUIViewLifecycleSmoke()
+                runWinUIViewZOrderSmoke()
+                runWinUIViewUnclippedBoundsSmoke()
+                if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipControlVarietySmoke")) {
+                    runWinUIViewControlVarietySmoke()
+                }
+                true
             }
-            true
         }
         if (skipWindowSmoke) {
             LaunchedEffect(Unit) {
@@ -510,7 +536,10 @@ private object ComposeWinUiSmokeApp {
         } else {
             LaunchedEffect(Unit) {
                 runSmoke(applicationScope) {
-                    if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipLaunchedSmoke")) {
+                    if (
+                        sampleMode == WinUIViewSampleMode.Full &&
+                        !java.lang.Boolean.getBoolean("compose.winui.sample.skipLaunchedSmoke")
+                    ) {
                         runWinUIViewPlacementSmoke()
                         runWinUIViewDensitySmoke()
                         runWinUIViewReuseSmoke()
@@ -734,6 +763,56 @@ private object ComposeWinUiSmokeApp {
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun runInteropSmokeSuite() {
+        runWinUIViewLifecycleSmoke()
+        runWinUIViewZOrderSmoke()
+        runWinUIViewUnclippedBoundsSmoke()
+        if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipControlVarietySmoke")) {
+            runWinUIViewControlVarietySmoke()
+        }
+        runWinUIViewPlacementSmoke()
+        runWinUIViewDensitySmoke()
+        runWinUIViewReuseSmoke()
+        runWinUIViewStateUpdateSmoke()
+        runWinUIViewRelayoutSmoke()
+        runWinUIViewPropertiesUpdateSmoke()
+        runWinUIViewContainerSyncSmoke()
+        runWinUIViewGeneratedEventCleanupSmoke()
+    }
+
+    private suspend fun runOwnerSmokeSuite() {
+        runWinUILifecycleOwnerSmoke()
+        runWinUIViewModelOwnerSmoke()
+        runWinUINavigationEventOwnerSmoke()
+        runWinUISaveableStateSmoke()
+        runWinUIRetainedValuesSmoke()
+        runWinUILayoutSnapshotInvalidationSmoke()
+        runWinUILayoutCompletedListenerSmoke()
+        runWinUILayoutRectChangedSmoke()
+        runWinUIOwnerLayerTransformSmoke()
+        runWinUIRootKeyEventSmoke()
+        runWinUIRootFocusTraversalKeySmoke()
+        runWinUIRootSemanticsSmoke()
+        runWinUIOwnerEndApplyChangesSmoke()
+        runWinUIRootUncaughtExceptionHandlerSmoke()
+        runWinUIRootIndirectPointerSmoke()
+    }
+
+    private suspend fun runPointerSmokeSuite() {
+        runWinUIPointerInputSmoke()
+        runWinUIPointerMoveSmoke()
+        runWinUIPointerEnterExitSmoke()
+        runWinUIPointerScrollSmoke()
+        runWinUIViewPointerInteropSmoke()
+        runWinUIPointerCancelOnDisposeSmoke()
+    }
+
+    private suspend fun runTextInputSmokeSuite() {
+        if (!java.lang.Boolean.getBoolean("compose.winui.sample.skipTextInputSmoke")) {
+            runWinUITextInputSessionSmoke()
         }
     }
 

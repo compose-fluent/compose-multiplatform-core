@@ -96,27 +96,54 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-tasks.register("runWinUIViewSample", JavaExec) {
-    group = "verification"
-    description = "Runs the minimal compose-winui WinUI smoke sample."
-    dependsOn("classes")
-    dependsOn("stageWinRtRuntimeAssets")
-    dependsOn("buildWinRtAuthoringHost")
-    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
-    classpath = sourceSets.main.runtimeClasspath
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-    systemProperty("compose.winui.sample.autoExit", "true")
+def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null ->
+    tasks.register(taskName, JavaExec) {
+        group = "verification"
+        description = descriptionText
+        dependsOn("classes")
+        dependsOn("stageWinRtRuntimeAssets")
+        dependsOn("buildWinRtAuthoringHost")
+        mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
+        classpath = sourceSets.main.runtimeClasspath
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
+        systemProperty("compose.winui.sample.autoExit", "true")
+        if (mode != null) {
+            args(mode)
+        }
+    }
 }
 
-tasks.register("runWinUISkikoSample", JavaExec) {
-    group = "verification"
-    description = "Runs the compose-winui Skiko render smoke sample."
-    dependsOn("classes")
-    dependsOn("stageWinRtRuntimeAssets")
-    dependsOn("buildWinRtAuthoringHost")
-    mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
-    classpath = sourceSets.main.runtimeClasspath
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-    systemProperty("compose.winui.sample.autoExit", "true")
-    args("skiko")
-}
+registerWinUISampleTask(
+    "runWinUIViewSample",
+    "Runs the minimal compose-winui WinUI smoke sample."
+)
+registerWinUISampleTask(
+    "runWinUIWindowSample",
+    "Runs the compose-winui WinUI window/lifecycle smoke sample.",
+    "window"
+)
+registerWinUISampleTask(
+    "runWinUIInteropSample",
+    "Runs the compose-winui WinUIView interop lifecycle/layout/input smoke sample.",
+    "interop"
+)
+registerWinUISampleTask(
+    "runWinUIOwnerSample",
+    "Runs the compose-winui owner, semantics, focus, and lifecycle smoke sample.",
+    "owner"
+)
+registerWinUISampleTask(
+    "runWinUIPointerSample",
+    "Runs the compose-winui pointer and scroll smoke sample.",
+    "pointer"
+)
+registerWinUISampleTask(
+    "runWinUITextInputSample",
+    "Runs the compose-winui text input and keyboard smoke sample.",
+    "text-input"
+)
+registerWinUISampleTask(
+    "runWinUISkikoSample",
+    "Runs the compose-winui Skiko render smoke sample.",
+    "skiko"
+)
