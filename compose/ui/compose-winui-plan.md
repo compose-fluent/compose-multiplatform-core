@@ -97,7 +97,7 @@
   principled source-set split before treating the MPP sample as representative;
   shared Skiko rendering sources should come from normal source-set
   dependencies, not from an ad hoc file list.
-- [ ] Inventory the original MPP sample's Compose UI API surface against WinUI
+- [x] Inventory the original MPP sample's Compose UI API surface against WinUI
   actuals and add missing implementations or guarded fallbacks for graphics,
   text, pointer, keyboard, clipboard, URI, window info, density, focus, popup,
   dialog, drag-and-drop, and accessibility hooks.

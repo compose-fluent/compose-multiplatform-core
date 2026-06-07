@@ -87,6 +87,76 @@ val winUiMppSampleForbiddenSourceTokens = listOf(
     "org.jetbrains.skiko.SkiaLayer",
     "org.jetbrains.skiko.awt",
 )
+val winUiMppSampleApiSurface = linkedMapOf(
+    "graphics" to listOf(
+        "ImageBitmap(",
+        "Canvas(",
+        "LinearGradientShader",
+        "drawIntoCanvas",
+        "drawImage(image)",
+        "readPixels(",
+    ),
+    "text" to listOf(
+        "LocalFontFamilyResolver",
+        "FontFamily",
+        "Font(\"NotoColorEmoji\"",
+        "fontFamilyResolver.preload",
+    ),
+    "pointer" to listOf(
+        "pointerInput(Unit)",
+        "detectTransformGestures",
+        "onPointerEvent(PointerEventType.Scroll)",
+        "detectTapGestures",
+    ),
+    "window-info" to listOf(
+        "Window(",
+        "appWindow.size",
+        "currentComposeViewForTest",
+    ),
+    "density" to listOf(
+        "LocalDensity.current",
+        "maxWidth.toPx()",
+        "maxHeight.toPx()",
+    ),
+)
+val winUiMppSampleGuardedApiSurface = linkedMapOf(
+    "keyboard" to listOf(
+        "onPreviewKeyEvent",
+        "onKeyEvent",
+        "KeyEvent",
+    ),
+    "clipboard" to listOf(
+        "LocalClipboard",
+        "LocalClipboardManager",
+        "ClipEntry",
+    ),
+    "uri" to listOf(
+        "LocalUriHandler",
+        "openUri",
+    ),
+    "focus" to listOf(
+        "FocusRequester",
+        "focusTarget",
+        "focusable(",
+    ),
+    "popup" to listOf(
+        "Popup(",
+        "PopupProperties",
+    ),
+    "dialog" to listOf(
+        "Dialog(",
+        "DialogProperties",
+    ),
+    "drag-and-drop" to listOf(
+        "dragAndDrop",
+        "DragAndDrop",
+    ),
+    "accessibility" to listOf(
+        "semantics",
+        "contentDescription",
+        "testTag",
+    ),
+)
 
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
@@ -416,6 +486,52 @@ tasks.register("validateWinUIMppSampleSourceIsolation") {
     }
 }
 
+tasks.register("validateWinUIMppSampleApiSurface") {
+    group = "verification"
+    description = "Inventories the selected original MPP sample Compose UI API surface used by WinUI."
+    inputs.files(winUiMppSampleSourceFiles)
+    outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-api-surface.txt"))
+
+    doLast {
+        val sourceByFile = winUiMppSampleSourceFiles.associateWith { sourceFile ->
+            check(sourceFile.isFile) {
+                "Missing WinUI MPP sample source file: ${sourceFile.absolutePath}"
+            }
+            sourceFile.readText()
+        }
+        val combinedSource = sourceByFile.values.joinToString(separator = "\n")
+        val missingRequiredTokens = winUiMppSampleApiSurface.flatMap { (category, tokens) ->
+            tokens.filterNot(combinedSource::contains).map { token -> "$category: $token" }
+        }
+        check(missingRequiredTokens.isEmpty()) {
+            "WinUI MPP sample API surface inventory is missing expected source tokens: " +
+                missingRequiredTokens
+        }
+
+        val unguardedOptionalTokens = winUiMppSampleGuardedApiSurface.flatMap { (category, tokens) ->
+            tokens.filter(combinedSource::contains).map { token -> "$category: $token" }
+        }
+        check(unguardedOptionalTokens.isEmpty()) {
+            "WinUI MPP sample uses API categories that are not part of the selected WinUI " +
+                "sample scope without adding focused validation: $unguardedOptionalTokens"
+        }
+
+        val report = outputs.files.singleFile
+        report.parentFile.mkdirs()
+        report.writeText(
+            buildString {
+                appendLine("WinUI MPP sample API surface inventory passed.")
+                appendLine("sourceFiles=${winUiMppSampleSourceFiles.joinToString { it.name }}")
+                appendLine("requiredCategories=${winUiMppSampleApiSurface.keys.joinToString()}")
+                appendLine("guardedAbsentCategories=${winUiMppSampleGuardedApiSurface.keys.joinToString()}")
+                winUiMppSampleApiSurface.forEach { (category, tokens) ->
+                    appendLine("$category=${tokens.joinToString()}")
+                }
+            }
+        )
+    }
+}
+
 val validateWinUINavigationCompileOnly = tasks.register<Exec>("validateWinUINavigationCompileOnly") {
     group = "verification"
     description = "Compiles the Navigation Compose and Navigation3 UI WinUI JVM targets."
@@ -498,6 +614,7 @@ val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMp
 tasks.register<JavaExec>("runWinUIMppSample") {
     dependsOn("validateWinUIMppSampleCompileOnly")
     dependsOn("validateWinUIMppSampleSourceIsolation")
+    dependsOn("validateWinUIMppSampleApiSurface")
     dependsOn(smokeWinUIMppSampleLaunchWindow)
     dependsOn(smokeWinUIMppSampleRenderOutput)
     dependsOn(smokeWinUIMppSampleInputFocus)
