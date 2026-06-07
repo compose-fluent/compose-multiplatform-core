@@ -93,7 +93,7 @@
   kotlin-winrt initialization chain as `runWinUIViewSample`, stages WinRT
   runtime assets, builds the authoring host, and keeps explicit `type(...)`
   declarations rather than full projection dependencies.
-- [ ] Replace the temporary `compileKotlinWinuiJvm` source override with a
+- [x] Replace the temporary `compileKotlinWinuiJvm` source override with a
   principled source-set split before treating the MPP sample as representative;
   shared Skiko rendering sources should come from normal source-set
   dependencies, not from an ad hoc file list.

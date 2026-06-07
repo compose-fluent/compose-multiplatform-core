@@ -77,8 +77,14 @@ class WinUISourceSetIsolationTest {
         }
         assertTrue(
             checkNotNull(sourceSetBlock(buildScript, "winuiMain"))
+                .contains("dependsOn(skikoRenderingMain)"),
+            "WinUI should depend on the shared Skiko rendering source set.",
+        )
+        assertFalse(
+            checkNotNull(sourceSetBlock(buildScript, "winuiMain"))
                 .contains("dependsOn(skikoMain)"),
-            "WinUI should remain below skikoMain until skiko-winui provides the shared rendering sources.",
+            "WinUI must not depend on all skikoMain sources because skikoMain also has generic " +
+                "or Desktop-backed actuals.",
         )
     }
 
@@ -119,42 +125,48 @@ class WinUISourceSetIsolationTest {
     }
 
     @Test
-    fun winuiJvmCompileSourceBridgeOnlyCompilesSelectedSkikoSharedSource() {
+    fun winuiUsesSourceSetSplitForSharedSkikoRenderingSource() {
         val moduleRoot = findUiModuleRoot()
         val buildScript = moduleRoot.resolve("build.gradle").readText()
-        val bridgeBlock = checkNotNull(compileKotlinWinuiJvmBridgeBlock(buildScript)) {
-            "Could not find the compileKotlinWinuiJvm source bridge in compose/ui/ui/build.gradle."
+        val sharedSource = moduleRoot.resolve(
+            "src/skikoRenderingMain/kotlin/androidx/compose/ui/skiko/" +
+                "RecordDrawRectRenderDecorator.skiko.kt"
+        )
+        val skikoRenderingBlock = checkNotNull(sourceSetBlock(buildScript, "skikoRenderingMain")) {
+            "Could not find skikoRenderingMain in compose/ui/ui/build.gradle."
         }
-        val requiredRoots = listOf(
-            "src/commonMain/kotlin",
-            "src/jvmAndAndroidMain/kotlin",
-            "src/skikoMain/kotlin/androidx/compose/ui/skiko/RecordDrawRectRenderDecorator.skiko.kt",
-            "src/winuiMain/kotlin",
-            "src/winuiJvmMain/kotlin",
-            "generated/kotlin-winrt/src/main/kotlin",
-            "generatedWinRtAuthoringSources",
-        )
-        val forbiddenRoots = listOf(
-            "src/desktopMain/kotlin",
-            "\"src/skikoMain/kotlin\"",
-        )
+        val winuiMainBlock = checkNotNull(sourceSetBlock(buildScript, "winuiMain")) {
+            "Could not find winuiMain in compose/ui/ui/build.gradle."
+        }
 
-        requiredRoots.forEach { root ->
-            assertTrue(
-                bridgeBlock.contains(root),
-                "WinUI JVM compile source bridge should include $root.",
-            )
-        }
         assertTrue(
-            buildScript.contains("generated/kotlin-winrt-authoring/src/main/kotlin"),
-            "WinUI JVM compile source bridge should define generatedWinRtAuthoringSources.",
+            sharedSource.exists(),
+            "Shared Skiko rendering source should live in skikoRenderingMain.",
         )
-        forbiddenRoots.forEach { root ->
-            assertFalse(
-                bridgeBlock.contains(root),
-                "WinUI JVM compile source bridge must not compile $root.",
-            )
-        }
+        assertTrue(
+            skikoRenderingBlock.contains("dependsOn(commonMain)") &&
+                skikoRenderingBlock.contains("api(libs.skiko)"),
+            "skikoRenderingMain should carry shared Skiko API sources and dependencies.",
+        )
+        assertTrue(
+            checkNotNull(sourceSetBlock(buildScript, "skikoMain"))
+                .contains("dependsOn(skikoRenderingMain)"),
+            "skikoMain should reuse the shared Skiko rendering source set.",
+        )
+        assertTrue(
+            winuiMainBlock.contains("dependsOn(skikoRenderingMain)"),
+            "winuiMain should reuse the shared Skiko rendering source set.",
+        )
+        assertTrue(
+            buildScript.contains("generated/kotlin-winrt/src/main/kotlin") &&
+                buildScript.contains("generated/kotlin-winrt-authoring/src/main/kotlin") &&
+                buildScript.contains("task.dependsOn(\"generateWinRtProjections\")"),
+            "Generated WinRT sources should remain wired by the kotlin-winrt plugin and task dependency.",
+        )
+        assertFalse(
+            buildScript.contains("task.setSource(project.files("),
+            "WinUI JVM compilation should use source-set dependencies, not a task source override.",
+        )
     }
 
     @Test
@@ -221,21 +233,4 @@ class WinUISourceSetIsolationTest {
         return null
     }
 
-    private fun compileKotlinWinuiJvmBridgeBlock(buildScript: String): String? {
-        val start = buildScript.indexOf("task.name == \"compileKotlinWinuiJvm\"")
-        if (start < 0) return null
-        val blockStart = buildScript.indexOf('{', start)
-        if (blockStart < 0) return null
-        var depth = 0
-        for (index in blockStart until buildScript.length) {
-            when (buildScript[index]) {
-                '{' -> depth += 1
-                '}' -> {
-                    depth -= 1
-                    if (depth == 0) return buildScript.substring(start, index + 1)
-                }
-            }
-        }
-        return null
-    }
 }

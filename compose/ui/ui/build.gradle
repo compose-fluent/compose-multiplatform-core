@@ -320,12 +320,18 @@ androidXMultiplatform {
         def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
         def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
         // TODO: Align naming: nonAndroidMain
-        skikoMain {
+        skikoRenderingMain {
             dependsOn(commonMain)
             dependencies {
                 api(project(":compose:ui:ui-graphics"))
                 api(project(":compose:ui:ui-text"))
                 api(libs.skiko)
+            }
+        }
+
+        skikoMain {
+            dependsOn(skikoRenderingMain)
+            dependencies {
                 implementation(libs.atomicFu)
 
                 implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
@@ -432,7 +438,7 @@ kotlin {
 
         sourceSets {
             winuiMain {
-                dependsOn(skikoMain)
+                dependsOn(skikoRenderingMain)
                 dependencies {
                     def lifecycleVersion = project.findProperty('artifactRedirection.version.androidx.lifecycle')
                     def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
@@ -545,21 +551,6 @@ if (composeWinUiGradlePluginAvailable) {
                 }
             }
             return
-        }
-        // WinUI sits below skikoMain in the source-set graph, but it must keep
-        // WinUI/XAML actuals where skikoMain uses generic or Win32-backed
-        // implementations. Start with a WinUI-first bridge and selectively
-        // allow skikoMain scene/rendering sources as skiko-winui lands.
-        if (task.name == "compileKotlinWinuiJvm") {
-            task.setSource(project.files(
-                    "src/commonMain/kotlin",
-                    "src/jvmAndAndroidMain/kotlin",
-                    "src/skikoMain/kotlin/androidx/compose/ui/skiko/RecordDrawRectRenderDecorator.skiko.kt",
-                    "src/winuiMain/kotlin",
-                    "src/winuiJvmMain/kotlin",
-                    layout.buildDirectory.dir("generated/kotlin-winrt/src/main/kotlin"),
-                    generatedWinRtAuthoringSources,
-            ))
         }
         task.dependsOn("generateWinRtProjections")
         task.compilerOptions {
