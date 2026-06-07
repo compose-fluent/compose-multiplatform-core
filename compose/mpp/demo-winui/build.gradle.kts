@@ -63,6 +63,19 @@ val winUiMppSampleResourceFiles = listOf(
     project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf"),
     project.file("../demo/src/desktopMain/resources/NotoColorEmoji.ttf"),
 )
+val winUiMppSampleSourceFiles = listOf(
+    project.file("../demo/src/commonMain/kotlin/androidx/compose/mpp/demo/ImageViewer.kt"),
+    project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/Main.winui.kt"),
+    project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/MainJavaExec.winui.kt"),
+)
+val winUiMppSampleForbiddenSourceTokens = listOf(
+    "androidx.compose.ui.awt",
+    "java.awt.",
+    "javax.swing.",
+    "kotlinx.coroutines.swing",
+    "org.jetbrains.skiko.SkiaLayer",
+    "org.jetbrains.skiko.awt",
+)
 
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
@@ -347,6 +360,51 @@ tasks.register("validateWinUIMppSamplePackaging") {
     }
 }
 
+tasks.register("validateWinUIMppSampleSourceIsolation") {
+    group = "verification"
+    description = "Validates the WinUI MPP sample does not use Desktop/AWT/Swing-only sources or runtimes."
+    inputs.files(winUiMppSampleSourceFiles)
+    outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-source-isolation.txt"))
+
+    doLast {
+        winUiMppSampleSourceFiles.forEach { sourceFile ->
+            check(sourceFile.isFile) {
+                "Missing WinUI MPP sample source file: ${sourceFile.absolutePath}"
+            }
+            val source = sourceFile.readText()
+            val forbiddenTokens = winUiMppSampleForbiddenSourceTokens.filter(source::contains)
+            check(forbiddenTokens.isEmpty()) {
+                "WinUI MPP sample source ${sourceFile.absolutePath} uses Desktop/AWT/Swing-only APIs: " +
+                    forbiddenTokens
+            }
+        }
+
+        val runtimeArtifacts = configurations.named("winuiJvmRuntimeClasspath").get().files
+        val forbiddenRuntimeArtifacts = runtimeArtifacts
+            .map { it.name }
+            .filter { name ->
+                name.startsWith("skiko-awt-runtime") ||
+                    name.startsWith("skiko-awt-runtime-windows") ||
+                    name.startsWith("kotlinx-coroutines-swing")
+            }
+        check(forbiddenRuntimeArtifacts.isEmpty()) {
+            "WinUI MPP sample runtime classpath contains Desktop/AWT/Swing-only runtime artifacts: " +
+                forbiddenRuntimeArtifacts
+        }
+
+        val report = outputs.files.singleFile
+        report.parentFile.mkdirs()
+        report.writeText(
+            buildString {
+                appendLine("WinUI MPP sample source isolation validation passed.")
+                appendLine("sources=${winUiMppSampleSourceFiles.joinToString { it.name }}")
+                appendLine("forbiddenSourceTokens=${winUiMppSampleForbiddenSourceTokens.joinToString()}")
+                appendLine("forbiddenRuntimeArtifacts=skiko-awt-runtime*, kotlinx-coroutines-swing*")
+            }
+        )
+    }
+}
+
 tasks.register("validateWinUIMppSampleCompileOnly") {
     group = "verification"
     description = "Compiles the original MPP demo through the compose-winui JVM target."
@@ -408,6 +466,7 @@ val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMp
 
 tasks.register<JavaExec>("runWinUIMppSample") {
     dependsOn("validateWinUIMppSampleCompileOnly")
+    dependsOn("validateWinUIMppSampleSourceIsolation")
     dependsOn(smokeWinUIMppSampleLaunchWindow)
     dependsOn(smokeWinUIMppSampleRenderOutput)
     dependsOn(smokeWinUIMppSampleInputFocus)

@@ -131,7 +131,7 @@
   bundled images, fonts, strings, Windows App SDK PRI/resource staging, default
   language, and unpackaged app runtime assets must all load from the WinUI run
   task.
-- [ ] Remove or guard desktop/AWT/Swing-only sample code paths, including
+- [x] Remove or guard desktop/AWT/Swing-only sample code paths, including
   desktop window APIs, Skiko AWT layer assumptions, file/dialog helpers, tray or
   menu APIs, and any JVM desktop dependencies that would pull AWT runtime
   artifacts into the WinUI classpath.
