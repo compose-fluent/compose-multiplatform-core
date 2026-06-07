@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import io.github.composefluent.winrt.runtime.Guid
+import io.github.composefluent.winrt.runtime.IInspectableReference
+import io.github.composefluent.winrt.runtime.IWinRTObject
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
@@ -183,6 +186,8 @@ private class WinUIViewHolder<T : UIElement>(
     initialDensity: Density,
 ) : InteropViewFactoryHolder(), WinUIInteropViewHost {
     private val interopView = view.asInteropView()
+    private val viewControl = view.asWinRtControl()
+    private val viewFrameworkElement = view.asWinRtFrameworkElement()
     private val group = InteropViewGroup(
         Canvas().also {
             it.requiredChildren.add(view)
@@ -201,7 +206,7 @@ private class WinUIViewHolder<T : UIElement>(
     private val initialGroupHitTestVisible = group.uiElement.isHitTestVisible
     private val initialViewHitTestVisible = view.isHitTestVisible
     private val initialViewTabStop = view.isTabStop
-    private val initialControlEnabled = (view as? Control)?.isEnabled
+    private val initialControlEnabled = viewControl?.isEnabled
     private var nativeAccessibilityOverrideApplied = false
     private var loadedFocusToken: EventRegistrationToken? = null
     private var layoutUpdatedFocusToken: EventRegistrationToken? = null
@@ -326,7 +331,7 @@ private class WinUIViewHolder<T : UIElement>(
         this.nativeHeight = nativeHeight
         group.uiElement.width = width.toWinUISize()
         group.uiElement.height = height.toWinUISize()
-        (view as? FrameworkElement)?.let {
+        viewFrameworkElement?.let {
             it.width = nativeWidth.toWinUISize()
             it.height = nativeHeight.toWinUISize()
             it.horizontalAlignment = HorizontalAlignment.Left
@@ -363,7 +368,7 @@ private class WinUIViewHolder<T : UIElement>(
         group.uiElement.isHitTestVisible = initialGroupHitTestVisible && isUserInteractionEnabled
         view.isHitTestVisible = initialViewHitTestVisible && isUserInteractionEnabled
         view.isTabStop = initialViewTabStop && isUserInteractionEnabled
-        (view as? Control)?.let { control ->
+        viewControl?.let { control ->
             control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
                 isUserInteractionEnabled
         }
@@ -393,7 +398,7 @@ private class WinUIViewHolder<T : UIElement>(
             cancelDeferredNativeFocus()
             return true
         }
-        val frameworkElement = view as? FrameworkElement ?: return false
+        val frameworkElement = viewFrameworkElement ?: return false
         requestNativeFocusWhenLayoutReady(frameworkElement)
         return true
     }
@@ -446,7 +451,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun cancelDeferredNativeFocus() {
-        val frameworkElement = view as? FrameworkElement ?: return
+        val frameworkElement = viewFrameworkElement ?: return
         clearLoadedFocusRequest(frameworkElement)
         clearLayoutUpdatedFocusRequest(frameworkElement)
     }
@@ -486,7 +491,7 @@ private class WinUIViewHolder<T : UIElement>(
         group.uiElement.isHitTestVisible = initialGroupHitTestVisible
         view.isHitTestVisible = initialViewHitTestVisible
         view.isTabStop = initialViewTabStop
-        (view as? Control)?.let { control ->
+        viewControl?.let { control ->
             initialControlEnabled?.let {
                 control.isEnabled = it
             }
@@ -661,7 +666,7 @@ private fun UIElement.measureUnclippedDesiredSize(): IntSize {
     }.getOrElse {
         IntSize.Zero
     }
-    val explicitSize = (this as? FrameworkElement)?.let {
+    val explicitSize = asWinRtFrameworkElement()?.let {
         IntSize(
             width = it.width.toComposeLayoutSize(),
             height = it.height.toComposeLayoutSize(),
@@ -694,6 +699,25 @@ private fun Double.toComposeLayoutSize(): Int =
         this >= Int.MAX_VALUE.toDouble() -> Int.MAX_VALUE
         else -> ceil(this).toInt()
     }
+
+private fun Any?.asWinRtControl(): Control? =
+    asWinRtRuntimeClass(Control.Metadata.DEFAULT_INTERFACE_IID, Control.Metadata::wrap)
+
+private fun Any?.asWinRtFrameworkElement(): FrameworkElement? =
+    asWinRtRuntimeClass(
+        FrameworkElement.Metadata.DEFAULT_INTERFACE_IID,
+        FrameworkElement.Metadata::wrap,
+    )
+
+private inline fun <T> Any?.asWinRtRuntimeClass(
+    defaultInterfaceIid: Guid,
+    wrap: (IInspectableReference) -> T,
+): T? {
+    val winRtObject = this as? IWinRTObject ?: return null
+    val queriedInterface = winRtObject.nativeObject.tryQueryInterface(defaultInterfaceIid) ?: return null
+    queriedInterface.close()
+    return wrap(winRtObject.nativeObject.asInspectable())
+}
 
 private fun setClip(element: UIElement, clip: RectangleGeometry?) {
     element.clip = clip

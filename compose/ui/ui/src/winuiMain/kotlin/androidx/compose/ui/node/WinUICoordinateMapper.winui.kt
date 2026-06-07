@@ -18,6 +18,7 @@ package androidx.compose.ui.node
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Matrix
+import io.github.composefluent.winrt.runtime.IWinRTObject
 import microsoft.ui.xaml.UIElement
 import windows.foundation.Point
 import windows.graphics.PointInt32
@@ -84,8 +85,17 @@ internal class WinUICoordinateMapper(
 
         private fun UIElement.rootTransformToWindow() = runCatching {
             val root = xamlRoot ?: return@runCatching null
-            transformToVisual(root.content as UIElement)
+            transformToVisual(root.content.asWinRtUIElement() ?: return@runCatching null)
         }.getOrNull()
+
+        private fun Any?.asWinRtUIElement(): UIElement? {
+            val winRtObject = this as? IWinRTObject ?: return null
+            val queriedInterface = winRtObject.nativeObject
+                .tryQueryInterface(UIElement.Metadata.DEFAULT_INTERFACE_IID)
+                ?: return null
+            queriedInterface.close()
+            return UIElement.Metadata.wrap(winRtObject.nativeObject.asInspectable())
+        }
 
         private fun Offset.toWinRtPoint(): Point = Point(x, y)
 

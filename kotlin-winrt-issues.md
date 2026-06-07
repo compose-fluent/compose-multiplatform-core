@@ -11,7 +11,7 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** `KWINRT-026`, not treated as blocking for current
   compose-winui work.
-- **Open upstream/plugin:** `KWINRT-025` and `KWINRT-030`.
+- **Open upstream/plugin:** `KWINRT-025`, `KWINRT-030`, and `KWINRT-031`.
 - **Open compose-side workarounds:** `KWINRT-025` and `KWINRT-030`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
@@ -884,3 +884,33 @@ baseline, not every retest attempt.
   `kmpPartiallyResolvedDependenciesChecker` only when the WinUI JVM target and
   kotlin-winrt Gradle plugin are enabled. This is a narrow validation unblocker;
   normal projection shape remains explicit `type(...)` declarations.
+
+## KWINRT-031: Generated authoring TypeDetails use projection-unsafe runtime casts
+
+- **Status:** Open upstream/compiler generator in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-07.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` after removing
+  compose-winui's handwritten projection-unsafe casts to WinRT runtime classes.
+- **Snapshot baseline:** `winrt-runtime-jvm`
+  `0.1.0-20260607.100854-44`, `winrt-gradle-plugin`
+  `0.1.0-20260607.101153-25`, and `skiko-winui`
+  `0.0.0-20260607.101016-8`.
+- **Symptom:** compilation still reports warnings such as
+  `WinRT runtime class cast to Microsoft.UI.Xaml.Controls.ContentControl is not
+  projection-safe; use WinRT projection cast helpers instead`, plus equivalent
+  warnings for `Control`, `FrameworkElement`, `UIElement`, and `Application`.
+- **Evidence:** direct source search no longer finds handwritten
+  `as` / `as?` casts to those WinRT runtime classes in the WinUI source or
+  sample. The remaining casts are generated under
+  `build/generated/kotlin-winrt-compiler-authoring/.../WinRT_*_TypeDetails.kt`,
+  for example `(value as ContentControl)`,
+  `(value as Control)`, `(value as FrameworkElement)`,
+  `(value as UIElement)`, and `(value as Application)` before invoking
+  generated `__winrtAuthoringInvoke...` methods.
+- **Expected behavior:** generated authoring TypeDetails should use a
+  projection-safe rewrap/query path or otherwise avoid emitting runtime-class
+  Kotlin casts that kotlin-winrt's own compiler diagnostics flag as unsafe.
+- **compose-winui workaround:** none. Handwritten compose-winui casts were
+  replaced with narrow QueryInterface + runtime-class wrapper helpers, but the
+  generated authoring diagnostics remain until kotlin-winrt changes the
+  compiler generator output.
