@@ -11,15 +11,16 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** `KWINRT-026`, not treated as blocking for current
   compose-winui work.
-- **Open upstream/plugin:** `KWINRT-025`.
-- **Open compose-side workarounds:** `KWINRT-025`.
+- **Open upstream/plugin:** `KWINRT-025` and `KWINRT-030`.
+- **Open compose-side workarounds:** `KWINRT-025` and `KWINRT-030`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
   `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`,
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
-  `KWINRT-022`, `KWINRT-023`, `KWINRT-004`, and `KWINRT-008`.
+  `KWINRT-022`, `KWINRT-023`, `KWINRT-004`, `KWINRT-008`, `KWINRT-028`,
+  and `KWINRT-029`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -762,8 +763,8 @@ baseline, not every retest attempt.
 
 ## KWINRT-028: Prebuilt WinUI projection Application.start callback hang
 
-- **Status:** Open upstream/projection runtime, blocking full compose-winui
-  runtime validation on the prebuilt projection path.
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot `0.1.0-SNAPSHOT` as
+  of 2026-06-07.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinRtApplicationHost` and
   `:compose:ui:ui:winui-samples:runWinUISkikoSample` after switching
   compose-winui from local Windows App SDK NuGet projection generation to
@@ -796,7 +797,90 @@ baseline, not every retest attempt.
   initialization callback, create the authored `Application` subclass, and then
   dispatch `onLaunched`, matching the current kotlin-winrt README and upstream
   samples.
-- **compose-winui workaround:** none yet. Keep the prebuilt projection
-  dependency wiring, but do not treat runtime validation as complete until this
-  startup callback issue is fixed or a narrow compose-winui workaround is
-  validated.
+- **Resolution:** compose-winui now validates the generated `Application.start`
+  path with explicit `type(...)` projection declarations and no prebuilt full
+  projection dependencies.
+- **Validation:** `runWinUISkikoSample` logs
+  `compose-winui-sample: application starting mode=skiko` and exits
+  successfully. `runWinUIViewSample` logs
+  `compose-winui-sample: application starting mode=full`,
+  `compose-winui-sample: application created`, window creation, focus/input,
+  generated event cleanup, and Skiko diagnostics before exiting successfully.
+
+## KWINRT-029: IContentCoordinateConverter single-point overload renders array path
+
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot `0.1.0-SNAPSHOT` as
+  of 2026-06-07.
+- **Observed in:** `:compose:ui:ui:generateWinRtProjections` and
+  `:compose:ui:ui:compileKotlinWinuiJvm` after switching compose-winui away
+  from prebuilt full projection artifacts and back to explicit `type(...)`
+  declarations.
+- **Snapshot baseline:** `skiko-winui` / `skiko-winui-windows`
+  `0.0.0-20260606.141637-7`, `winrt-runtime-jvm`
+  `0.1.0-SNAPSHOT`, and `winrt-gradle-plugin` `0.1.0-SNAPSHOT` resolved from
+  Maven snapshots on 2026-06-06.
+- **Symptom:** compose-winui declares explicit `type(...)` entries for the
+  Windows SDK and Windows App SDK types it uses, including
+  `Microsoft.UI.Xaml.Controls.Canvas`,
+  `Microsoft.UI.Xaml.Controls.ContentControl`,
+  `Microsoft.UI.Xaml.Controls.MenuFlyout`,
+  `Microsoft.UI.Xaml.Input.FocusManager`,
+  `Microsoft.UI.Input.InputSystemCursor`, and
+  `Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop`. The generator emits the
+  requested reduced projection surface, but the Windows App SDK dependency
+  closure also includes `Microsoft.UI.Content.IContentCoordinateConverter`.
+  The generated Kotlin for that interface does not compile.
+- **Evidence:** generation with filtered Windows App SDK metadata emits the
+  requested types such as `Windows.System.Launcher`,
+  `Windows.UI.ViewManagement.UISettings`,
+  `Microsoft.UI.Input.InputSystemCursor`,
+  `Microsoft.UI.Xaml.Controls.Canvas`, `ContentControl`, and `MenuFlyout`.
+  Compilation then fails in generated
+  `microsoft/ui/content/microsoft_ui_content.kt` because
+  `IContentCoordinateConverter.convertLocalToScreen(localPoint: Point)` is
+  rendered with the unrelated `localPoints` array path and returns
+  `Array<PointInt32>` where `PointInt32` is expected. The WinMD dependency
+  chain appears legitimate; compose-winui should not exclude
+  `IContentCoordinateConverter`, `ContentCoordinateConverter`,
+  `ContentIsland`, `IXamlRoot3`, or `IXamlRoot4` to hide this bug.
+- **Expected behavior:** the single-point
+  `convertLocalToScreen(localPoint: Windows.Foundation.Point)` overload should
+  use the `localPoint` parameter and return `Windows.Graphics.PointInt32`.
+  The array overload should remain the only overload that uses `localPoints`
+  and returns `Array<PointInt32>`.
+- **Resolution:** the latest generated
+  `microsoft/ui/content/microsoft_ui_content.kt` keeps
+  `IContentCoordinateConverter`, `ContentCoordinateConverter`, and
+  `ContentIsland` in the dependency closure. The single-point
+  `convertLocalToScreen(localPoint: Point)` overload now has an independent
+  `PointInt32` return path, while the array overloads remain separate.
+- **Validation:** `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `:compose:ui:ui:winuiJvmTest` pass with 70 generated projection files in the
+  reduced explicit-type surface.
+
+## KWINRT-030: KMP partial dependency checker resolves kotlin-winrt identity early
+
+- **Status:** Open upstream/plugin in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-07.
+- **Observed in:** `:compose:ui:ui:kmpPartiallyResolvedDependenciesChecker`
+  when running `:compose:ui:ui:compileKotlinWinuiJvm` together with
+  `:compose:ui:ui:winuiJvmTest` after switching compose-winui to explicit
+  `type(...)` projection declarations.
+- **Snapshot baseline:** `winrt-runtime-jvm`
+  `0.1.0-20260607.100854-44`, `winrt-gradle-plugin`
+  `0.1.0-20260607.101153-25`, and `skiko-winui`
+  `0.0.0-20260607.101016-8`.
+- **Symptom:** the checker fails before projection compilation with
+  `Cannot mutate the dependencies of configuration
+  ':compose:ui:ui:kotlinWinRtLibraryDependencyIdentity' after the
+  configuration was resolved`. The stacktrace shows Kotlin's
+  `KmpPartiallyResolvedDependenciesChecker` resolving the graph, then
+  `addKotlinDomApiDependency` firing while Gradle is resolving dependencies.
+- **Expected behavior:** kotlin-winrt should finish configuring
+  `kotlinWinRtLibraryDependencyIdentity` before other Gradle/Kotlin validation
+  tasks can observe or resolve it, or should use a lazy provider path that does
+  not mutate the configuration after resolution begins.
+- **compose-winui workaround:** disable
+  `kmpPartiallyResolvedDependenciesChecker` only when the WinUI JVM target and
+  kotlin-winrt Gradle plugin are enabled. This is a narrow validation unblocker;
+  normal projection shape remains explicit `type(...)` declarations.

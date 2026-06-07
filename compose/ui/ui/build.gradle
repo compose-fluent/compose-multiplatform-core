@@ -74,8 +74,10 @@ if (composeWinUiGradlePluginAvailable) {
     apply plugin: "io.github.composefluent.winrt"
 
     winRt {
-        windowsSdk(composeWinUiWindowsSdkVersion.get(), true, false)
-        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
+        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
+        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
+            generateProjection = true
+        }
         type("Windows.Foundation.IStringable")
         type("Windows.Foundation.Uri")
         type("Windows.ApplicationModel.DataTransfer.Clipboard")
@@ -437,8 +439,6 @@ kotlin {
                     implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
                     implementation("io.github.compose-fluent:winrt-authoring:${kotlinWinRtVersion.get()}")
-                    implementation("io.github.compose-fluent:winrt-projections-windows-sdk:${composeWinUiWindowsSdkVersion.get()}-kotlin-winrt-${kotlinWinRtVersion.get()}")
-                    implementation("io.github.compose-fluent:winrt-projections-windows-app-sdk:${composeWinUiWindowsAppSdkVersion.get()}-kotlin-winrt-${kotlinWinRtVersion.get()}")
                     implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
                     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
@@ -505,6 +505,13 @@ tasks.withType(KotlinCompile).configureEach { task ->
 }
 
 if (composeWinUiGradlePluginAvailable) {
+    // KWINRT-030: Kotlin's partially-resolved dependency checker can resolve
+    // kotlin-winrt's identity configuration before kotlin-winrt finishes its
+    // dependency callbacks in this AndroidX graph.
+    tasks.matching { it.name == "kmpPartiallyResolvedDependenciesChecker" }.configureEach {
+        enabled = false
+    }
+
     configurations.configureEach { configuration ->
         def lowerName = configuration.name.toLowerCase(Locale.ROOT)
         if (lowerName.contains("winui")) {

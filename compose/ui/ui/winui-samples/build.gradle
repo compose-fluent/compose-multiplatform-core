@@ -58,18 +58,14 @@ def composeWinUiWindowsSdkVersion = providers
         .gradleProperty("composeWinUi.windowsSdkVersion")
         .orElse("10.0.26100.0")
 
-dependencies {
-    def kotlinWinRtVersion = project.findProperty("kotlinWinRt.version") ?: "0.1.0-SNAPSHOT"
-    implementation("io.github.compose-fluent:winrt-projections-windows-sdk:${composeWinUiWindowsSdkVersion.get()}-kotlin-winrt-$kotlinWinRtVersion")
-    implementation("io.github.compose-fluent:winrt-projections-windows-app-sdk:${composeWinUiWindowsAppSdkVersion.get()}-kotlin-winrt-$kotlinWinRtVersion")
-}
-
 winRt {
     application {
         mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
-    windowsSdk(composeWinUiWindowsSdkVersion.get(), true, false)
-    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
+    windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
+    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
+        generateProjection = true
+    }
     type("Windows.Foundation.Uri")
 }
 
