@@ -115,8 +115,12 @@ internal actual fun ActualCanvas(image: ImageBitmap): Canvas {
 
 fun SkCanvas.asComposeCanvas(): Canvas = WinUICanvas(this)
 
+val Canvas.skiaCanvas: SkCanvas
+    get() = (this as? WinUICanvas)?.skiaCanvas
+        ?: error("Canvas is not backed by a WinUI Skia canvas.")
+
 private class WinUICanvas(
-    private val skiaCanvas: SkCanvas? = null,
+    val skiaCanvas: SkCanvas? = null,
 ) : Canvas {
     override fun save() {
         skiaCanvas?.save()

@@ -29,6 +29,8 @@ import androidx.compose.ui.text.ParagraphIntrinsics
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlatformStringDelegate
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.WinUIParagraph
+import androidx.compose.ui.text.winUITypeface
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.intl.Locale
@@ -67,7 +69,14 @@ internal actual fun ActualParagraph(
     width: Float,
     density: Density,
     resourceLoader: Font.ResourceLoader,
-): Paragraph = EmptyWinUIParagraph(width = width)
+): Paragraph = WinUIParagraph(
+    text = text,
+    style = style,
+    density = density,
+    typeface = style.winUITypeface(),
+    width = width,
+    maxLines = maxLines,
+)
 
 internal actual fun ActualParagraph(
     text: String,
@@ -79,14 +88,24 @@ internal actual fun ActualParagraph(
     constraints: Constraints,
     density: Density,
     fontFamilyResolver: FontFamily.Resolver,
-): Paragraph = EmptyWinUIParagraph(width = constraints.maxWidth.toFloat())
+): Paragraph = WinUIParagraph(
+    text = text,
+    style = style,
+    density = density,
+    typeface = style.winUITypeface(),
+    width = constraints.maxWidth.toFloat(),
+    maxLines = maxLines,
+)
 
 internal actual fun ActualParagraph(
     paragraphIntrinsics: ParagraphIntrinsics,
     maxLines: Int,
     overflow: TextOverflow,
     constraints: Constraints,
-): Paragraph = EmptyWinUIParagraph(width = constraints.maxWidth.toFloat())
+): Paragraph = (paragraphIntrinsics as? WinUIParagraphIntrinsics)?.toParagraph(
+    maxLines = maxLines,
+    constraints = constraints,
+) ?: EmptyWinUIParagraph(width = constraints.maxWidth.toFloat())
 
 internal actual fun ActualParagraphIntrinsics(
     text: String,
@@ -95,10 +114,37 @@ internal actual fun ActualParagraphIntrinsics(
     placeholders: List<AnnotatedString.Range<Placeholder>>,
     density: Density,
     fontFamilyResolver: FontFamily.Resolver,
-): ParagraphIntrinsics = object : ParagraphIntrinsics {
-    override val minIntrinsicWidth: Float = 0f
-    override val maxIntrinsicWidth: Float = 0f
+): ParagraphIntrinsics = WinUIParagraphIntrinsics(
+    text = text,
+    style = style,
+    density = density,
+)
+
+internal class WinUIParagraphIntrinsics(
+    private val text: String,
+    private val style: TextStyle,
+    private val density: Density,
+) : ParagraphIntrinsics {
+    private val paragraph = WinUIParagraph(
+        text = text,
+        style = style,
+        density = density,
+        typeface = style.winUITypeface(),
+        width = Float.POSITIVE_INFINITY,
+        maxLines = Int.MAX_VALUE,
+    )
+    override val minIntrinsicWidth: Float = paragraph.minIntrinsicWidth
+    override val maxIntrinsicWidth: Float = paragraph.maxIntrinsicWidth
     override val hasStaleResolvedFonts: Boolean = false
+
+    fun toParagraph(maxLines: Int, constraints: Constraints): Paragraph = WinUIParagraph(
+        text = text,
+        style = style,
+        density = density,
+        typeface = style.winUITypeface(),
+        width = constraints.maxWidth.toFloat(),
+        maxLines = maxLines,
+    )
 }
 
 internal actual fun MultiParagraph.drawMultiParagraph(
@@ -109,4 +155,11 @@ internal actual fun MultiParagraph.drawMultiParagraph(
     decoration: TextDecoration?,
     drawStyle: DrawStyle?,
     blendMode: BlendMode,
-) = Unit
+) {
+    canvas.save()
+    paragraphInfoList.forEach {
+        it.paragraph.paint(canvas, brush, alpha, shadow, decoration, drawStyle, blendMode)
+        canvas.translate(0f, it.paragraph.height)
+    }
+    canvas.restore()
+}

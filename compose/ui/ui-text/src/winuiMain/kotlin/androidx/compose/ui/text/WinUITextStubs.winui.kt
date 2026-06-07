@@ -25,12 +25,29 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.skiaCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.DrawStyle
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextMotion
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.isUnspecified
+import androidx.compose.ui.unit.sp
+import org.jetbrains.skia.Font as SkFont
+import org.jetbrains.skia.FontMetrics
+import org.jetbrains.skia.FontMgr
+import org.jetbrains.skia.FontSlant
+import org.jetbrains.skia.FontStyle as SkFontStyle
+import org.jetbrains.skia.FontWidth
+import org.jetbrains.skia.Paint as SkPaint
+import org.jetbrains.skia.Typeface as SkTypeface
 
 internal actual fun String.findPrecedingBreak(index: Int): Int = (index - 1).coerceAtLeast(0)
 
@@ -148,6 +165,186 @@ internal class EmptyWinUIParagraph(
         blendMode: BlendMode,
     ) = Unit
 }
+
+internal class WinUIParagraph(
+    private val text: String,
+    private val style: TextStyle,
+    private val density: Density,
+    private val typeface: SkTypeface,
+    override val width: Float,
+    private val maxLines: Int,
+) : Paragraph {
+    private val lines: List<String> = text.split('\n').let { split ->
+        split.ifEmpty { listOf("") }.take(maxLines.coerceAtLeast(1))
+    }
+    private val fontSize = style.fontSize.toWinUIPx(density)
+    private val font = SkFont(typeface, fontSize)
+    private val metrics: FontMetrics = font.metrics
+    private val lineHeightPx = style.lineHeight
+        .takeUnless { it.isUnspecified }
+        ?.toWinUIPx(density)
+        ?.coerceAtLeast(1f)
+        ?: (metrics.descent - metrics.ascent + metrics.leading).coerceAtLeast(fontSize)
+    private val measuredLineWidths = lines.map(::measureText)
+
+    override val height: Float = lineHeightPx * lines.size
+    override val minIntrinsicWidth: Float = measuredLineWidths.maxOrNull() ?: 0f
+    override val maxIntrinsicWidth: Float = minIntrinsicWidth
+    override val firstBaseline: Float = -metrics.ascent
+    override val lastBaseline: Float = firstBaseline + lineHeightPx * (lines.size - 1)
+    override val didExceedMaxLines: Boolean = text.count { it == '\n' } + 1 > lines.size
+    override val lineCount: Int = lines.size
+    override val placeholderRects: List<Rect?> = emptyList()
+
+    override fun getPathForRange(start: Int, end: Int): Path = Path()
+    override fun getCursorRect(offset: Int): Rect {
+        val line = getLineForOffset(offset)
+        val lineStart = getLineStart(line)
+        val x = measureText(lines[line].take((offset - lineStart).coerceIn(0, lines[line].length)))
+        val top = getLineTop(line)
+        return Rect(x, top, x + 1f, top + lineHeightPx)
+    }
+
+    override fun getLineLeft(lineIndex: Int): Float = 0f
+    override fun getLineRight(lineIndex: Int): Float = getLineWidth(lineIndex)
+    override fun getLineTop(lineIndex: Int): Float = lineIndex.coerceLineIndex() * lineHeightPx
+    override fun getLineBaseline(lineIndex: Int): Float = firstBaseline + lineIndex.coerceLineIndex() * lineHeightPx
+    override fun getLineBottom(lineIndex: Int): Float = getLineTop(lineIndex) + lineHeightPx
+    override fun getLineHeight(lineIndex: Int): Float = lineHeightPx
+    override fun getLineWidth(lineIndex: Int): Float = measuredLineWidths[lineIndex.coerceLineIndex()]
+    override fun getLineStart(lineIndex: Int): Int {
+        val target = lineIndex.coerceLineIndex()
+        var start = 0
+        for (i in 0 until target) {
+            start += lines[i].length + 1
+        }
+        return start
+    }
+
+    override fun getLineEnd(lineIndex: Int, visibleEnd: Boolean): Int =
+        getLineStart(lineIndex) + lines[lineIndex.coerceLineIndex()].length
+
+    override fun isLineEllipsized(lineIndex: Int): Boolean = false
+    override fun getLineForOffset(offset: Int): Int {
+        var start = 0
+        lines.forEachIndexed { index, line ->
+            val end = start + line.length
+            if (offset <= end) return index
+            start = end + 1
+        }
+        return lines.lastIndex
+    }
+
+    override fun getHorizontalPosition(offset: Int, usePrimaryDirection: Boolean): Float =
+        getCursorRect(offset).left
+
+    override fun getParagraphDirection(offset: Int): ResolvedTextDirection = ResolvedTextDirection.Ltr
+    override fun getBidiRunDirection(offset: Int): ResolvedTextDirection = ResolvedTextDirection.Ltr
+    override fun getLineForVerticalPosition(vertical: Float): Int =
+        (vertical / lineHeightPx).toInt().coerceLineIndex()
+
+    override fun getOffsetForPosition(position: Offset): Int {
+        val lineIndex = getLineForVerticalPosition(position.y)
+        val line = lines[lineIndex]
+        var bestOffset = 0
+        var bestDistance = Float.POSITIVE_INFINITY
+        for (i in 0..line.length) {
+            val distance = kotlin.math.abs(measureText(line.take(i)) - position.x)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestOffset = i
+            }
+        }
+        return getLineStart(lineIndex) + bestOffset
+    }
+
+    override fun getRangeForRect(
+        rect: Rect,
+        granularity: TextGranularity,
+        inclusionStrategy: TextInclusionStrategy,
+    ): TextRange = TextRange(getOffsetForPosition(rect.topLeft), getOffsetForPosition(rect.bottomRight))
+
+    override fun getBoundingBox(offset: Int): Rect = getCursorRect(offset)
+    override fun fillBoundingBoxes(range: TextRange, array: FloatArray, arrayStart: Int) {
+        var index = arrayStart
+        for (offset in range.min until range.max) {
+            if (index + 3 >= array.size) return
+            val rect = getCursorRect(offset)
+            array[index++] = rect.left
+            array[index++] = rect.top
+            array[index++] = rect.right
+            array[index++] = rect.bottom
+        }
+    }
+
+    override fun getWordBoundary(offset: Int): TextRange {
+        val bounded = offset.coerceIn(0, text.length)
+        val start = text.lastIndexOf(' ', (bounded - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val end = text.indexOf(' ', bounded).let { if (it < 0) text.length else it }
+        return TextRange(start, end)
+    }
+
+    override fun paint(canvas: Canvas, color: Color, shadow: Shadow?, textDecoration: TextDecoration?) =
+        paint(canvas, color, shadow, textDecoration, null, BlendMode.SrcOver)
+
+    override fun paint(
+        canvas: Canvas,
+        color: Color,
+        shadow: Shadow?,
+        textDecoration: TextDecoration?,
+        drawStyle: DrawStyle?,
+        blendMode: BlendMode,
+    ) {
+        val paint = SkPaint().apply {
+            this.color = color.takeIf { it.isSpecified }?.toArgb()
+                ?: style.color.takeIf { it.isSpecified }?.toArgb()
+                ?: Color.Black.toArgb()
+            isAntiAlias = true
+        }
+        lines.forEachIndexed { index, line ->
+            canvas.skiaCanvas.drawString(line, 0f, getLineBaseline(index), font, paint)
+        }
+    }
+
+    override fun paint(
+        canvas: Canvas,
+        brush: Brush,
+        alpha: Float,
+        shadow: Shadow?,
+        textDecoration: TextDecoration?,
+        drawStyle: DrawStyle?,
+        blendMode: BlendMode,
+    ) = paint(canvas, style.color.copy(alpha = alpha), shadow, textDecoration, drawStyle, blendMode)
+
+    private fun measureText(value: String): Float = font.measureText(value).width
+    private fun Int.coerceLineIndex(): Int = coerceIn(0, lines.lastIndex)
+}
+
+internal fun TextStyle.winUITypeface(): SkTypeface {
+    val weight = fontWeight ?: FontWeight.Normal
+    val skStyle = SkFontStyle(
+        weight = weight.weight,
+        width = FontWidth.NORMAL,
+        slant = if (fontStyle == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+    )
+    val familyName = when (fontFamily) {
+        androidx.compose.ui.text.font.FontFamily.Serif -> "Times New Roman"
+        androidx.compose.ui.text.font.FontFamily.Monospace -> "Consolas"
+        androidx.compose.ui.text.font.FontFamily.Cursive -> "Comic Sans MS"
+        else -> "Segoe UI"
+    }
+    return FontMgr.default.matchFamilyStyle(familyName, skStyle)
+        ?: FontMgr.default.legacyMakeTypeface(familyName, skStyle)
+        ?: FontMgr.default.matchFamilyStyle("Arial", skStyle)
+        ?: error("Unable to load WinUI paragraph font '$familyName'.")
+}
+
+private fun TextUnit.toWinUIPx(density: Density): Float =
+    if (isUnspecified) {
+        with(density) { 16.sp.toPx() }
+    } else {
+        with(density) { toPx() }
+    }
 
 actual class PlatformTextStyle {
     actual val spanStyle: PlatformSpanStyle?
