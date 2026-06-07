@@ -59,8 +59,8 @@ val localWinUiJarProjects = listOf(
     ":compose:ui:ui-text",
 )
 val navigationWinUiCompileTasks = listOf(
-    ":navigation:navigation-compose-winui:compileKotlinWinuiJvm",
-    ":navigation3:navigation3-ui-winui:compileKotlinWinuiJvm",
+    ":navigation:navigation-compose:compileKotlinWinuiJvm",
+    ":navigation3:navigation3-ui:compileKotlinWinuiJvm",
 )
 val gradleWrapper = rootProject.layout.projectDirectory.file(
     if (System.getProperty("os.name").startsWith("Windows")) {
