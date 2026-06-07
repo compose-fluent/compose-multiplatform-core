@@ -11,8 +11,8 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** `KWINRT-026`, not treated as blocking for current
   compose-winui work.
-- **Open upstream/plugin:** `KWINRT-025`, `KWINRT-030`, `KWINRT-031`, and
-  `KWINRT-032`.
+- **Open upstream/plugin:** `KWINRT-025`, `KWINRT-030`, `KWINRT-031`,
+  `KWINRT-032`, and `KWINRT-033`.
 - **Open compose-side workarounds:** `KWINRT-025` and `KWINRT-030`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
@@ -960,3 +960,31 @@ baseline, not every retest attempt.
   keeping skiko-unique support projection classes needed by
   `WinUISkiaHostPanel`. The broader bundled-projection publication issue is
   tracked by `SKIKO-007`.
+
+## KWINRT-033: Groovy DSL cannot consume explicit WinUI type declarations without generateProjection
+
+- **Status:** Open upstream/plugin in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-08.
+- **Observed in:** `compose/ui/ui/build.gradle` and
+  `compose/ui/ui/winui-samples/build.gradle` after trying to follow the current
+  `external/kotlin-winrt/README.md` WinUI setup, which uses
+  `windowsSdk(...)`, `nugetPackage(...)`, and explicit `type(...)` declarations
+  without `generateProjection = true`.
+- **Symptom:** the Groovy DSL does not expose the two-argument
+  `windowsSdk(version, includeExtensions)` overload used by the Kotlin DSL
+  samples. Using the legacy three-argument form with
+  `windowsSdk(version, false, false)` configures successfully, but
+  `:compose:ui:ui:compileKotlinWinuiJvm` then fails because explicitly declared
+  WinUI and Windows SDK types such as `FocusManager`, `Clipboard`, `Canvas`,
+  `ContentControl`, `Launcher`, `UISettings`, and `InputSystemCursor` are not on
+  the compile classpath.
+- **Expected behavior:** Groovy builds should be able to use the same
+  preprojection/explicit-type model as the README and Kotlin DSL samples:
+  declare WinMD sources and `type(...)` entries without enabling full NuGet or
+  Windows SDK projection generation, while still exposing the declared types to
+  compilation.
+- **compose-winui workaround:** keep the legacy
+  `windowsSdk(version, false, true)` and `nugetPackage(...) {
+  generateProjection = true }` configuration in Groovy build scripts until the
+  plugin supports the README path for these modules. `compose/mpp/demo-winui`,
+  which uses Kotlin DSL, already uses the no-`generateProjection` form.
