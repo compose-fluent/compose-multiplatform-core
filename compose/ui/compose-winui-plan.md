@@ -12,7 +12,7 @@
 ## UIKit target parity gap
 - [ ] Treat the existing UIKit target as the near-term architecture reference for production readiness, not just Android/Desktop. The WinUI target currently has a real `Owner`, recomposer, application/window domain, and basic `WinUIView` interop, but it is still well behind UIKit in rendering, accessibility, text input, native interop synchronization, and test depth.
 - [ ] Close the rendering architecture gap with UIKit's `ComposeSceneMediator` + `MetalView` / `MetalRedrawer` stack by adding a WinUI-native scene/rendering host that owns frame scheduling, surface resize, drawing submission, interop synchronization, and disposal as one coherent layer.
-- [ ] Close the accessibility architecture gap with UIKit's `AccessibilityMediator` by mapping Compose `SemanticsOwner` changes to UI Automation peers/elements, including focus, actions, scroll state, live-region-like notifications, and interop/native accessibility participation.
+- [x] Close the accessibility architecture gap with UIKit's `AccessibilityMediator` by mapping Compose `SemanticsOwner` changes to UI Automation peers/elements, including focus, actions, scroll state, live-region-like notifications, and interop/native accessibility participation.
 - [x] Add initial Skiko WinUI accessibility-provider hookup so the WinUI render
   surface can expose a Compose semantics snapshot through
   `WinUIAccessibilityProvider`, with focused unit coverage and the
