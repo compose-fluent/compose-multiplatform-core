@@ -58,6 +58,11 @@ val localWinUiJarProjects = listOf(
     ":compose:ui:ui-graphics",
     ":compose:ui:ui-text",
 )
+val winUiMppSampleResourcesDir = layout.buildDirectory.dir("winui-mpp-sample-resources")
+val winUiMppSampleResourceFiles = listOf(
+    project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf"),
+    project.file("../demo/src/desktopMain/resources/NotoColorEmoji.ttf"),
+)
 
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
@@ -201,15 +206,83 @@ fun projectionClassEntries(files: Iterable<File>): Set<String> =
             }
     }
 
+val stageWinUIMppSampleResources = tasks.register<Copy>("stageWinUIMppSampleResources") {
+    from(project.file("../demo/src/commonMain/resources"))
+    from(project.file("../demo/src/desktopMain/resources"))
+    into(winUiMppSampleResourcesDir)
+}
+
+tasks.register("validateWinUIMppSamplePackaging") {
+    group = "verification"
+    description = "Validates WinUI MPP sample resources and Windows App SDK runtime packaging."
+    dependsOn(stageWinUIMppSampleResources)
+    mustRunAfter("stageWinRtRuntimeAssets")
+    inputs.files(winUiMppSampleResourceFiles)
+    outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-packaging.txt"))
+
+    doLast {
+        fun requireFile(file: File, label: String) {
+            check(file.isFile && file.length() > 0L) {
+                "Missing or empty $label: ${file.absolutePath}"
+            }
+        }
+
+        winUiMppSampleResourceFiles.forEach { resource ->
+            requireFile(resource, "source sample resource")
+            requireFile(
+                winUiMppSampleResourcesDir.get().asFile.resolve(resource.name),
+                "staged sample resource"
+            )
+        }
+
+        val runtimeAssets = layout.buildDirectory.dir("kotlin-winrt/runtime-assets").get().asFile
+        requireFile(runtimeAssets.resolve("resources.pri"), "application resources.pri")
+        requireFile(runtimeAssets.resolve("Microsoft.UI.pri"), "Microsoft.UI component PRI")
+        requireFile(
+            runtimeAssets.resolve("Microsoft.UI.Xaml.Controls.pri"),
+            "WinUI controls component PRI"
+        )
+        requireFile(
+            runtimeAssets.resolve("WindowsAppSDK-SelfContained.manifest"),
+            "Windows App SDK activation manifest"
+        )
+        requireFile(
+            runtimeAssets.resolve("kotlin-winrt-process.manifest"),
+            "process compatibility manifest"
+        )
+        requireFile(runtimeAssets.resolve("Microsoft.ui.xaml.dll"), "WinUI runtime DLL")
+        requireFile(runtimeAssets.resolve("Microsoft.UI.Xaml.Controls.dll"), "WinUI controls DLL")
+        requireFile(
+            runtimeAssets.resolve("en-us/Microsoft.ui.xaml.dll.mui"),
+            "default language WinUI MUI asset"
+        )
+
+        val report = outputs.files.singleFile
+        report.parentFile.mkdirs()
+        report.writeText(
+            buildString {
+                appendLine("WinUI MPP sample packaging validation passed.")
+                appendLine("fonts=${winUiMppSampleResourceFiles.joinToString { it.name }}")
+                appendLine("images=none in selected WinUI sample resource roots")
+                appendLine("strings=none in selected WinUI sample resource roots")
+                appendLine("runtimeAssets=${runtimeAssets.absolutePath}")
+                appendLine("defaultLanguage=en-us")
+            }
+        )
+    }
+}
+
 tasks.register<JavaExec>("runWinUIMppSample") {
     group = "verification"
     description = "Runs the original MPP demo through the compose-winui JVM target."
     dependsOn("compileKotlinWinuiJvm")
     dependsOn("stageWinRtRuntimeAssets")
     dependsOn("buildWinRtAuthoringHost")
+    dependsOn("validateWinUIMppSamplePackaging")
     dependsOn(stripSkikoWinUiProjectionClasses)
     mainClass.set("androidx.compose.mpp.demo.MainJavaExec_winuiKt")
     classpath(
+        winUiMppSampleResourcesDir,
         layout.buildDirectory.dir("classes/kotlin/winuiJvm/main"),
         configurations.named("winuiJvmRuntimeClasspath").map { runtimeClasspath ->
             runtimeClasspath.filter { file ->
@@ -225,6 +298,13 @@ tasks.register<JavaExec>("runWinUIMppSample") {
     systemProperty("compose.winui.mpp.sample.autoExit", "true")
     doFirst {
         val classpathNames = classpath.files.map { it.name }
+        winUiMppSampleResourceFiles.forEach { resource ->
+            check(classpath.files.any { file ->
+                file.isDirectory && file.resolve(resource.name).isFile
+            }) {
+                "WinUI MPP sample runtime classpath did not include staged resource ${resource.name}."
+            }
+        }
         check(classpathNames.any { it.contains("skiko-winui") }) {
             "WinUI MPP sample runtime classpath did not include skiko-winui."
         }

@@ -127,7 +127,7 @@
   projection, bounds updates, focus, click/custom actions, scroll actions,
   live-region-like notifications, and native interop accessibility inclusion
   or exclusion.
-- [ ] Add resource and packaging validation for the original MPP sample:
+- [x] Add resource and packaging validation for the original MPP sample:
   bundled images, fonts, strings, Windows App SDK PRI/resource staging, default
   language, and unpackaged app runtime assets must all load from the WinUI run
   task.
