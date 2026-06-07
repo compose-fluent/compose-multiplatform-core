@@ -86,7 +86,7 @@
   of relying only on `compose/ui/ui/winui-samples`; keep the original sample
   source shared as much as possible and isolate only the app entry/window
   bootstrap behind WinUI-specific source sets.
-- [ ] Define the exact original MPP sample scope that must run on WinUI,
+- [x] Define the exact original MPP sample scope that must run on WinUI,
   including its modules, resources, image/font assets, navigation paths, and
   desktop-specific APIs that need WinUI equivalents or source-set guards.
 - [ ] Add Gradle wiring for a `runWinUIMppSample` task that uses the same
