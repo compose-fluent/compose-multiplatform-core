@@ -21,7 +21,7 @@
   semantics for focus, click, expand, collapse, and set-text requests, with
   focused unit coverage for the click path.
 - [ ] Close the text input architecture gap with UIKit's `NativeTextInputView` / `ComposeTextInputView` stack by replacing the current WinUI text-input lifecycle stubs with a real IME/editing bridge, including selection, composition, keyboard visibility, software keyboard control where available, and text-toolbar coordination.
-- [ ] Close the interop transaction gap with UIKit's `UIKitInteropContainer` by moving WinUI native child insertion, removal, z-order, layout, clipping, and native property updates into a render-synchronized transaction model instead of ad hoc root-content sync callbacks.
+- [x] Close the interop transaction gap with UIKit's `UIKitInteropContainer` by moving WinUI native child insertion, removal, z-order, layout, clipping, and native property updates into a render-synchronized transaction model instead of ad hoc root-content sync callbacks.
 - [ ] Close the interop input/focus gap with UIKit's cooperative/non-cooperative interaction modes by supporting WinUIView native focus transfer, native pointer/keyboard handling inside hosted controls, Compose event delivery outside hosted controls, and predictable Tab / Shift+Tab traversal across Compose and WinUI controls.
 - [ ] Close the platform-dependency gap by removing direct ABI event/property workarounds as `kotlin-winrt` generated event sources, interface registries, nullable WinRT properties, and resource/application lifecycle support become reliable in compose-winui.
 - [ ] Close the test architecture gap with UIKit's `iosTest` / `uikitInstrumentedTest` coverage by splitting the current large WinUI sample smoke into focused tests for scene/rendering, interop, accessibility, keyboard/text input, window/lifecycle, pointer/scroll, resource loading, memory/disposal, and integration launch.
@@ -116,7 +116,7 @@
   logs: verify attached Direct3D rendering, positive render sizes, non-empty
   draw bounds, and at least one nonblank rendered frame or equivalent
   skiko-winui pixel/readback diagnostic once available.
-- [ ] Move WinUI native child insertion/removal/z-order/layout/clipping updates
+- [x] Move WinUI native child insertion/removal/z-order/layout/clipping updates
   fully behind the render-synchronized interop transaction queue before using
   the original sample as an interop correctness baseline.
 - [ ] Complete enough native text input for sample use: focus entry, session

@@ -43,6 +43,7 @@ import androidx.compose.ui.node.WinUICoordinateMapper
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.skiko.RecordDrawRectRenderDecorator
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.viewinterop.WinUIInteropAction
 import androidx.compose.ui.viewinterop.WinUIInteropTransaction
 import androidx.compose.ui.viewinterop.WinUIRootContentHost
 import androidx.compose.ui.viewinterop.WinUIRootContentControl
@@ -74,6 +75,7 @@ class WinUIComposeView internal constructor(
     private val rootContentControl: WinUIRootContentControl,
     private val setRenderContent: (UIElement) -> Unit,
     private val setRootContent: (List<UIElement>) -> Unit,
+    private val scheduleInteropUpdate: (WinUIInteropAction) -> Unit,
     private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
 ) {
@@ -165,6 +167,7 @@ class WinUIComposeView internal constructor(
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
         onRootInvalidated = ::invalidateRootLayer,
+        onInteropTransactionScheduled = ::scheduleInteropTransaction,
         onAccessibilityUpdate = renderHost::notifyAccessibilityChanged,
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
@@ -312,6 +315,7 @@ class WinUIComposeView internal constructor(
     private fun render(canvas: Canvas) {
         if (isDisposed) return
         owner.measureAndLayout(sendPointerUpdate = false)
+        updateRootContent(rootNode.collectWinUIInteropRoots())
         rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
     }
 
@@ -393,12 +397,27 @@ class WinUIComposeView internal constructor(
         if (contentChanged || transaction.actions.isNotEmpty()) {
             transaction.performTransaction()
         }
+        drainPendingInteropTransactions()
+    }
+
+    private fun drainPendingInteropTransactions() {
+        while (true) {
+            val transaction = retrieveInteropTransaction()
+            if (transaction.actions.isEmpty()) return
+            transaction.performTransaction()
+        }
+    }
+
+    private fun scheduleInteropTransaction(action: WinUIInteropAction) {
+        scheduleInteropUpdate(action)
+        scheduleRootContentSync()
     }
 
     private constructor(host: WinUIRootContentHost) : this(
         host.root,
         host::setRenderContent,
         host::setRootContent,
+        host::scheduleUpdate,
         host::retrieveTransaction,
     )
 
@@ -409,6 +428,7 @@ class WinUIComposeView internal constructor(
         host.root,
         host::setRenderContent,
         host::setRootContent,
+        host::scheduleUpdate,
         host::retrieveTransaction,
         onSensitiveContentChanged,
     )

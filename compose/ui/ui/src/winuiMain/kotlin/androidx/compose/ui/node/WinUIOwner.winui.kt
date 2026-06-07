@@ -100,6 +100,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.InteropView
+import androidx.compose.ui.viewinterop.WinUIInteropAction
 import org.jetbrains.skiko.winui.WinUIAccessibilityProvider
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -115,6 +116,7 @@ internal class WinUIOwner(
     private val onSemanticsChanged: (SemanticsOwner) -> Unit = {},
     private val onLayoutChanged: (SemanticsOwner, Int) -> Unit = { _, _ -> },
     private val onScrollChanged: (Offset) -> Unit = {},
+    private val onInteropTransactionScheduled: (WinUIInteropAction) -> Unit = {},
     private val onAccessibilityUpdate: (WinUIAccessibilityUpdate) -> Unit = {},
     private val onKeepScreenOnChanged: (Boolean) -> Unit = {},
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
@@ -413,6 +415,11 @@ internal class WinUIOwner(
     override fun onInteropViewLayoutChange(view: InteropView) {
         if (isShuttingDown) return
         onMeasureAndLayoutRequested()
+    }
+
+    internal fun scheduleInteropTransaction(action: WinUIInteropAction) {
+        if (isShuttingDown) return
+        onInteropTransactionScheduled(action)
     }
 
     internal fun setInteropViewFocusRect(rect: Rect?) {

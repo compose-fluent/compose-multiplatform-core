@@ -190,12 +190,12 @@ private class WinUIViewHolder<T : UIElement>(
     private val viewFrameworkElement = view.asWinRtFrameworkElement()
     private val group = InteropViewGroup(
         Canvas().also {
-            it.requiredChildren.add(view)
             it.horizontalAlignment = HorizontalAlignment.Left
             it.verticalAlignment = VerticalAlignment.Top
         }
     )
     private var isViewAttachedToGroup = true
+    private var isNativeChildAttachedToGroup = false
     private var width = 0
     private var height = 0
     private var nativeWidth = 0
@@ -211,6 +211,8 @@ private class WinUIViewHolder<T : UIElement>(
     private var loadedFocusToken: EventRegistrationToken? = null
     private var layoutUpdatedFocusToken: EventRegistrationToken? = null
     private val releaseCleanups = mutableListOf<() -> Unit>()
+    private val pendingNativeUpdates = mutableListOf<WinUIInteropAction>()
+    private var lastKnownOwner: WinUIOwner? = null
 
     override val interopRoot: UIElement
         get() = group.uiElement
@@ -258,6 +260,33 @@ private class WinUIViewHolder<T : UIElement>(
         releaseCleanups += cleanup
     }
 
+    private fun scheduleNativeUpdate(action: WinUIInteropAction) {
+        val owner = if (layoutNode.isAttached) {
+            (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
+        } else {
+            lastKnownOwner
+        }
+        if (owner == null) {
+            pendingNativeUpdates += action
+            return
+        }
+        owner.scheduleInteropTransaction(action)
+    }
+
+    private fun flushPendingNativeUpdates() {
+        if (pendingNativeUpdates.isEmpty()) return
+        val owner = if (layoutNode.isAttached) {
+            (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
+        } else {
+            lastKnownOwner
+        } ?: return
+        val updates = pendingNativeUpdates.toList()
+        pendingNativeUpdates.clear()
+        owner.scheduleInteropTransaction {
+            updates.forEach { it.invoke() }
+        }
+    }
+
     private fun composeModifier(modifier: Modifier): Modifier =
         modifier
             .winUIFocusInteropModifier(
@@ -295,7 +324,7 @@ private class WinUIViewHolder<T : UIElement>(
     override fun getInteropView(): InteropView = interopView
 
     override fun onReuse() {
-        if (!isViewAttachedToGroup) {
+        if (!isViewAttachedToGroup || !isNativeChildAttachedToGroup) {
             attachViewToGroup()
         } else {
             resetBlock(view)
@@ -307,8 +336,11 @@ private class WinUIViewHolder<T : UIElement>(
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
         resetBlock(view)
-        group.uiElement.requiredChildren.clear()
+        scheduleNativeUpdate {
+            group.uiElement.requiredChildren.clear()
+        }
         isViewAttachedToGroup = false
+        isNativeChildAttachedToGroup = false
     }
 
     override fun onRelease() {
@@ -321,6 +353,10 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun applyLayout(width: Int, height: Int, nativeWidth: Int, nativeHeight: Int) {
+        if (!isNativeChildAttachedToGroup) {
+            attachViewToGroup()
+        }
+        flushPendingNativeUpdates()
         val changed = this.width != width ||
             this.height != height ||
             this.nativeWidth != nativeWidth ||
@@ -329,13 +365,15 @@ private class WinUIViewHolder<T : UIElement>(
         this.height = height
         this.nativeWidth = nativeWidth
         this.nativeHeight = nativeHeight
-        group.uiElement.width = width.toWinUISize()
-        group.uiElement.height = height.toWinUISize()
-        viewFrameworkElement?.let {
-            it.width = nativeWidth.toWinUISize()
-            it.height = nativeHeight.toWinUISize()
-            it.horizontalAlignment = HorizontalAlignment.Left
-            it.verticalAlignment = VerticalAlignment.Top
+        scheduleNativeUpdate {
+            group.uiElement.width = width.toWinUISize()
+            group.uiElement.height = height.toWinUISize()
+            viewFrameworkElement?.let {
+                it.width = nativeWidth.toWinUISize()
+                it.height = nativeHeight.toWinUISize()
+                it.horizontalAlignment = HorizontalAlignment.Left
+                it.verticalAlignment = VerticalAlignment.Top
+            }
         }
         updateClip()
         updateOwnerInteropBoundsIfActive()
@@ -349,8 +387,10 @@ private class WinUIViewHolder<T : UIElement>(
         val changed = positionX != x || positionY != y
         positionX = x
         positionY = y
-        Canvas.setLeft(group.uiElement, x.toDouble())
-        Canvas.setTop(group.uiElement, y.toDouble())
+        scheduleNativeUpdate {
+            Canvas.setLeft(group.uiElement, x.toDouble())
+            Canvas.setTop(group.uiElement, y.toDouble())
+        }
         updateOwnerInteropBoundsIfActive()
         updateOwnerInteropFocusRectIfFocused()
         if (changed) {
@@ -365,29 +405,39 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun applyInteraction(isUserInteractionEnabled: Boolean) {
-        group.uiElement.isHitTestVisible = initialGroupHitTestVisible && isUserInteractionEnabled
-        view.isHitTestVisible = initialViewHitTestVisible && isUserInteractionEnabled
-        view.isTabStop = initialViewTabStop && isUserInteractionEnabled
-        viewControl?.let { control ->
-            control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
+        scheduleNativeUpdate {
+            group.uiElement.isHitTestVisible = initialGroupHitTestVisible &&
                 isUserInteractionEnabled
+            view.isHitTestVisible = initialViewHitTestVisible && isUserInteractionEnabled
+            view.isTabStop = initialViewTabStop && isUserInteractionEnabled
+            viewControl?.let { control ->
+                control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
+                    isUserInteractionEnabled
+            }
         }
     }
 
     private fun applyNativeAccessibility(isNativeAccessibilityEnabled: Boolean) {
         if (isNativeAccessibilityEnabled) {
             if (nativeAccessibilityOverrideApplied) {
-                view.clearValue(requiredAccessibilityViewProperty)
+                scheduleNativeUpdate {
+                    view.clearValue(requiredAccessibilityViewProperty)
+                }
                 nativeAccessibilityOverrideApplied = false
             }
         } else {
-            AutomationProperties.setAccessibilityView(view, AccessibilityView.Raw)
+            scheduleNativeUpdate {
+                AutomationProperties.setAccessibilityView(view, AccessibilityView.Raw)
+            }
             nativeAccessibilityOverrideApplied = true
         }
     }
 
     private fun canRequestFocus(): Boolean =
-        isViewAttachedToGroup && properties.isUserInteractionEnabled && view.isTabStop
+        isViewAttachedToGroup &&
+            isNativeChildAttachedToGroup &&
+            properties.isUserInteractionEnabled &&
+            initialViewTabStop
 
     private fun requestNativeFocus(): Boolean {
         if (!canRequestFocus()) {
@@ -471,8 +521,11 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun attachViewToGroup() {
-        group.uiElement.requiredChildren.add(view)
+        scheduleNativeUpdate {
+            group.uiElement.requiredChildren.add(view)
+        }
         isViewAttachedToGroup = true
+        isNativeChildAttachedToGroup = true
         updateOwnerInteropBoundsIfActive()
     }
 
@@ -480,27 +533,35 @@ private class WinUIViewHolder<T : UIElement>(
         cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
+        pendingNativeUpdates.clear()
         restoreInteraction()
         restoreNativeAccessibility()
         clearClip()
-        group.uiElement.requiredChildren.clear()
+        scheduleNativeUpdate {
+            group.uiElement.requiredChildren.clear()
+        }
         isViewAttachedToGroup = false
+        isNativeChildAttachedToGroup = false
     }
 
     private fun restoreInteraction() {
-        group.uiElement.isHitTestVisible = initialGroupHitTestVisible
-        view.isHitTestVisible = initialViewHitTestVisible
-        view.isTabStop = initialViewTabStop
-        viewControl?.let { control ->
-            initialControlEnabled?.let {
-                control.isEnabled = it
+        scheduleNativeUpdate {
+            group.uiElement.isHitTestVisible = initialGroupHitTestVisible
+            view.isHitTestVisible = initialViewHitTestVisible
+            view.isTabStop = initialViewTabStop
+            viewControl?.let { control ->
+                initialControlEnabled?.let {
+                    control.isEnabled = it
+                }
             }
         }
     }
 
     private fun restoreNativeAccessibility() {
         if (!nativeAccessibilityOverrideApplied) return
-        view.clearValue(requiredAccessibilityViewProperty)
+        scheduleNativeUpdate {
+            view.clearValue(requiredAccessibilityViewProperty)
+        }
         nativeAccessibilityOverrideApplied = false
     }
 
@@ -516,13 +577,17 @@ private class WinUIViewHolder<T : UIElement>(
             },
             Rect(0f, 0f, width.toFloat(), height.toFloat()),
         )
-        setClip(group.uiElement, clip)
+        scheduleNativeUpdate {
+            setClip(group.uiElement, clip)
+        }
     }
 
     private fun clearClip() {
         if (clipGeometry == null) return
         clipGeometry = null
-        setClip(group.uiElement, null)
+        scheduleNativeUpdate {
+            setClip(group.uiElement, null)
+        }
     }
 
     private fun interopFocusRect(): ComposeRect =

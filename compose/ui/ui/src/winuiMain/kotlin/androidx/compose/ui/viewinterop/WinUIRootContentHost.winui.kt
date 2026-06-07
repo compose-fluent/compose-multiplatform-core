@@ -38,7 +38,7 @@ internal class WinUIRootContentHost {
         transaction.isInteropActive = content.isNotEmpty()
     }
 
-    private fun scheduleUpdate(action: () -> Unit) {
+    fun scheduleUpdate(action: () -> Unit) {
         transaction.add(action)
     }
 
