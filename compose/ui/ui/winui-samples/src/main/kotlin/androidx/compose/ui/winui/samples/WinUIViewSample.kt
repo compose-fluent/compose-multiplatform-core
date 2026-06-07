@@ -444,6 +444,7 @@ private enum class WinUIViewSampleMode(
     Interop("interop"),
     Owner("owner"),
     Pointer("pointer"),
+    Rendering("rendering"),
     Shutdown("shutdown"),
     TextInput("text-input"),
     Skiko("skiko");
@@ -490,6 +491,7 @@ private object ComposeWinUiSmokeApp {
                         WinUIViewSampleMode.Interop -> runInteropSmokeSuite()
                         WinUIViewSampleMode.Owner -> runOwnerSmokeSuite()
                         WinUIViewSampleMode.Pointer -> runPointerSmokeSuite()
+                        WinUIViewSampleMode.Rendering -> runRenderingSmokeSuite()
                         WinUIViewSampleMode.Shutdown -> runShutdownSmokeSuite()
                         WinUIViewSampleMode.TextInput -> runTextInputSmokeSuite()
                         WinUIViewSampleMode.Full,
@@ -819,6 +821,16 @@ private object ComposeWinUiSmokeApp {
         runWinUIPointerScrollSmoke()
         runWinUIViewPointerInteropSmoke()
         runWinUIPointerCancelOnDisposeSmoke()
+    }
+
+    private suspend fun runRenderingSmokeSuite() {
+        runWinUILayoutCompletedListenerSmoke()
+        runWinUIOwnerLayerTransformSmoke()
+        runWinUIViewContainerSyncSmoke()
+        runWinUISkikoRuntimeClasspathSmoke()
+        runWinUISkikoUnattachedSchedulerSmoke()
+        runWinUISkikoRenderDiagnosticsSmoke()
+        println("compose-winui-sample: rendering suite")
     }
 
     private suspend fun runShutdownSmokeSuite() {

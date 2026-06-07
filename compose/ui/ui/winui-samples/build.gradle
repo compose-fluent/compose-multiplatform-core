@@ -143,6 +143,11 @@ registerWinUISampleTask(
     "pointer"
 )
 registerWinUISampleTask(
+    "runWinUIRenderingSample",
+    "Runs the compose-winui rendering host and interop transaction smoke sample.",
+    "rendering"
+)
+registerWinUISampleTask(
     "runWinUIShutdownSample",
     "Runs the compose-winui shutdown and disposal smoke sample.",
     "shutdown"
