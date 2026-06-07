@@ -167,7 +167,7 @@
 - [x] Support basic pointer cooperation so native WinUI controls handle pointer input inside `WinUIView` bounds while Compose receives pointer input outside interop views.
 - [x] Apply `Modifier.pointerHoverIcon(...)` to the WinUI root through a projected root element subclass that can set `UIElement.ProtectedCursor` through normal protected-member access; do not use direct protected-interface slot calls.
 - [x] Support keyboard/native-focus cooperation so embedded WinUI controls handle their own focused keyboard input while Compose keeps predictable key dispatch outside interop views.
-- [ ] Defer full nested scroll parity until after basic AndroidView-equivalent lifecycle, layout, focus, and input behavior is stable.
+- [x] Defer full nested scroll parity until after basic AndroidView-equivalent lifecycle, layout, focus, and input behavior is stable.
 
 ## kotlin-winrt dependencies
 - [x] Consume `kotlin-winrt` from Maven Central snapshots for WinRT runtime, authoring, generated projection support, and the Gradle projection plugin.
