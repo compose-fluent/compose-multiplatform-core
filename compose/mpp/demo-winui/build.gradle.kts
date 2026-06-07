@@ -255,7 +255,8 @@ val stripSkikoWinUiProjectionClasses = tasks.register("stripSkikoWinUiProjection
         val sourceJar = skikoWinUiJar.get().files.singleOrNull()
             ?: error("Unable to find skiko-winui jar on WinUI MPP sample runtime classpath.")
         val externalProjectionEntries = projectionClassEntries(
-            runtimeClasspath.get().files.filter { it != sourceJar }
+            runtimeClasspath.get().files.filter { it != sourceJar } +
+                localWinUiJarProjects.map { path -> localWinUiJar(path).get() }
         )
         val targetJar = outputFile.get().asFile
         targetJar.parentFile.mkdirs()

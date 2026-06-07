@@ -43,6 +43,12 @@ baseline, not every retest attempt.
   is tracked separately as `KWINRT-032`. Remove this workaround once the
   published snapshot no longer contains shared projection classes and
   compose-winui can own the required projection surface normally.
+- **2026-06-08 CoreText projection retest:** adding explicit
+  `Windows.UI.Text.Core.*` declarations to compose-ui exposed duplicate
+  `windows/ui/text/core/**`, `windows/ui/text/**`, and
+  `windows/globalization/**` classes in the staged `skiko-winui` jar. The
+  compose-side strip task now compares against local WinUI jars as well as
+  external runtime jars before staging `skiko-winui-projection-free.jar`.
 
 ## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
 

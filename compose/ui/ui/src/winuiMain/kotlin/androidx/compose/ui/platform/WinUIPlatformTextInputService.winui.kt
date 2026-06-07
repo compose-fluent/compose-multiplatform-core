@@ -54,6 +54,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     internal val currentValue: TextFieldValue?
         get() = activeInputSession?.value
 
+    internal val currentImeOptions: ImeOptions?
+        get() = activeInputSession?.imeOptions
+
     internal val previousValue: TextFieldValue?
         get() = activeInputSession?.oldValue
 
@@ -66,6 +69,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         onEditCommand: (List<EditCommand>) -> Unit,
         onImeActionPerformed: (ImeAction) -> Unit,
     ) {
+        nativeBridge.disposeCoreTextSession()
         activeInputSession = WinUITextInputSessionState(
             value = value,
             imeOptions = imeOptions,
@@ -75,6 +79,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     override fun stopInput() {
+        nativeBridge.disposeCoreTextSession()
         activeInputSession = null
     }
 
@@ -95,6 +100,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             oldValue = oldValue,
             value = newValue,
         )
+        nativeBridge.updateCoreTextState(oldValue, newValue)
     }
 
     override fun updateTextLayoutResult(
@@ -112,6 +118,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             innerTextFieldBounds = innerTextFieldBounds,
             decorationBoxBounds = decorationBoxBounds,
         )
+        nativeBridge.notifyCoreTextLayoutChanged()
     }
 
     internal fun enterNativeTextInputFocus(): Boolean {
@@ -165,6 +172,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     internal fun resetForTest() {
+        nativeBridge.disposeCoreTextSession()
         activeInputSession = null
         activeInputMethodSession = null
     }
@@ -186,14 +194,91 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 internal class WinUINativeTextInputBridge(
     private val textInputService: WinUIPlatformTextInputService,
 ) {
+    private var coreTextSession: WinUICoreTextInputSession? = null
+
     val isFocused: Boolean
         get() = textInputService.isNativeTextInputFocused
+
+    val isCoreTextSessionActive: Boolean
+        get() = coreTextSession != null
 
     fun enterFocus(): Boolean =
         textInputService.enterNativeTextInputFocus()
 
     fun exitFocus(): Boolean =
-        textInputService.exitNativeTextInputFocus()
+        textInputService.exitNativeTextInputFocus().also { didExit ->
+            if (didExit) {
+                coreTextSession?.notifyFocusLeave()
+            }
+        }
+
+    fun attachCoreTextForCurrentInput(
+        notifyNativeFocus: Boolean = false,
+    ): Boolean {
+        val value = textInputService.currentValue ?: return false
+        val imeOptions = textInputService.currentImeOptions ?: return false
+        return attachCoreTextForCurrentInput(
+            editContext = null,
+            initialValue = value,
+            imeOptions = imeOptions,
+            notifyNativeFocus = notifyNativeFocus,
+        )
+    }
+
+    internal fun attachCoreTextForCurrentInput(
+        editContext: WinUICoreTextEditContext,
+        notifyNativeFocus: Boolean = false,
+    ): Boolean {
+        val value = textInputService.currentValue ?: return false
+        val imeOptions = textInputService.currentImeOptions ?: return false
+        return attachCoreTextForCurrentInput(
+            editContext = editContext,
+            initialValue = value,
+            imeOptions = imeOptions,
+            notifyNativeFocus = notifyNativeFocus,
+        )
+    }
+
+    private fun attachCoreTextForCurrentInput(
+        editContext: WinUICoreTextEditContext?,
+        initialValue: TextFieldValue,
+        imeOptions: ImeOptions,
+        notifyNativeFocus: Boolean,
+    ): Boolean {
+        disposeCoreTextSession()
+        coreTextSession = if (editContext != null) {
+            WinUICoreTextInputSession.create(
+                initialValue = initialValue,
+                imeOptions = imeOptions,
+                editContext = editContext,
+                dispatchEditCommands = textInputService::sendEditCommands,
+            )
+        } else {
+            WinUICoreTextInputSession.create(
+                initialValue = initialValue,
+                imeOptions = imeOptions,
+                dispatchEditCommands = textInputService::sendEditCommands,
+            )
+        }
+        textInputService.enterNativeTextInputFocus()
+        if (notifyNativeFocus) {
+            coreTextSession?.notifyFocusEnter()
+        }
+        return true
+    }
+
+    internal fun updateCoreTextState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
+        coreTextSession?.updateState(oldValue, newValue)
+    }
+
+    internal fun notifyCoreTextLayoutChanged() {
+        coreTextSession?.notifyLayoutChanged()
+    }
+
+    internal fun disposeCoreTextSession() {
+        coreTextSession?.dispose()
+        coreTextSession = null
+    }
 
     fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
         textInputService.commitText(text, newCursorPosition)
