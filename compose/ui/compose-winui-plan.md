@@ -104,7 +104,7 @@
 - [x] Replace current `ui-graphics` WinUI stubs that affect visible sample
   output with real Skia-backed implementations or explicit tracked gaps,
   including path/effect/image/brush/layer behavior used by the sample.
-- [ ] Replace current `ui-text` WinUI stubs that affect visible sample output
+- [x] Replace current `ui-text` WinUI stubs that affect visible sample output
   with real text measurement/rendering/font behavior or explicit tracked gaps,
   including font resolution, paragraph layout, selection geometry, and text
   input integration used by the sample.

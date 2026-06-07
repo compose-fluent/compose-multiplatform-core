@@ -196,7 +196,15 @@ internal class WinUIParagraph(
     override val lineCount: Int = lines.size
     override val placeholderRects: List<Rect?> = emptyList()
 
-    override fun getPathForRange(start: Int, end: Int): Path = Path()
+    override fun getPathForRange(start: Int, end: Int): Path {
+        val path = Path()
+        val boundedStart = start.coerceIn(0, text.length)
+        val boundedEnd = end.coerceIn(boundedStart, text.length)
+        for (offset in boundedStart until boundedEnd) {
+            path.addRect(getBoundingBox(offset))
+        }
+        return path
+    }
     override fun getCursorRect(offset: Int): Rect {
         val line = getLineForOffset(offset)
         val lineStart = getLineStart(line)
@@ -264,7 +272,20 @@ internal class WinUIParagraph(
         inclusionStrategy: TextInclusionStrategy,
     ): TextRange = TextRange(getOffsetForPosition(rect.topLeft), getOffsetForPosition(rect.bottomRight))
 
-    override fun getBoundingBox(offset: Int): Rect = getCursorRect(offset)
+    override fun getBoundingBox(offset: Int): Rect {
+        val boundedOffset = offset.coerceIn(0, text.length)
+        val line = getLineForOffset(boundedOffset)
+        val lineStart = getLineStart(line)
+        val lineOffset = (boundedOffset - lineStart).coerceIn(0, lines[line].length)
+        val left = measureText(lines[line].take(lineOffset))
+        val right = if (lineOffset < lines[line].length) {
+            measureText(lines[line].take(lineOffset + 1))
+        } else {
+            left + 1f
+        }
+        val top = getLineTop(line)
+        return Rect(left, top, right.coerceAtLeast(left + 1f), top + lineHeightPx)
+    }
     override fun fillBoundingBoxes(range: TextRange, array: FloatArray, arrayStart: Int) {
         var index = arrayStart
         for (offset in range.min until range.max) {
