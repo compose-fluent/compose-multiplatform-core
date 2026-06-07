@@ -7,7 +7,7 @@
 - [x] Preserve WinUI/XAML actuals where `skikoMain` uses generic or Win32-backed behavior; use a WinUI-first compile bridge until `skiko-winui` can supply the rendering sources that should be shared.
 - [x] Use `kotlin-winrt` as the WinRT and WinUI projection/runtime foundation instead of duplicating COM or Windows App SDK bootstrap code in `compose-ui`.
 - [x] Share WinUI-specific Compose semantics in `winuiMain`, with `winuiJvmMain` providing current JVM runtime details and `winuiMingwMain` deferred until `kotlin-winrt` provides mingw support.
-- [ ] Treat Android `AndroidView` interop as the behavioral reference for factory, update, reuse, detach, release, layout, focus, and input behavior.
+- [x] Treat Android `AndroidView` interop as the behavioral reference for factory, update, reuse, detach, release, layout, focus, and input behavior.
 
 ## UIKit target parity gap
 - [ ] Treat the existing UIKit target as the near-term architecture reference for production readiness, not just Android/Desktop. The WinUI target currently has a real `Owner`, recomposer, application/window domain, and basic `WinUIView` interop, but it is still well behind UIKit in rendering, accessibility, text input, native interop synchronization, and test depth.
