@@ -996,3 +996,12 @@ baseline, not every retest attempt.
   generateProjection = true }` configuration in Groovy build scripts until the
   plugin supports the README path for these modules. `compose/mpp/demo-winui`,
   which uses Kotlin DSL, already uses the no-`generateProjection` form.
+- **2026-06-08 retest:** still open. The current Maven snapshot still does not
+  expose the README's `windowsSdk(version, includeExtensions)` path to Groovy
+  builds (`Could not find method windowsSdk() for arguments [10.0.26100.0,
+  false]`). The legacy three-argument form with projection generation disabled
+  configures, but `:compose:ui:ui:compileKotlinWinuiJvm` still fails with
+  unresolved explicit types including `FocusManager`, `Clipboard`,
+  `UISettings`, `InputSystemCursor`, `MenuFlyout`, `Launcher`, `Canvas`, and
+  `ContentControl`. Keep the compose-ui and winui-samples full-projection
+  workaround for now.
