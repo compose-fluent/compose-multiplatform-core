@@ -532,6 +532,131 @@ tasks.register("validateWinUIMppSampleApiSurface") {
     }
 }
 
+tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
+    group = "verification"
+    description = "Validates the compose-winui kotlin-winrt KMP graph baseline."
+    dependsOn("compileKotlinWinuiJvm")
+    dependsOn(localWinUiJarProjects.map { path -> "$path:winuiJvmJar" })
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+    inputs.files(localWinUiJarProjects.map(::localWinUiJar))
+    outputs.file(layout.buildDirectory.file("validation/winui-kotlin-winrt-kmp-graph.txt"))
+
+    doLast {
+        val buildScript = layout.projectDirectory.file("build.gradle.kts").asFile.readText()
+        val requiredBuildScriptTokens = listOf(
+            "jvm(\"winuiJvm\")",
+            "kotlin.srcDir(\"../demo/src/commonMain/kotlin\")",
+            "kotlin.srcDir(\"../demo/src/winuiJvmMain/kotlin\")",
+            "dependsOn(localWinUiJarProjects.map { path -> \"${'$'}path:winuiJvmJar\" })",
+        )
+        val missingBuildScriptTokens = requiredBuildScriptTokens.filterNot(buildScript::contains)
+        check(missingBuildScriptTokens.isEmpty()) {
+            "WinUI MPP sample KMP graph is missing expected source-set/task wiring: " +
+                missingBuildScriptTokens
+        }
+
+        val uiBuildDir = rootProject.project(":compose:ui:ui").layout.buildDirectory.get().asFile
+        val uiIdentity = uiBuildDir.resolve("generated/kotlin-winrt/identity/kotlin-winrt.json")
+        check(uiIdentity.isFile && uiIdentity.length() > 0L) {
+            "Missing compose-ui WinRT identity: ${uiIdentity.absolutePath}"
+        }
+        val uiIdentityText = uiIdentity.readText()
+        val requiredIdentityTokens = listOf(
+            "\"model\": \"library\"",
+            "\"Microsoft.UI.Xaml.Application\"",
+            "\"Microsoft.UI.Xaml.Controls.Canvas\"",
+            "\"authoredHostManifests\"",
+            "\"compilerSupportManifests\"",
+            "ui.host.json",
+        )
+        val missingIdentityTokens = requiredIdentityTokens.filterNot(uiIdentityText::contains)
+        check(missingIdentityTokens.isEmpty()) {
+            "compose-ui WinRT identity is missing expected transitive identity data: " +
+                missingIdentityTokens
+        }
+
+        val localJars = localWinUiJarProjects.associateWith { path -> localWinUiJar(path).get() }
+        localJars.forEach { (path, jar) ->
+            check(jar.isFile && jar.length() > 0L) {
+                "Missing local WinUI jar for $path: ${jar.absolutePath}"
+            }
+        }
+        val uiJar = localJars.getValue(":compose:ui:ui")
+        val uiJarEntries = ZipFile(uiJar).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .map { it.name }
+                .toSet()
+        }
+        val requiredUiJarEntries = listOf(
+            "io/github/composefluent/winrt/projections/support/WinRTCompilerSupportManifest.class",
+            "io/github/composefluent/winrt/projections/support/WinRTAuthoringTypeDetailsRegistrar_ui.class",
+            "kotlin-winrt/type-index.tsv",
+            "kotlin-winrt-authoring/ui.host.json",
+            "kotlin-winrt-authoring/ui.winmd",
+        )
+        val missingUiJarEntries = requiredUiJarEntries.filterNot(uiJarEntries::contains)
+        check(missingUiJarEntries.isEmpty()) {
+            "compose-ui WinUI jar is missing kotlin-winrt support artifacts: " +
+                missingUiJarEntries
+        }
+
+        val localProjectionOwners = linkedMapMapOfProjectionOwners(localJars.values.toSet())
+            .filterValues { it.size > 1 }
+        check(localProjectionOwners.isEmpty()) {
+            val sample = localProjectionOwners.entries.take(50).joinToString(separator = "\n") {
+                    (entry, owners) ->
+                "  $entry: ${owners.joinToString()}"
+            }
+            "Local WinUI jars contain duplicate generated projection owners:\n$sample"
+        }
+
+        val demoClassesDir = layout.buildDirectory
+            .dir("classes/kotlin/winuiJvm/main")
+            .get()
+            .asFile
+        val requiredDemoFiles = listOf(
+            demoClassesDir.resolve(
+                "io/github/composefluent/winrt/projections/support/" +
+                    "WinRTCompilerSupportManifest.class"
+            ),
+            demoClassesDir.resolve("kotlin-winrt/type-index.tsv"),
+            demoClassesDir.resolve("kotlin-winrt/authored-candidates.tsv"),
+            demoClassesDir.resolve("kotlin-winrt-authoring/demo-winui.host.json"),
+            demoClassesDir.resolve("kotlin-winrt-authoring/demo-winui.winmd"),
+        )
+        requiredDemoFiles.forEach { output ->
+            check(output.isFile) {
+                "Missing demo-winui kotlin-winrt output: ${output.absolutePath}"
+            }
+        }
+        val requiredNonEmptyDemoOutputs = requiredDemoFiles.filterNot {
+            val path = it.path.replace(File.separatorChar, '/')
+            path.endsWith("/kotlin-winrt/type-index.tsv") ||
+                path.endsWith("/kotlin-winrt/authored-candidates.tsv")
+        }
+        requiredNonEmptyDemoOutputs.forEach { output ->
+            check(output.length() > 0L) {
+                "Empty demo-winui kotlin-winrt output: ${output.absolutePath}"
+            }
+        }
+
+        val report = outputs.files.singleFile
+        report.parentFile.mkdirs()
+        report.writeText(
+            buildString {
+                appendLine("compose-winui kotlin-winrt KMP graph baseline validation passed.")
+                appendLine("customizedSourceSets=winuiJvmMain includes selected common and WinUI sources")
+                appendLine("transitiveWinRtIdentity=${uiIdentity.absolutePath}")
+                appendLine("supportArtifactJar=${uiJar.name}")
+                appendLine("localProjectionOwnerJars=${localJars.values.joinToString { it.name }}")
+                appendLine("duplicateLocalProjectionOwners=0")
+                appendLine("demoWinRtOutputs=${requiredDemoFiles.joinToString { it.name }}")
+            }
+        )
+    }
+}
+
 val validateWinUINavigationCompileOnly = tasks.register<Exec>("validateWinUINavigationCompileOnly") {
     group = "verification"
     description = "Compiles the Navigation Compose and Navigation3 UI WinUI JVM targets."
@@ -551,6 +676,7 @@ tasks.register("validateWinUIMppSampleCompileOnly") {
     description = "Compiles the original MPP demo through the compose-winui JVM target."
     dependsOn("compileKotlinWinuiJvm")
     dependsOn(validateWinUINavigationCompileOnly)
+    dependsOn("validateWinUiKotlinWinRtKmpGraphBaseline")
 }
 
 val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSampleLaunchWindow") {
