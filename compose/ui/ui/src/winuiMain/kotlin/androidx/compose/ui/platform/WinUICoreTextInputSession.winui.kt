@@ -109,10 +109,11 @@ internal class WinUICoreTextInputSession private constructor(
                 return@addTextUpdating
             }
             val commands = buildList {
-                add(SetSelectionCommand(event.range.startCaretPosition, event.range.endCaretPosition))
+                val range = event.range
+                add(SetSelectionCommand(range.startCaretPosition, range.endCaretPosition))
                 if (compositionActive) {
                     add(SetComposingTextCommand(event.text, 1))
-                } else if (event.text.isNotEmpty()) {
+                } else if (event.text.isNotEmpty() || !range.isCollapsed) {
                     add(CommitTextCommand(event.text, 1))
                 }
                 add(SetSelectionCommand(
@@ -407,6 +408,9 @@ private class WinUIRealCoreTextSelectionUpdatingEvent(
 
 private fun TextRange.toCoreTextRange(): CoreTextRange =
     CoreTextRange(start, end)
+
+private val CoreTextRange.isCollapsed: Boolean
+    get() = startCaretPosition == endCaretPosition
 
 private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
     textBounds = bounds.innerTextFieldBounds.toWinRtRect()

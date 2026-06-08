@@ -322,6 +322,22 @@ class WinUIPlatformTextInputServiceTest {
         editContext.dispatchSelectionUpdating(selectionUpdate)
         assertEquals(CoreTextSelectionUpdatingResult.Succeeded, selectionUpdate.result)
         assertEquals(listOf(SetSelectionCommand(0, 2)), editCommandBatches.last())
+
+        val deleteUpdate = FakeCoreTextTextUpdatingEvent(
+            range = CoreTextRange(1, 4),
+            text = "",
+            newSelection = CoreTextRange(1, 1),
+        )
+        editContext.dispatchTextUpdating(deleteUpdate)
+        assertEquals(CoreTextTextUpdatingResult.Succeeded, deleteUpdate.result)
+        assertEquals(
+            listOf(
+                SetSelectionCommand(1, 4),
+                CommitTextCommand("", 1),
+                SetSelectionCommand(1, 1),
+            ),
+            editCommandBatches.last(),
+        )
     }
 
     @Test
