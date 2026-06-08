@@ -27,6 +27,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import windows.foundation.TypedEventHandler
 import windows.foundation.Rect as WinRtRect
 import windows.ui.text.core.CoreTextEditContext
+import windows.ui.text.core.CoreTextFormatUpdatingEventArgs
+import windows.ui.text.core.CoreTextFormatUpdatingResult
 import windows.ui.text.core.CoreTextInputPaneDisplayPolicy
 import windows.ui.text.core.CoreTextInputScope
 import windows.ui.text.core.CoreTextLayoutRequest
@@ -141,6 +143,11 @@ internal class WinUICoreTextInputSession private constructor(
                 CoreTextSelectionUpdatingResult.Failed
             }
         }
+        eventTokens += editContext.addFormatUpdating { event ->
+            if (!event.isCanceled) {
+                event.result = CoreTextFormatUpdatingResult.Failed
+            }
+        }
         eventTokens += editContext.addCompositionStarted {
             compositionActive = true
         }
@@ -192,6 +199,7 @@ internal interface WinUICoreTextEditContext {
     fun addLayoutRequested(handler: (WinUICoreTextLayoutRequest) -> Unit): WinUICoreTextEventToken
     fun addTextUpdating(handler: (WinUICoreTextTextUpdatingEvent) -> Unit): WinUICoreTextEventToken
     fun addSelectionUpdating(handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit): WinUICoreTextEventToken
+    fun addFormatUpdating(handler: (WinUICoreTextFormatUpdatingEvent) -> Unit): WinUICoreTextEventToken
     fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken
     fun addCompositionCompleted(handler: () -> Unit): WinUICoreTextEventToken
     fun removeEventHandler(token: WinUICoreTextEventToken)
@@ -232,6 +240,11 @@ internal interface WinUICoreTextSelectionUpdatingEvent {
     val selection: CoreTextRange
     val isCanceled: Boolean
     var result: CoreTextSelectionUpdatingResult
+}
+
+internal interface WinUICoreTextFormatUpdatingEvent {
+    val isCanceled: Boolean
+    var result: CoreTextFormatUpdatingResult
 }
 
 internal data class WinUICoreTextEventToken(
@@ -291,6 +304,13 @@ private class WinUIRealCoreTextEditContext(
         editContext.addSelectionUpdating(TypedEventHandler { _, args ->
                 handler(WinUIRealCoreTextSelectionUpdatingEvent(args))
             }).let { token -> WinUICoreTextEventToken { editContext.removeSelectionUpdating(token) } }
+
+    override fun addFormatUpdating(
+        handler: (WinUICoreTextFormatUpdatingEvent) -> Unit,
+    ): WinUICoreTextEventToken =
+        editContext.addFormatUpdating(TypedEventHandler { _, args ->
+                handler(WinUIRealCoreTextFormatUpdatingEvent(args))
+            }).let { token -> WinUICoreTextEventToken { editContext.removeFormatUpdating(token) } }
 
     override fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken =
         editContext.addCompositionStarted(TypedEventHandler { _, args ->
@@ -400,6 +420,18 @@ private class WinUIRealCoreTextSelectionUpdatingEvent(
     override val isCanceled: Boolean
         get() = event.isCanceled
     override var result: CoreTextSelectionUpdatingResult
+        get() = event.result
+        set(value) {
+            event.result = value
+        }
+}
+
+private class WinUIRealCoreTextFormatUpdatingEvent(
+    private val event: CoreTextFormatUpdatingEventArgs,
+) : WinUICoreTextFormatUpdatingEvent {
+    override val isCanceled: Boolean
+        get() = event.isCanceled
+    override var result: CoreTextFormatUpdatingResult
         get() = event.result
         set(value) {
             event.result = value

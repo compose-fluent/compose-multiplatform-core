@@ -54,6 +54,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import windows.ui.text.core.CoreTextFormatUpdatingResult
 import windows.ui.text.core.CoreTextInputPaneDisplayPolicy
 import windows.ui.text.core.CoreTextInputScope
 import windows.ui.text.core.CoreTextRange
@@ -323,6 +324,10 @@ class WinUIPlatformTextInputServiceTest {
         assertEquals(CoreTextSelectionUpdatingResult.Succeeded, selectionUpdate.result)
         assertEquals(listOf(SetSelectionCommand(0, 2)), editCommandBatches.last())
 
+        val formatUpdate = FakeCoreTextFormatUpdatingEvent()
+        editContext.dispatchFormatUpdating(formatUpdate)
+        assertEquals(CoreTextFormatUpdatingResult.Failed, formatUpdate.result)
+
         val deleteUpdate = FakeCoreTextTextUpdatingEvent(
             range = CoreTextRange(1, 4),
             text = "",
@@ -428,7 +433,7 @@ class WinUIPlatformTextInputServiceTest {
         WinUIPlatformTextInputService.stopInput()
 
         assertFalse(bridge.isCoreTextSessionActive)
-        assertEquals(7, editContext.removedHandlerCount)
+        assertEquals(8, editContext.removedHandlerCount)
     }
 
     @Test
@@ -627,6 +632,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
     private var layoutRequested: ((WinUICoreTextLayoutRequest) -> Unit)? = null
     private var textUpdating: ((WinUICoreTextTextUpdatingEvent) -> Unit)? = null
     private var selectionUpdating: ((WinUICoreTextSelectionUpdatingEvent) -> Unit)? = null
+    private var formatUpdating: ((WinUICoreTextFormatUpdatingEvent) -> Unit)? = null
     private var compositionStarted: (() -> Unit)? = null
     private var compositionCompleted: (() -> Unit)? = null
 
@@ -662,6 +668,13 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
         handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit,
     ): WinUICoreTextEventToken {
         selectionUpdating = handler
+        return token()
+    }
+
+    override fun addFormatUpdating(
+        handler: (WinUICoreTextFormatUpdatingEvent) -> Unit,
+    ): WinUICoreTextEventToken {
+        formatUpdating = handler
         return token()
     }
 
@@ -719,6 +732,10 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     fun dispatchSelectionUpdating(event: WinUICoreTextSelectionUpdatingEvent) {
         selectionUpdating?.invoke(event)
+    }
+
+    fun dispatchFormatUpdating(event: WinUICoreTextFormatUpdatingEvent) {
+        formatUpdating?.invoke(event)
     }
 
     fun dispatchCompositionStarted() {
@@ -783,4 +800,10 @@ private class FakeCoreTextSelectionUpdatingEvent(
     override val isCanceled: Boolean = false,
 ) : WinUICoreTextSelectionUpdatingEvent {
     override var result: CoreTextSelectionUpdatingResult = CoreTextSelectionUpdatingResult.Failed
+}
+
+private class FakeCoreTextFormatUpdatingEvent(
+    override val isCanceled: Boolean = false,
+) : WinUICoreTextFormatUpdatingEvent {
+    override var result: CoreTextFormatUpdatingResult = CoreTextFormatUpdatingResult.Succeeded
 }
