@@ -16,17 +16,32 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.MultiParagraph
+import androidx.compose.ui.text.TextLayoutInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -401,6 +416,38 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
+    fun updateTextLayoutResultStoresRootTransformedBoundsAndNotifiesCoreTextLayout() {
+        val bridge = WinUIPlatformTextInputService.nativeBridge
+        val editContext = FakeCoreTextEditContext()
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("hello", selection = TextRange(1)),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
+
+        WinUIPlatformTextInputService.updateTextLayoutResult(
+            textFieldValue = TextFieldValue("hello", selection = TextRange(1)),
+            offsetMapping = OffsetMapping.Identity,
+            textLayoutResult = testTextLayoutResult("hello"),
+            textFieldToRootTransform = { matrix -> matrix.setTranslate(Offset(20f, 30f)) },
+            innerTextFieldBounds = Rect(1f, 2f, 11f, 12f),
+            decorationBoxBounds = Rect(0f, 1f, 12f, 13f),
+        )
+
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(21f, 32f, 31f, 42f),
+                decorationBoxBounds = Rect(20f, 31f, 32f, 43f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
+        )
+        assertEquals(1, editContext.layoutChangedCount)
+    }
+
+    @Test
     fun startInputReplacesPreviousSessionCallbacks() {
         val firstCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
         val secondCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
@@ -502,6 +549,38 @@ class WinUIPlatformTextInputServiceTest {
 
 private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodRequest
 
+private fun testTextLayoutResult(text: String): TextLayoutResult {
+    val annotatedString = AnnotatedString(text)
+    val density = Density(1f)
+    val constraints = Constraints(maxWidth = 100)
+    val fontFamilyResolver = createFontFamilyResolver()
+    val layoutInput = TextLayoutInput(
+        text = annotatedString,
+        style = TextStyle.Default,
+        placeholders = emptyList(),
+        maxLines = Int.MAX_VALUE,
+        softWrap = true,
+        overflow = TextOverflow.Clip,
+        density = density,
+        layoutDirection = LayoutDirection.Ltr,
+        fontFamilyResolver = fontFamilyResolver,
+        constraints = constraints,
+    )
+    val multiParagraph = MultiParagraph(
+        annotatedString = annotatedString,
+        style = TextStyle.Default,
+        constraints = constraints,
+        density = density,
+        fontFamilyResolver = fontFamilyResolver,
+    )
+    return TextLayoutResult(layoutInput, multiParagraph, IntSize(100, multiParagraph.height.toInt()))
+}
+
+private fun Matrix.setTranslate(offset: Offset) {
+    reset()
+    translate(offset.x, offset.y)
+}
+
 private fun assertCoreTextRangeEquals(expected: CoreTextRange, actual: CoreTextRange) {
     assertEquals(expected.startCaretPosition, actual.startCaretPosition)
     assertEquals(expected.endCaretPosition, actual.endCaretPosition)
@@ -515,6 +594,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     var didNotifyFocusEnter = false
     var removedHandlerCount = 0
+    var layoutChangedCount = 0
     val textChanges = mutableListOf<FakeTextChange>()
     val selectionChanges = mutableListOf<CoreTextRange>()
 
@@ -585,7 +665,9 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
         selectionChanges += selection
     }
 
-    override fun notifyLayoutChanged() = Unit
+    override fun notifyLayoutChanged() {
+        layoutChangedCount++
+    }
 
     fun dispatchTextRequested(request: WinUICoreTextTextRequest) {
         textRequested?.invoke(request)

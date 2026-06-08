@@ -63,6 +63,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     internal val currentInputMethodRequest: PlatformTextInputMethodRequest?
         get() = activeInputMethodSession?.request
 
+    internal val currentTextLayoutBoundsInRoot: WinUITextLayoutBounds?
+        get() = activeInputSession?.textLayoutBoundsInRoot
+
     override fun startInput(
         value: TextFieldValue,
         imeOptions: ImeOptions,
@@ -112,12 +115,19 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         innerTextFieldBounds: Rect,
         decorationBoxBounds: Rect,
     ) {
+        val textFieldToRootMatrix = Matrix()
+        textFieldToRootTransform(textFieldToRootMatrix)
+        val textLayoutBoundsInRoot = WinUITextLayoutBounds(
+            innerTextFieldBounds = textFieldToRootMatrix.map(innerTextFieldBounds),
+            decorationBoxBounds = textFieldToRootMatrix.map(decorationBoxBounds),
+        )
         activeInputSession = activeInputSession?.copy(
             textFieldValue = textFieldValue,
             offsetMapping = offsetMapping,
             textLayoutResult = textLayoutResult,
             innerTextFieldBounds = innerTextFieldBounds,
             decorationBoxBounds = decorationBoxBounds,
+            textLayoutBoundsInRoot = textLayoutBoundsInRoot,
         )
         nativeBridge.notifyCoreTextLayoutChanged()
     }
@@ -332,9 +342,15 @@ private data class WinUITextInputSessionState(
     val textLayoutResult: TextLayoutResult? = null,
     val innerTextFieldBounds: Rect? = null,
     val decorationBoxBounds: Rect? = null,
+    val textLayoutBoundsInRoot: WinUITextLayoutBounds? = null,
 )
 
 private data class WinUITextInputMethodSessionState(
     val request: PlatformTextInputMethodRequest,
     val isSoftwareKeyboardVisible: Boolean,
+)
+
+internal data class WinUITextLayoutBounds(
+    val innerTextFieldBounds: Rect,
+    val decorationBoxBounds: Rect,
 )
