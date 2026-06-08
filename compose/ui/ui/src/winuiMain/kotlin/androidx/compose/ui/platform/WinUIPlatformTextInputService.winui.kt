@@ -271,12 +271,14 @@ internal class WinUINativeTextInputBridge(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
                 editContext = editContext,
+                currentLayoutBounds = { textInputService.currentTextLayoutBoundsInRoot },
                 dispatchEditCommands = textInputService::sendEditCommands,
             )
         } else {
             WinUICoreTextInputSession.create(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
+                currentLayoutBounds = { textInputService.currentTextLayoutBoundsInRoot },
                 dispatchEditCommands = textInputService::sendEditCommands,
             )
         }

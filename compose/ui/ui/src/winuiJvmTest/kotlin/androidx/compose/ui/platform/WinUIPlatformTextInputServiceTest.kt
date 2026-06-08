@@ -412,7 +412,7 @@ class WinUIPlatformTextInputServiceTest {
         WinUIPlatformTextInputService.stopInput()
 
         assertFalse(bridge.isCoreTextSessionActive)
-        assertEquals(6, editContext.removedHandlerCount)
+        assertEquals(7, editContext.removedHandlerCount)
     }
 
     @Test
@@ -445,6 +445,14 @@ class WinUIPlatformTextInputServiceTest {
             WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
         )
         assertEquals(1, editContext.layoutChangedCount)
+
+        val layoutRequest = FakeCoreTextLayoutRequest()
+        editContext.dispatchLayoutRequested(layoutRequest)
+
+        assertEquals(Rect(21f, 32f, 31f, 42f), layoutRequest.textBounds)
+        assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.controlBounds)
+        assertEquals(Rect(21f, 32f, 31f, 42f), layoutRequest.visualPixelsTextBounds)
+        assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.visualPixelsControlBounds)
     }
 
     @Test
@@ -600,6 +608,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     private var textRequested: ((WinUICoreTextTextRequest) -> Unit)? = null
     private var selectionRequested: ((WinUICoreTextSelectionRequest) -> Unit)? = null
+    private var layoutRequested: ((WinUICoreTextLayoutRequest) -> Unit)? = null
     private var textUpdating: ((WinUICoreTextTextUpdatingEvent) -> Unit)? = null
     private var selectionUpdating: ((WinUICoreTextSelectionUpdatingEvent) -> Unit)? = null
     private var compositionStarted: (() -> Unit)? = null
@@ -616,6 +625,13 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
         handler: (WinUICoreTextSelectionRequest) -> Unit,
     ): WinUICoreTextEventToken {
         selectionRequested = handler
+        return token()
+    }
+
+    override fun addLayoutRequested(
+        handler: (WinUICoreTextLayoutRequest) -> Unit,
+    ): WinUICoreTextEventToken {
+        layoutRequested = handler
         return token()
     }
 
@@ -677,6 +693,10 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
         selectionRequested?.invoke(request)
     }
 
+    fun dispatchLayoutRequested(request: WinUICoreTextLayoutRequest) {
+        layoutRequested?.invoke(request)
+    }
+
     fun dispatchTextUpdating(event: WinUICoreTextTextUpdatingEvent) {
         textUpdating?.invoke(event)
     }
@@ -711,6 +731,26 @@ private class FakeCoreTextTextRequest(
 
 private class FakeCoreTextSelectionRequest : WinUICoreTextSelectionRequest {
     override var selection: CoreTextRange = CoreTextRange(0, 0)
+}
+
+private class FakeCoreTextLayoutRequest(
+    override val isCanceled: Boolean = false,
+) : WinUICoreTextLayoutRequest {
+    var textBounds: Rect? = null
+        private set
+    var controlBounds: Rect? = null
+        private set
+    var visualPixelsTextBounds: Rect? = null
+        private set
+    var visualPixelsControlBounds: Rect? = null
+        private set
+
+    override fun setLayoutBounds(bounds: WinUITextLayoutBounds) {
+        textBounds = bounds.innerTextFieldBounds
+        controlBounds = bounds.decorationBoxBounds
+        visualPixelsTextBounds = bounds.innerTextFieldBounds
+        visualPixelsControlBounds = bounds.decorationBoxBounds
+    }
 }
 
 private class FakeCoreTextTextUpdatingEvent(

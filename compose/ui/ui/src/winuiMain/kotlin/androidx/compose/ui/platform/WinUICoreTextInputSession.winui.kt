@@ -25,9 +25,11 @@ import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import windows.foundation.TypedEventHandler
+import windows.foundation.Rect as WinRtRect
 import windows.ui.text.core.CoreTextEditContext
 import windows.ui.text.core.CoreTextInputPaneDisplayPolicy
 import windows.ui.text.core.CoreTextInputScope
+import windows.ui.text.core.CoreTextLayoutRequest
 import windows.ui.text.core.CoreTextRange
 import windows.ui.text.core.CoreTextSelectionRequest
 import windows.ui.text.core.CoreTextSelectionRequestedEventArgs
@@ -43,6 +45,7 @@ internal class WinUICoreTextInputSession private constructor(
     initialValue: TextFieldValue,
     imeOptions: ImeOptions,
     private val editContext: WinUICoreTextEditContext,
+    private val currentLayoutBounds: () -> WinUITextLayoutBounds?,
     private val dispatchEditCommands: (List<EditCommand>) -> Boolean,
 ) {
     private val eventTokens = mutableListOf<WinUICoreTextEventToken>()
@@ -96,6 +99,11 @@ internal class WinUICoreTextInputSession private constructor(
         eventTokens += editContext.addSelectionRequested { request ->
             request.selection = value.selection.toCoreTextRange()
         }
+        eventTokens += editContext.addLayoutRequested { request ->
+            if (!request.isCanceled) {
+                currentLayoutBounds()?.let(request::setLayoutBounds)
+            }
+        }
         eventTokens += editContext.addTextUpdating { event ->
             if (event.isCanceled) {
                 return@addTextUpdating
@@ -145,12 +153,14 @@ internal class WinUICoreTextInputSession private constructor(
         fun create(
             initialValue: TextFieldValue,
             imeOptions: ImeOptions,
+            currentLayoutBounds: () -> WinUITextLayoutBounds?,
             dispatchEditCommands: (List<EditCommand>) -> Boolean,
         ): WinUICoreTextInputSession =
             create(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
                 editContext = WinUIRealCoreTextEditContext.create(),
+                currentLayoutBounds = currentLayoutBounds,
                 dispatchEditCommands = dispatchEditCommands,
             )
 
@@ -158,12 +168,14 @@ internal class WinUICoreTextInputSession private constructor(
             initialValue: TextFieldValue,
             imeOptions: ImeOptions,
             editContext: WinUICoreTextEditContext,
+            currentLayoutBounds: () -> WinUITextLayoutBounds?,
             dispatchEditCommands: (List<EditCommand>) -> Boolean,
         ): WinUICoreTextInputSession =
             WinUICoreTextInputSession(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
                 editContext = editContext,
+                currentLayoutBounds = currentLayoutBounds,
                 dispatchEditCommands = dispatchEditCommands,
             )
     }
@@ -176,6 +188,7 @@ internal interface WinUICoreTextEditContext {
 
     fun addTextRequested(handler: (WinUICoreTextTextRequest) -> Unit): WinUICoreTextEventToken
     fun addSelectionRequested(handler: (WinUICoreTextSelectionRequest) -> Unit): WinUICoreTextEventToken
+    fun addLayoutRequested(handler: (WinUICoreTextLayoutRequest) -> Unit): WinUICoreTextEventToken
     fun addTextUpdating(handler: (WinUICoreTextTextUpdatingEvent) -> Unit): WinUICoreTextEventToken
     fun addSelectionUpdating(handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit): WinUICoreTextEventToken
     fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken
@@ -199,6 +212,11 @@ internal interface WinUICoreTextTextRequest {
 
 internal interface WinUICoreTextSelectionRequest {
     var selection: CoreTextRange
+}
+
+internal interface WinUICoreTextLayoutRequest {
+    val isCanceled: Boolean
+    fun setLayoutBounds(bounds: WinUITextLayoutBounds)
 }
 
 internal interface WinUICoreTextTextUpdatingEvent {
@@ -251,6 +269,13 @@ private class WinUIRealCoreTextEditContext(
         editContext.addSelectionRequested(TypedEventHandler { _, args ->
                 args.request?.let { handler(WinUIRealCoreTextSelectionRequest(it)) }
             }).let { token -> WinUICoreTextEventToken { editContext.removeSelectionRequested(token) } }
+
+    override fun addLayoutRequested(
+        handler: (WinUICoreTextLayoutRequest) -> Unit,
+    ): WinUICoreTextEventToken =
+        editContext.addLayoutRequested(TypedEventHandler { _, args ->
+                args.request?.let { handler(WinUIRealCoreTextLayoutRequest(it)) }
+            }).let { token -> WinUICoreTextEventToken { editContext.removeLayoutRequested(token) } }
 
     override fun addTextUpdating(
         handler: (WinUICoreTextTextUpdatingEvent) -> Unit,
@@ -336,6 +361,18 @@ private class WinUIRealCoreTextSelectionRequest(
         }
 }
 
+private class WinUIRealCoreTextLayoutRequest(
+    private val request: CoreTextLayoutRequest,
+) : WinUICoreTextLayoutRequest {
+    override val isCanceled: Boolean
+        get() = request.isCanceled
+
+    override fun setLayoutBounds(bounds: WinUITextLayoutBounds) {
+        request.layoutBounds?.setFrom(bounds)
+        request.layoutBoundsVisualPixels?.setFrom(bounds)
+    }
+}
+
 private class WinUIRealCoreTextTextUpdatingEvent(
     private val event: CoreTextTextUpdatingEventArgs,
 ) : WinUICoreTextTextUpdatingEvent {
@@ -370,6 +407,14 @@ private class WinUIRealCoreTextSelectionUpdatingEvent(
 
 private fun TextRange.toCoreTextRange(): CoreTextRange =
     CoreTextRange(start, end)
+
+private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
+    textBounds = bounds.innerTextFieldBounds.toWinRtRect()
+    controlBounds = bounds.decorationBoxBounds.toWinRtRect()
+}
+
+private fun androidx.compose.ui.geometry.Rect.toWinRtRect(): WinRtRect =
+    WinRtRect(left, top, width, height)
 
 private fun String.sliceCoreTextRange(range: CoreTextRange): String {
     val start = range.startCaretPosition.coerceIn(0, length)
