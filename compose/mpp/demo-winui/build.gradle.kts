@@ -74,6 +74,13 @@ val winUiMppSampleResourceFiles = listOf(
     project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf"),
     project.file("../demo/src/desktopMain/resources/NotoColorEmoji.ttf"),
 )
+val winUiMppPriRoot = project.file("src/winuiPri")
+val winUiMppAppxManifest = winUiMppPriRoot.resolve("AppxManifest.xml")
+val winUiMppPriStringResource = winUiMppPriRoot.resolve("Strings/en-US/Resources.resw")
+val winUiMppPriPage = winUiMppPriRoot.resolve("Views/MainPage.xaml")
+val winUiMppPriApplicationDefinition = winUiMppPriRoot.resolve("App.xaml")
+val winUiMppPriContent = winUiMppPriRoot.resolve("Assets/Sample.txt")
+val winUiMppPriEmbed = winUiMppPriRoot.resolve("Embedded/Payload.bin")
 val winUiMppSampleSourceFiles = listOf(
     project.file("../demo/src/commonMain/kotlin/androidx/compose/mpp/demo/ImageViewer.kt"),
     project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/Main.winui.kt"),
@@ -172,6 +179,7 @@ kotlin {
             kotlin.include("androidx/compose/mpp/demo/ImageViewer.kt")
             resources.srcDir("../demo/src/commonMain/resources")
             dependencies {
+                implementation(kotlin("stdlib"))
                 implementation(libs.skiko)
 
                 implementation(project(":compose:runtime:runtime"))
@@ -210,7 +218,17 @@ kotlin {
 }
 
 winRt {
-    application {}
+    application {
+        projectPriIndexName.set("ComposeWinUi.MppDemo")
+        projectPriInitialPath.set("Appx")
+        enableDefaultProjectPriResources.set(false)
+        appxManifest(winUiMppAppxManifest)
+        projectPriResource(winUiMppPriStringResource, "Strings/en-US/Resources.resw")
+        projectPriPage(winUiMppPriPage, "Views/MainPage.xaml")
+        projectPriApplicationDefinition(winUiMppPriApplicationDefinition, "App.xaml")
+        projectPriContent(winUiMppPriContent, "Assets/Sample.txt")
+        projectPriEmbedFile(winUiMppPriEmbed, "Embedded/Payload.bin")
+    }
     windowsSdk(composeWinUiWindowsSdkVersion.get(), includeExtensions = false)
     nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
     type("Windows.Foundation.Uri")
@@ -387,8 +405,17 @@ tasks.register("validateWinUIMppSamplePackaging") {
     group = "verification"
     description = "Validates WinUI MPP sample resources and Windows App SDK runtime packaging."
     dependsOn(stageWinUIMppSampleResources)
-    mustRunAfter("stageWinRtRuntimeAssets")
-    inputs.files(winUiMppSampleResourceFiles)
+    dependsOn("stageWinRtRuntimeAssets")
+    inputs.files(
+        winUiMppSampleResourceFiles + listOf(
+            winUiMppAppxManifest,
+            winUiMppPriStringResource,
+            winUiMppPriPage,
+            winUiMppPriApplicationDefinition,
+            winUiMppPriContent,
+            winUiMppPriEmbed,
+        )
+    )
     outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-packaging.txt"))
 
     doLast {
@@ -398,8 +425,17 @@ tasks.register("validateWinUIMppSamplePackaging") {
             }
         }
 
-        winUiMppSampleResourceFiles.forEach { resource ->
+        (winUiMppSampleResourceFiles + listOf(
+            winUiMppAppxManifest,
+            winUiMppPriStringResource,
+            winUiMppPriPage,
+            winUiMppPriApplicationDefinition,
+            winUiMppPriContent,
+            winUiMppPriEmbed,
+        )).forEach { resource ->
             requireFile(resource, "source sample resource")
+        }
+        winUiMppSampleResourceFiles.forEach { resource ->
             requireFile(
                 winUiMppSampleResourcesDir.get().asFile.resolve(resource.name),
                 "staged sample resource"
@@ -414,12 +450,11 @@ tasks.register("validateWinUIMppSamplePackaging") {
             "WinUI controls component PRI"
         )
         requireFile(
-            runtimeAssets.resolve("WindowsAppSDK-SelfContained.manifest"),
-            "Windows App SDK activation manifest"
-        )
-        requireFile(
-            runtimeAssets.resolve("kotlin-winrt-process.manifest"),
-            "process compatibility manifest"
+            runtimeAssets.resolve(
+                "registrations/Microsoft.WindowsAppSDK.WinUI/build/native/" +
+                    "LiftedWinRTClassRegistrations.xml"
+            ),
+            "Windows App SDK lifted WinRT registration asset"
         )
         requireFile(runtimeAssets.resolve("Microsoft.ui.xaml.dll"), "WinUI runtime DLL")
         requireFile(runtimeAssets.resolve("Microsoft.UI.Xaml.Controls.dll"), "WinUI controls DLL")
@@ -427,6 +462,12 @@ tasks.register("validateWinUIMppSamplePackaging") {
             runtimeAssets.resolve("en-us/Microsoft.ui.xaml.dll.mui"),
             "default language WinUI MUI asset"
         )
+        requireFile(runtimeAssets.resolve("Appx/Views/MainPage.xaml"), "staged Page PRI input")
+        requireFile(runtimeAssets.resolve("Appx/App.xaml"), "staged ApplicationDefinition PRI input")
+        requireFile(runtimeAssets.resolve("Appx/Assets/Sample.txt"), "staged content PRI input")
+        check(!runtimeAssets.resolve("Appx/src/winuiPri").exists()) {
+            "Default PRI resource scanning duplicated explicit WinUI PRI inputs under Appx/src/winuiPri."
+        }
 
         val report = outputs.files.singleFile
         report.parentFile.mkdirs()
@@ -438,6 +479,14 @@ tasks.register("validateWinUIMppSamplePackaging") {
                 appendLine("strings=none in selected WinUI sample resource roots")
                 appendLine("runtimeAssets=${runtimeAssets.absolutePath}")
                 appendLine("defaultLanguage=en-us")
+                appendLine("projectPriIndexName=ComposeWinUi.MppDemo")
+                appendLine("appxPriInitialPath=Appx")
+                appendLine("page=Appx/Views/MainPage.xaml")
+                appendLine("applicationDefinition=Appx/App.xaml")
+                appendLine("priResource=Strings/en-US/Resources.resw")
+                appendLine("content=Appx/Assets/Sample.txt")
+                appendLine("embedInput=embed/Appx/Embedded/Payload.bin")
+                appendLine("defaultProjectPriResources=false")
             }
         )
     }

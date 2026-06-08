@@ -903,6 +903,18 @@ baseline, not every retest attempt.
   ':compose:ui:ui:kotlinWinRtLibraryDependencyIdentity' after the configuration
   was resolved`; this extends `KWINRT-030` beyond the partially-resolved
   dependency checker into WinUI sample classpath resolution order.
+- **2026-06-08 WinUI MPP PRI bootstrap retest:** adding app-owned PRI inputs to
+  `:compose:mpp:demo-winui` made
+  `:compose:mpp:demo-winui:stageWinRtRuntimeAssets` fail during task graph
+  construction with the same mutation class, this time on
+  `:compose:mpp:demo-winui:kotlinWinRtIdentity`. The trigger was Kotlin's
+  late stdlib dependency addition while Gradle was already visiting task
+  dependencies for the resolved identity file collection. The narrow
+  compose-winui workaround is to declare `implementation(kotlin("stdlib"))`
+  explicitly in the WinUI MPP sample so Kotlin does not add it during task
+  dependency resolution. With that workaround, PRI staging, packaging
+  validation, `runWinUIMppSample`, and `:compose:ui:ui:compileKotlinWinuiJvm`
+  pass.
 
 ## KWINRT-031: Generated authoring TypeDetails use projection-unsafe runtime casts
 
