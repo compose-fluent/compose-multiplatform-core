@@ -255,7 +255,7 @@ internal class WinUINativeTextInputBridge(
             false
         } else {
             runCatching {
-                attachCoreTextForCurrentInput()
+                attachCoreTextForCurrentInput(notifyNativeFocus = true)
             }.getOrDefault(false)
         }
 

@@ -9,8 +9,8 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** `KWINRT-026`, not treated as blocking for current
-  compose-winui work.
+- **Open upstream/runtime:** none known for the current compose-winui
+  validation path.
 - **Open upstream/plugin:** `KWINRT-025`, `KWINRT-030`, `KWINRT-031`,
   `KWINRT-032`, and `KWINRT-033`.
 - **Open compose-side workarounds:** `KWINRT-025` and `KWINRT-030`.
@@ -20,8 +20,8 @@ baseline, not every retest attempt.
   `KWINRT-005`, `KWINRT-006`, `KWINRT-007`, `KWINRT-009`,
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
-  `KWINRT-022`, `KWINRT-023`, `KWINRT-004`, `KWINRT-008`, `KWINRT-028`,
-  and `KWINRT-029`.
+  `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
+  `KWINRT-028`, and `KWINRT-029`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -689,8 +689,8 @@ baseline, not every retest attempt.
 
 ## KWINRT-026: Core text input focus registration fail-fast after full smoke
 
-- **Status:** Open upstream/runtime, non-blocking for current compose-winui
-  Skiko integration.
+- **Status:** Fixed for the current compose-winui validation path with Maven
+  snapshots on 2026-06-08.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIViewSample` after the
   latest 2026-06-03 Maven snapshot retest. The full sample reaches
   `compose-winui-sample: text input session cancellation` before the process
@@ -715,12 +715,10 @@ baseline, not every retest attempt.
   `Windows_UI_Core_TextInput!Windows::UI::Text::Core::CEditContext::NotifyFocusEnter`.
   The loaded `Microsoft.UI.Xaml.dll` is Windows App SDK `3.1.8.2604` from the
   staged kotlin-winrt/skiko WinUI application package.
-- **Current assessment:** this is a separate bucket from the `KWINRT-024`
-  CoreMessaging/XAML teardown dumps. It points at WinUI core text input focus
+- **Assessment:** this was a separate bucket from the `KWINRT-024`
+  CoreMessaging/XAML teardown dumps. It pointed at WinUI core text input focus
   registration or lifetime during the full sample's text input path, not a
-  Skiko render failure and not a Java/Kotlin managed exception. Do not block
-  skiko-winui integration on this issue; use the focused Skiko sample for
-  Skiko-specific validation until text input teardown is the active work item.
+  Skiko render failure and not a Java/Kotlin managed exception.
 - **2026-06-05 SkiaWinUISample dump:** Store WinDbg
   `Microsoft.WinDbg_1.2603.20001.0` was available but its `WinDbgX.exe`
   command-line launch did not produce a headless log; the same dump was then
@@ -737,14 +735,16 @@ baseline, not every retest attempt.
   `compose-fluent-skiko\samples\SkiaWinUISample`, loaded Windows App SDK
   `Microsoft.UI.Xaml.dll` `3.1.8.2604`, and is evidence that this native
   text-input fail-fast is not specific to compose-winui's full smoke sample.
-- **2026-06-08 compose-winui mitigation retest:** compose-winui now creates a
-  CoreText edit context/session only when
-  `compose.winui.textInput.coreText.enabled=true` and keeps
-  `CoreTextEditContext.notifyFocusEnter()` opt-in. With that path enabled,
+- **Resolution:** compose-winui now creates a CoreText edit context/session only
+  when `compose.winui.textInput.coreText.enabled=true`; when enabled, the
+  automatic attach path calls `CoreTextEditContext.notifyFocusEnter()` so the
+  native focus registration path is exercised instead of merely creating an
+  inert edit context.
+- **Validation:** with JDK 25 and current Maven snapshots,
   `:compose:ui:ui:winui-samples:runWinUITextInputSample` and
   `:compose:mpp:demo-winui:runWinUIMppSample` pass without reproducing this
-  fail-fast. Keep this issue open until native focus registration itself is
-  safe.
+  fail-fast. Reopen only with fresh native crash evidence from the current
+  snapshots.
 
 ## KWINRT-027: Maven compiler plugin snapshot requires Kotlin 2.4 compiler APIs
 

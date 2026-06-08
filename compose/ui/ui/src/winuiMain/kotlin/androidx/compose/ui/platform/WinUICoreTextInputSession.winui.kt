@@ -81,7 +81,6 @@ internal class WinUICoreTextInputSession private constructor(
     }
 
     fun notifyFocusEnter() {
-        // KWINRT-026: keep this opt-in until CoreText focus registration is stable.
         editContext.notifyFocusEnter()
     }
 
