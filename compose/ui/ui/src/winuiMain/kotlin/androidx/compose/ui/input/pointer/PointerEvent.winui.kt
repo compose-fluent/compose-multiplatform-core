@@ -20,9 +20,6 @@ import androidx.collection.LongSparseArray
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.util.fastForEach
 
-internal actual typealias NativePointerButtons = Int
-internal actual typealias NativePointerKeyboardModifiers = Int
-
 fun PointerButtons(
     isPrimaryPressed: Boolean = false,
     isSecondaryPressed: Boolean = false,
@@ -64,9 +61,6 @@ fun PointerKeyboardModifiers(
     if (isNumLockOn) value = value or KeyboardModifierMasks.NumLockOn
     return PointerKeyboardModifiers(value)
 }
-
-internal actual fun EmptyPointerKeyboardModifiers(): PointerKeyboardModifiers =
-    PointerKeyboardModifiers()
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual class PointerEvent internal constructor(

@@ -9,7 +9,7 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/runtime:** none known for the current compose-winui
+- **Open upstream/runtime:** `KWINRT-024` for the current full WinUI sample
   validation path.
 - **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, and `KWINRT-032`.
 - **Open compose-side workarounds:** `KWINRT-030`.
@@ -667,6 +667,21 @@ baseline, not every retest attempt.
   `%LOCALAPPDATA%\CrashDumps\java.exe.5868.dmp` and
   `%LOCALAPPDATA%\CrashDumps\java.exe(1).5868.dmp`; CDB confirmed the dump
   stores an access violation but timed out before producing a useful stack.
+- **2026-06-10 upstream merge / MPP sample retest:** after merging
+  `origin/jb-main` into `winui_dev` and fixing WinUI source-set/API drift,
+  `:compose:mpp:demo-winui:smokeWinUIMppSampleAutoTraverse` compiles through
+  the WinUI variants for `compose-ui`, `foundation`, `material`, `material3`,
+  `navigation-compose`, `navigation3-runtime`, `navigation3-ui`, adaptive
+  material3, and the MPP sample. Runtime validation starts the WinUI window,
+  logs `autorun-start`, `autorun-count:99`, `render-direct3d`, and
+  `app-content-composed`, then the sample process exits with
+  `NTSTATUS 0xC000027B`. Windows Event Log reports `APPCRASH java.exe` with
+  faulting module `CoreMessagingXP.dll`, exception `0xc000027b`, and WER
+  signature `P7: 8007000e`; the paired Windows Error Reporting event records a
+  later `combase.dll` bucket with the same `8007000e` signature. No JVM
+  `hs_err_pid` was produced for this run. This keeps the current MPP failure in
+  the existing CoreMessaging/XAML application lifetime bucket rather than a
+  managed Compose exception or Skiko render failure.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 

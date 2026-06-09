@@ -23,24 +23,23 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
-actual fun MeshGradientRenderer(): MeshGradientRenderer {
+internal actual fun MeshGradientRenderer(): MeshGradientRenderer {
     return WinUIMeshGradientRenderer()
 }
 
 private class WinUIMeshGradientRenderer : MeshGradientRenderer {
     private val paint = Paint()
 
-    override fun DrawScope.draw(
-        rows: Int,
-        columns: Int,
-        positions: FloatArray,
-        colors: IntArray,
-        leftBezierOffsets: FloatArray?,
-        topBezierOffsets: FloatArray?,
-        rightBezierOffsets: FloatArray?,
-        bottomBezierOffsets: FloatArray?,
-        hasBicubicColor: Boolean,
-    ) {
+    override fun DrawScope.draw(config: MeshGradientConfig) {
+        val rows = config.rows
+        val columns = config.columns
+        val positions = config.positions
+        val colors = config.colors
+        val leftBezierOffsets = config.leftBezierOffsets
+        val topBezierOffsets = config.topBezierOffsets
+        val rightBezierOffsets = config.rightBezierOffsets
+        val bottomBezierOffsets = config.bottomBezierOffsets
+        val hasBicubicColor = config.hasBicubicColor
         val expectedPositions = (rows + 1) * (columns + 1) * 2
         val expectedColors = (rows + 1) * (columns + 1)
         require(positions.size == expectedPositions) {
@@ -53,16 +52,6 @@ private class WinUIMeshGradientRenderer : MeshGradientRenderer {
         requireOffsetBuffer("topBezierOffsets", topBezierOffsets, expectedPositions)
         requireOffsetBuffer("rightBezierOffsets", rightBezierOffsets, expectedPositions)
         requireOffsetBuffer("bottomBezierOffsets", bottomBezierOffsets, expectedPositions)
-
-        inferBezierControlPointsIfRequired(
-            rows,
-            columns,
-            positions,
-            leftBezierOffsets,
-            topBezierOffsets,
-            rightBezierOffsets,
-            bottomBezierOffsets,
-        )
 
         val (subdivisionsU, subdivisionsV) = calculateSubdivisions(rows, columns, positions, size)
         for (row in 0 until rows) {

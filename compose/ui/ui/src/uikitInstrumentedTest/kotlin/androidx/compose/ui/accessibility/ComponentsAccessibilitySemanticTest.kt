@@ -78,6 +78,8 @@ import kotlin.test.assertTrue
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.OSVersion
 import org.jetbrains.skiko.available
+import platform.UIKit.UIAccessibilityContainerTypeNone
+import platform.UIKit.UIAccessibilityContainerTypeSemanticGroup
 import platform.UIKit.UIAccessibilityTraitAdjustable
 import platform.UIKit.UIAccessibilityTraitButton
 import platform.UIKit.UIAccessibilityTraitHeader
@@ -1144,6 +1146,44 @@ class ComponentsAccessibilitySemanticTest {
     }
 
     @Test
+    fun testTraversalGroupWithSemantics() = runUIKitInstrumentedTest {
+        setContent {
+            Column(
+                modifier = Modifier.semantics {
+                    testTag = "group_column"
+                    isTraversalGroup = true
+                    // Should be added as a separate accessibility element
+                    contentDescription = "Group Column"
+                }
+            ) {
+                Button(
+                    onClick = {},
+                    modifier = Modifier.semantics {
+                        testTag = "button"
+                    }
+                ) {
+                    Text("Button text")
+                }
+            }
+        }
+        assertAccessibilityTree {
+            isAccessibilityElement = false
+            containerType = UIAccessibilityContainerTypeSemanticGroup
+            node {
+                identifier = "button"
+                isAccessibilityElement = true
+                containerType = UIAccessibilityContainerTypeNone
+            }
+            node {
+                identifier = "group_column"
+                label = "Group Column"
+                isAccessibilityElement = true
+                containerType = UIAccessibilityContainerTypeNone
+            }
+        }
+    }
+
+    @Test
     fun testMergeDescendantsWithButton() = runUIKitInstrumentedTest {
         setContent {
             Column(
@@ -1272,6 +1312,79 @@ class ComponentsAccessibilitySemanticTest {
             node {
                 isAccessibilityElement = true
                 label = "Line 3"
+                traits(UIAccessibilityTraitStaticText)
+            }
+        }
+    }
+
+    @Test
+    fun testSemanticsMergingInsideFocusableNodes() = runUIKitInstrumentedTest {
+        setContent {
+            Column(modifier = Modifier.clickable {}) {
+                Text("Line 1")
+                Column(modifier = Modifier.focusable()) {
+                    Text("Line 2")
+                    Text("Line 3")
+                }
+            }
+        }
+
+        assertAccessibilityTree {
+            node {
+                isAccessibilityElement = true
+                label = "Line 1"
+                traits(UIAccessibilityTraitButton)
+                node {
+                    isAccessibilityElement = false
+                    label = "Line 1"
+                    traits(UIAccessibilityTraitStaticText)
+                }
+            }
+            node {
+                isAccessibilityElement = true
+                label = "Line 2, Line 3"
+                node {
+                    isAccessibilityElement = false
+                    label = "Line 2"
+                    traits(UIAccessibilityTraitStaticText)
+                }
+                node {
+                    isAccessibilityElement = false
+                    label = "Line 3"
+                    traits(UIAccessibilityTraitStaticText)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testSemanticsWithoutMergingInsideFocusableNodes() = runUIKitInstrumentedTest {
+        setContent {
+            Column(
+                modifier = Modifier
+                    .testTag("ContentBox")
+                    .focusable()
+            ) {
+                Box {
+                    Text("Text 1")
+                }
+                Text("Text 2")
+            }
+        }
+
+        assertAccessibilityTree {
+            node {
+                isAccessibilityElement = false
+                identifier = "ContentBox"
+            }
+            node {
+                isAccessibilityElement = true
+                label = "Text 1"
+                traits(UIAccessibilityTraitStaticText)
+            }
+            node {
+                isAccessibilityElement = true
+                label = "Text 2"
                 traits(UIAccessibilityTraitStaticText)
             }
         }
