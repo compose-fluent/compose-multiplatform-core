@@ -39,6 +39,9 @@ def composeWinUiJvmTargetEnabled = providers
         .orElse(false)
         .get()
 def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
 
 androidXMultiplatform {
     androidLibrary {
@@ -185,10 +188,8 @@ kotlin {
 
         sourceSets {
             winuiMain {
-                dependsOn(commonMain)
-                dependencies {
-                    api(libs.skiko)
-                }
+                dependsOn(skikoMain)
+                dependsOn(skikoExcludingWebMain)
             }
 
             winuiTest {
@@ -201,6 +202,9 @@ kotlin {
                 }
                 winuiJvmTest {
                     dependsOn(winuiTest)
+                    dependencies {
+                        runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
+                    }
                 }
             }
 

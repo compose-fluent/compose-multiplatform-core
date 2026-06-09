@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.graphics.shadow
+package androidx.compose.ui.graphics
 
-import androidx.compose.ui.graphics.Paint
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
-internal actual fun BlurFilter(radius: Float): BlurFilter = BlurFilter()
-
-internal actual class BlurFilter
-
-internal actual fun Paint.setBlurFilter(blur: BlurFilter?) = Unit
+internal actual fun ByteArray.putBytesInto(array: IntArray, offset: Int, length: Int) {
+    ByteBuffer.wrap(this)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .asIntBuffer()
+        .get(array, offset, length)
+}
