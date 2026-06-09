@@ -825,6 +825,22 @@ val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMp
     )
 }
 
+val smokeWinUIMppSampleAutoTraverse = tasks.register<JavaExec>("smokeWinUIMppSampleAutoTraverse") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Automatically traverses WinUI MPP sample demo screens and exercises pointer input.",
+        reportName = "winui-mpp-sample-auto-traverse",
+        requiredEvents = listOf(
+            "autorun-start",
+            "autorun-complete",
+            "render-direct3d",
+            "render-positive-size",
+            "render-state-size-matched",
+            "non-empty-draw-bounds",
+        ),
+    )
+    systemProperty("compose.winui.mpp.sample.autoTraverse", "true")
+}
+
 tasks.register<JavaExec>("runWinUIMppSample") {
     dependsOn("validateWinUIMppSampleCompileOnly")
     dependsOn("validateWinUIMppSampleSourceIsolation")
@@ -834,6 +850,7 @@ tasks.register<JavaExec>("runWinUIMppSample") {
     dependsOn(smokeWinUIMppSampleInputFocus)
     dependsOn(smokeWinUIMppSampleResourceLoading)
     dependsOn(smokeWinUIMppSampleShutdownDisposal)
+    dependsOn(smokeWinUIMppSampleAutoTraverse)
     configureWinUIMppSampleJavaExec(
         taskDescription = "Runs the original MPP demo through the compose-winui JVM target.",
         reportName = "winui-mpp-sample",
@@ -847,11 +864,14 @@ tasks.register<JavaExec>("runWinUIMppSample") {
             "render-positive-size",
             "render-state-size-matched",
             "non-empty-draw-bounds",
+            "autorun-start",
+            "autorun-complete",
             "frame-observed",
             "exit-requested",
             "window-content-disposed",
         ),
     )
+    systemProperty("compose.winui.mpp.sample.autoTraverse", "true")
 }
 
 tasks.register<JavaExec>("runWinUIMppSampleInteractive") {

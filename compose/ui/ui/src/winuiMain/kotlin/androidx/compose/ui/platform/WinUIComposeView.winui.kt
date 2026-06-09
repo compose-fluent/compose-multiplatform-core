@@ -144,6 +144,69 @@ class WinUIComposeView internal constructor(
     fun performAccessibilityActionForTest(request: WinUIAccessibilityActionRequest): Boolean =
         owner.accessibilityProvider.performAction(request)
 
+    @InternalComposeUiApi
+    fun sendMouseMoveForTest(position: Offset): Boolean =
+        sendMousePointerEventForTest(
+            eventType = PointerEventType.Move,
+            position = position,
+            down = false,
+            buttons = PointerButtons(),
+            button = null,
+        )
+
+    @InternalComposeUiApi
+    fun sendMousePressForTest(position: Offset): Boolean =
+        sendMousePointerEventForTest(
+            eventType = PointerEventType.Press,
+            position = position,
+            down = true,
+            buttons = PointerButtons(isPrimaryPressed = true),
+            button = PointerButton.Primary,
+        )
+
+    @InternalComposeUiApi
+    fun sendMouseReleaseForTest(position: Offset): Boolean =
+        sendMousePointerEventForTest(
+            eventType = PointerEventType.Release,
+            position = position,
+            down = false,
+            buttons = PointerButtons(),
+            button = PointerButton.Primary,
+        )
+
+    @InternalComposeUiApi
+    fun sendMouseScrollForTest(position: Offset, scrollDelta: Offset): Boolean =
+        sendMousePointerEventForTest(
+            eventType = PointerEventType.Scroll,
+            position = position,
+            down = false,
+            buttons = PointerButtons(),
+            button = null,
+            scrollDelta = scrollDelta,
+        )
+
+    @InternalComposeUiApi
+    private fun sendMousePointerEventForTest(
+        eventType: PointerEventType,
+        position: Offset,
+        down: Boolean,
+        buttons: PointerButtons,
+        button: PointerButton?,
+        scrollDelta: Offset = Offset.Zero,
+    ): Boolean =
+        owner.sendPointerEventForTest(
+            eventType = eventType,
+            position = position,
+            uptimeMillis = System.nanoTime() / 1_000_000L,
+            pointerId = 1L,
+            down = down,
+            type = PointerType.Mouse,
+            buttons = buttons,
+            keyboardModifiers = PointerKeyboardModifiers(),
+            button = button,
+            scrollDelta = scrollDelta,
+        )
+
     private val architectureComponentsOwner = DefaultArchitectureComponentsOwner(
         enforceMainThread = false,
     ).apply {
@@ -188,7 +251,10 @@ class WinUIComposeView internal constructor(
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
         coordinateMapper = WinUICoordinateMapper.forRoot(root),
-        textToolbar = WinUITextToolbar { root },
+        textToolbar = WinUITextToolbar(
+            hostProvider = { rootContentControl },
+            densityProvider = { rootNode.density },
+        ),
         pointerIconService = pointerIconService,
     )
     init {
@@ -205,6 +271,7 @@ class WinUIComposeView internal constructor(
     private var platformWindowInsets: PlatformWindowInsets by mutableStateOf(EmptyPlatformWindowInsets)
     private var currentInteropRoots: List<UIElement> = emptyList()
     private var isRootContentSyncScheduled = false
+    private var isRenderRequestFlushScheduled = false
     private var isApplyingOwnerChanges = false
     private var hasPendingRenderRequest = false
     private var isDisposed = false
@@ -329,7 +396,7 @@ class WinUIComposeView internal constructor(
         WinUIScheduler.register(dispatcherQueue)
         GlobalSnapshotManager.ensureStarted(dispatcherQueue)
         val dispatcher = WinUIDispatcher(dispatcherQueue)
-        val currentFrameClock = WinUIFrameClock(dispatcherQueue)
+        val currentFrameClock = WinUIFrameClock(dispatcherQueue, ::requestRender)
         val recomposerParentJob = SupervisorJob()
         val recomposerContext = dispatcher + currentFrameClock + recomposerParentJob
         ownerCoroutineContext = recomposerContext
@@ -347,9 +414,15 @@ class WinUIComposeView internal constructor(
     }
 
     private fun syncRootContent() {
+        if (owner.isMeasureLayoutInProgress) {
+            scheduleRootContentSync()
+            return
+        }
         applyOwnerChanges {
+            owner.sendAndPerformSnapshotChanges()
             updateRootContent(rootNode.collectWinUIInteropRoots())
             owner.measureAndLayout(sendPointerUpdate = false)
+            owner.sendAndPerformSnapshotChanges()
             updateRootContent(rootNode.collectWinUIInteropRoots())
             requestRender()
         }
@@ -359,7 +432,9 @@ class WinUIComposeView internal constructor(
         renderHost.performDrawSubmission {
             if (isDisposed) return@performDrawSubmission
             applyOwnerChanges {
+                owner.sendAndPerformSnapshotChanges()
                 owner.measureAndLayout(sendPointerUpdate = false)
+                owner.sendAndPerformSnapshotChanges()
                 updateRootContent(rootNode.collectWinUIInteropRoots())
                 rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
             }
@@ -443,9 +518,11 @@ class WinUIComposeView internal constructor(
     }
 
     private fun requestRender() {
-        if (!isDisposed && isApplyingOwnerChanges) {
+        if (isDisposed) return
+        if (isApplyingOwnerChanges || owner.isMeasureLayoutInProgress) {
             hasPendingRenderRequest = true
-        } else if (!isDisposed) {
+            scheduleRenderRequestFlush()
+        } else {
             renderHost.requestRender()
         }
     }
@@ -460,9 +537,31 @@ class WinUIComposeView internal constructor(
             block()
         } finally {
             isApplyingOwnerChanges = false
-            if (hasPendingRenderRequest && !isDisposed) {
-                hasPendingRenderRequest = false
-                renderHost.requestRender()
+            flushPendingRenderRequest()
+        }
+    }
+
+    private fun flushPendingRenderRequest() {
+        if (isDisposed || !hasPendingRenderRequest) return
+        if (isApplyingOwnerChanges || owner.isMeasureLayoutInProgress) {
+            scheduleRenderRequestFlush()
+            return
+        }
+        hasPendingRenderRequest = false
+        renderHost.requestRender()
+    }
+
+    private fun scheduleRenderRequestFlush() {
+        if (isDisposed || isRenderRequestFlushScheduled) return
+        isRenderRequestFlushScheduled = true
+        if (!dispatchQueue.dispatch {
+                isRenderRequestFlushScheduled = false
+                flushPendingRenderRequest()
+            }
+        ) {
+            isRenderRequestFlushScheduled = false
+            if (!isApplyingOwnerChanges && !owner.isMeasureLayoutInProgress) {
+                flushPendingRenderRequest()
             }
         }
     }

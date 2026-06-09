@@ -65,14 +65,22 @@ internal class WinUIClipboard : Clipboard {
         get() = winUIClipboardStatics
 
     internal fun hasText(): Boolean =
-        lastPlainText != null || getWinUIContent().contains(winUITextFormat)
+        lastPlainText != null || runCatching { getWinUIContent().contains(winUITextFormat) }
+            .getOrElse {
+                logClipboardReadFailure(it)
+                false
+            }
 
     internal fun getTextBlocking(): String? {
         // The deprecated ClipboardManager API is synchronous. Preserve Android-like
         // setText/getText round-trips for in-process writes without blocking WinRT async work.
         lastPlainText?.let { return it }
-        val content = getWinUIContent()
-        if (!content.contains(winUITextFormat)) {
+        val content = runCatching { getWinUIContent() }
+            .getOrElse {
+                logClipboardReadFailure(it)
+                return null
+            }
+        if (!runCatching { content.contains(winUITextFormat) }.getOrDefault(false)) {
             return null
         }
         return null
@@ -87,17 +95,30 @@ internal class WinUIClipboard : Clipboard {
 
     internal fun getClipEntryBlocking(): ClipEntry? {
         lastPlainText?.let { return ClipEntry(it) }
-        val content = getWinUIContent()
-        if (content.availableFormats.isEmpty()) return null
+        val content = runCatching { getWinUIContent() }
+            .getOrElse {
+                logClipboardReadFailure(it)
+                return null
+            }
+        if (runCatching { content.availableFormats.isEmpty() }.getOrDefault(true)) return null
         return ClipEntry(content)
     }
 
     private suspend fun readClipEntry(): ClipEntry? {
         lastPlainText?.let { return ClipEntry(it) }
-        val content = getWinUIContent()
-        if (content.availableFormats.isEmpty()) return null
-        if (content.contains(winUITextFormat)) {
-            return ClipEntry(content.getTextAsync().await())
+        val content = runCatching { getWinUIContent() }
+            .getOrElse {
+                logClipboardReadFailure(it)
+                return null
+            }
+        if (runCatching { content.availableFormats.isEmpty() }.getOrDefault(true)) return null
+        if (runCatching { content.contains(winUITextFormat) }.getOrDefault(false)) {
+            return runCatching {
+                ClipEntry(content.getTextAsync().await())
+            }.getOrElse {
+                logClipboardReadFailure(it)
+                null
+            }
         }
         return ClipEntry(content)
     }
@@ -166,3 +187,9 @@ private val winUITextFormat: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
 
 private fun getWinUIContent(): DataPackageView =
     WinRTClipboardClass.getContent()
+
+private fun logClipboardReadFailure(throwable: Throwable) {
+    System.err.println(
+        "WinUIClipboard read failed: ${throwable::class.qualifiedName}: ${throwable.message}"
+    )
+}

@@ -1111,3 +1111,23 @@ baseline, not every retest attempt.
 - **compose-winui workaround:** none. Do not exclude authored classes or replace
   real XAML measure/arrange participation with no-op wrappers to hide the
   generator path.
+
+## KWINRT-038: KeyboardAccelerator setters are public in bytecode but not callable from Kotlin
+
+- **Status:** Open.
+- **Observed in:** `:compose:foundation:foundation:compileKotlinWinuiJvm` after
+  adding native WinUI `KeyboardAccelerator` entries for text context-menu
+  `MenuFlyoutItem`s.
+- **Symptom:** generated `microsoft.ui.xaml.input.KeyboardAccelerator` exposes
+  public JVM methods `setKey(windows.system.VirtualKey)` and the mangled
+  `setModifiers-flDks54(int)` in bytecode, but Kotlin source cannot call
+  `key = ...`, `setKey(...)`, `modifiers = ...`, or `setModifiers(...)`.
+  `key = ...` reports `val cannot be reassigned`; the explicit setter names are
+  unresolved.
+- **Expected behavior:** generated mutable WinRT properties should be callable
+  from Kotlin source, including flag/value-class properties such as
+  `VirtualKeyModifiers`.
+- **compose-winui workaround:** `BasicContextMenuRepresentation.winui.kt` uses a
+  narrowly scoped reflection helper to call the generated public setters while
+  configuring `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, and `Ctrl+A` native menu
+  accelerators. Remove the helper once kotlin-winrt exposes callable setters.

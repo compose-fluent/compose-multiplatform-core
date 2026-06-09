@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.platform.WinUITextToolbar
+import androidx.compose.ui.platform.toXamlPoint
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -135,6 +136,46 @@ class WinUIOwnerTest {
             assertEquals(owner.root.semanticsId, events.lastLayoutChangedSemanticsId)
             assertEquals(Offset(3f, 4f), events.lastScrollDelta)
             assertEquals(1, events.rootInvalidated)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun rootCoordinatorLayerInvalidationInvalidatesRootLayer() {
+        val owner = createOwner()
+        try {
+            val initialInvalidations = owner.ownerStateForTest().rootInvalidationCount
+
+            owner.root.innerCoordinator.invalidateLayer()
+
+            assertEquals(
+                initialInvalidations + 1,
+                owner.ownerStateForTest().rootInvalidationCount,
+            )
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun childCoordinatorLayerInvalidationInvalidatesRootLayer() {
+        val owner = createOwner()
+        try {
+            val child = LayoutNode().also {
+                it.measurePolicy = fixedMeasurePolicy(20, 20)
+            }
+            owner.root.insertAt(0, child)
+            owner.setWindowContainerSize(IntSize(100, 100))
+            owner.measureAndLayout()
+            val initialInvalidations = owner.ownerStateForTest().rootInvalidationCount
+
+            child.innerCoordinator.invalidateLayer()
+
+            assertEquals(
+                initialInvalidations + 1,
+                owner.ownerStateForTest().rootInvalidationCount,
+            )
         } finally {
             owner.dispose()
         }
@@ -888,6 +929,17 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun textToolbarConvertsComposePixelsToXamlDips() {
+        val unscaled = Rect(10f, 15f, 30f, 20f).toXamlPoint(Density(1f))
+        assertEquals(10f, unscaled.x)
+        assertEquals(20f, unscaled.y)
+
+        val scaled = Rect(10f, 15f, 30f, 20f).toXamlPoint(Density(2f))
+        assertEquals(5f, scaled.x)
+        assertEquals(10f, scaled.y)
+    }
+
+    @Test
     fun ownerTracksInteropViewFocusRect() {
         val owner = createOwner()
         try {
@@ -974,7 +1026,7 @@ class WinUIOwnerTest {
     }
 
     @Test
-    fun mousePressAtNewPositionClearsHoverBeforePressAndRestoresAfterRelease() {
+    fun mousePressAndReleaseDoNotSynthesizeHoverExitOrEnter() {
         val owner = createOwner()
         val events = mutableListOf<PointerEventType>()
         try {
@@ -1015,7 +1067,6 @@ class WinUIOwnerTest {
             assertEquals(
                 listOf(
                     PointerEventType.Enter,
-                    PointerEventType.Exit,
                     PointerEventType.Press,
                 ),
                 events,
@@ -1036,10 +1087,31 @@ class WinUIOwnerTest {
             assertEquals(
                 listOf(
                     PointerEventType.Enter,
-                    PointerEventType.Exit,
                     PointerEventType.Press,
                     PointerEventType.Release,
+                ),
+                events,
+            )
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Exit,
+                position = Offset(10f, 10f),
+                uptimeMillis = 4L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+                isInBounds = false,
+            )
+
+            assertEquals(
+                listOf(
                     PointerEventType.Enter,
+                    PointerEventType.Press,
+                    PointerEventType.Release,
+                    PointerEventType.Exit,
                 ),
                 events,
             )
@@ -1146,6 +1218,30 @@ class WinUIOwnerTest {
                 button = PointerButton.Primary,
             )
             assertEquals(InputMode.Touch, owner.inputModeManager.inputMode)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun mouseHoverDoesNotSwitchInputModeToTouch() {
+        val owner = createOwner()
+        try {
+            assertEquals(InputMode.Keyboard, owner.inputModeManager.inputMode)
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(1f, 2f),
+                uptimeMillis = 3L,
+                pointerId = 4L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+            )
+
+            assertEquals(InputMode.Keyboard, owner.inputModeManager.inputMode)
         } finally {
             owner.dispose()
         }

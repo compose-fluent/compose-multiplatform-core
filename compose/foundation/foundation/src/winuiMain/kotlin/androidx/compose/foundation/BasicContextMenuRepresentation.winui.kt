@@ -18,55 +18,75 @@ package androidx.compose.foundation
 
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuComponent
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuItemWithComposableLeadingIcon
+import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuSeparator
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuSession
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWinUIRoot
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.unit.IntOffset
+import io.github.composefluent.winrt.runtime.EventHandlerCallback
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.RoutedEventHandler
+import microsoft.ui.xaml.controls.FontIcon
 import microsoft.ui.xaml.controls.MenuFlyout
 import microsoft.ui.xaml.controls.MenuFlyoutItem
 import microsoft.ui.xaml.controls.MenuFlyoutSeparator
+import microsoft.ui.xaml.input.KeyboardAccelerator
 import windows.foundation.Point
+import windows.system.VirtualKey
 
 @OptIn(InternalComposeUiApi::class)
 @Composable
 internal fun DefaultOpenContextMenu(
     session: TextContextMenuSession,
     components: List<TextContextMenuComponent>,
-    popupPositionProvider: PopupPositionProvider,
+    positionInRoot: IntOffset,
     colors: ContextMenuColors = DefaultContextMenuColors,
 ) {
-    val root = LocalWinUIRoot.current ?: return
-    val windowSize = LocalWindowInfo.current.containerSize.takeIf { it != IntSize.Zero }
-        ?: IntSize.Zero
-    val layoutDirection = LocalLayoutDirection.current
-    val flyout = remember(session, components) {
+    val root = LocalWinUIRoot.current as? FrameworkElement ?: return
+    val density = LocalDensity.current
+    val menu = remember(session, components) {
         createMenuFlyout(session, components)
     }
-    LaunchedEffect(root, flyout, windowSize, layoutDirection, popupPositionProvider) {
-        val position = popupPositionProvider.calculatePosition(
-            anchorBounds = IntRect.Zero,
-            windowSize = windowSize,
-            layoutDirection = layoutDirection,
-            popupContentSize = IntSize.Zero,
+    DisposableEffect(menu) {
+        onDispose {
+            menu.dispose()
+        }
+    }
+    LaunchedEffect(root, menu, positionInRoot, density) {
+        System.err.println(
+            "WinUIContextMenu.showAt source=foundation " +
+                "root=${root::class.simpleName} " +
+                "loaded=${runCatching { root.isLoaded }.getOrNull()} " +
+                "xamlRoot=${runCatching { root.xamlRoot != null }.getOrNull()} " +
+                "size=${runCatching { root.actualWidth }.getOrNull()}x" +
+                "${runCatching { root.actualHeight }.getOrNull()} " +
+                "density=${density.density} " +
+                "positionPx=${positionInRoot.x},${positionInRoot.y} " +
+                "items=${components.size}"
         )
-        flyout.showAt(root, Point(position.x.toFloat(), position.y.toFloat()))
+        if (components.isEmpty()) {
+            return@LaunchedEffect
+        }
+        menu.flyout.showAt(
+            root,
+            Point(positionInRoot.x / density.density, positionInRoot.y / density.density),
+        )
     }
 }
 
 private fun createMenuFlyout(
     session: TextContextMenuSession,
     components: List<TextContextMenuComponent>,
-): MenuFlyout {
+): WinUIContextMenu {
     val flyout = MenuFlyout()
+    val clickRegistrations = mutableListOf<WinUIContextMenuClickRegistration>()
     components.forEach { component ->
         when (component) {
             is TextContextMenuSeparator -> flyout.items.add(MenuFlyoutSeparator())
@@ -74,15 +94,97 @@ private fun createMenuFlyout(
                 val item = MenuFlyoutItem()
                 item.text = component.label
                 item.isEnabled = component.enabled
-                item.click.add(RoutedEventHandler { _, _ ->
+                configureTextContextMenuItemVisuals(item, component.key)
+                val handler = RoutedEventHandler { _, _ ->
                     component.onClick(session)
-                })
+                }
+                val token = item.click.add(handler)
+                clickRegistrations += WinUIContextMenuClickRegistration(item, token, handler)
                 flyout.items.add(item)
             }
         }
     }
-    return flyout
+    val closedHandler: EventHandlerCallback<Any?> = { _, _ ->
+        session.close()
+    }
+    val closedRegistration = WinUIContextMenuClosedRegistration(
+        flyout.closed.add(closedHandler),
+        closedHandler,
+    )
+    return WinUIContextMenu(flyout, clickRegistrations, closedRegistration)
 }
+
+private fun configureTextContextMenuItemVisuals(item: MenuFlyoutItem, key: Any) {
+    val visuals = when (key) {
+        TextContextMenuKeys.CutKey -> TextContextMenuItemVisuals("\uE8C6", "Ctrl+X", VirtualKey.X)
+        TextContextMenuKeys.CopyKey -> TextContextMenuItemVisuals("\uE8C8", "Ctrl+C", VirtualKey.C)
+        TextContextMenuKeys.PasteKey -> TextContextMenuItemVisuals("\uE77F", "Ctrl+V", VirtualKey.V)
+        TextContextMenuKeys.SelectAllKey -> TextContextMenuItemVisuals(null, "Ctrl+A", VirtualKey.A)
+        else -> null
+    } ?: return
+    visuals.glyph?.let { glyph ->
+        item.icon = FontIcon().apply {
+            this.glyph = glyph
+        }
+    }
+    item.keyboardAcceleratorTextOverride = visuals.shortcutText
+    item.keyboardAccelerators.add(
+        KeyboardAccelerator().apply {
+            configureCtrlShortcut(visuals.key)
+        }
+    )
+}
+
+// KWINRT-038: these generated public setters exist in bytecode, but are not callable from Kotlin.
+private fun KeyboardAccelerator.configureCtrlShortcut(key: VirtualKey) {
+    javaClass.getMethod("setKey", VirtualKey::class.java).invoke(this, key)
+    javaClass.methods
+        .first { method ->
+            method.name.startsWith("setModifiers-") &&
+                method.parameterCount == 1 &&
+                method.parameterTypes[0] == Integer.TYPE
+        }
+        .invoke(this, ControlModifierAbiValue)
+}
+
+private data class TextContextMenuItemVisuals(
+    val glyph: String?,
+    val shortcutText: String,
+    val key: VirtualKey,
+)
+
+private const val ControlModifierAbiValue = 1
+
+private class WinUIContextMenu(
+    val flyout: MenuFlyout,
+    private val clickRegistrations: List<WinUIContextMenuClickRegistration>,
+    private val closedRegistration: WinUIContextMenuClosedRegistration,
+) {
+    fun dispose() {
+        clickRegistrations.forEach { registration ->
+            runCatching {
+                registration.item.click.remove(registration.token)
+            }
+        }
+        runCatching {
+            flyout.closed.remove(closedRegistration.token)
+        }
+        runCatching {
+            flyout.hide()
+        }
+    }
+}
+
+private data class WinUIContextMenuClickRegistration(
+    val item: MenuFlyoutItem,
+    val token: EventRegistrationToken,
+    val handler: RoutedEventHandler,
+)
+
+private data class WinUIContextMenuClosedRegistration(
+    val token: EventRegistrationToken,
+    val handler: EventHandlerCallback<Any?>,
+)
 
 private const val DisabledAlpha = 0.38f
 

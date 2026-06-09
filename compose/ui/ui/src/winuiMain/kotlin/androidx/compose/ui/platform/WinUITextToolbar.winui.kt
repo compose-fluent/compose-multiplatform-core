@@ -17,16 +17,19 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.Density
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.xaml.RoutedEventHandler
+import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.controls.MenuFlyout
 import microsoft.ui.xaml.controls.MenuFlyoutItem
 import windows.foundation.Point
 
 internal class WinUITextToolbar(
-    private val hostProvider: () -> UIElement? = { null },
+    private val hostProvider: () -> FrameworkElement? = { null },
+    private val densityProvider: () -> Density = { Density(1f) },
 ) : TextToolbar {
     private var currentMenu: WinUITextToolbarMenu? = null
 
@@ -73,13 +76,7 @@ internal class WinUITextToolbar(
         )
         currentMenu = menu
         if (host != null && nativeMenu != null) {
-            try {
-                nativeMenu.flyout.showAt(host, Point(rect.left, rect.bottom))
-            } catch (throwable: Throwable) {
-                currentMenu = null
-                clearNativeRegistrations(menu)
-                throw throwable
-            }
+            showNativeMenu(host, nativeMenu.flyout, menu)
         }
     }
 
@@ -146,6 +143,34 @@ internal class WinUITextToolbar(
         return NativeMenu(flyout, clickRegistrations, closedRegistration)
     }
 
+    private fun showNativeMenu(
+        host: FrameworkElement,
+        flyout: MenuFlyout,
+        menu: WinUITextToolbarMenu,
+    ) {
+        if (currentMenu?.nativeMenu == flyout) {
+            try {
+                System.err.println(
+                    "WinUIContextMenu.showAt source=textToolbar " +
+                        "root=${host::class.simpleName} " +
+                        "loaded=${runCatching { host.isLoaded }.getOrNull()} " +
+                        "xamlRoot=${runCatching { host.xamlRoot != null }.getOrNull()} " +
+                        "size=${runCatching { host.actualWidth }.getOrNull()}x" +
+                        "${runCatching { host.actualHeight }.getOrNull()} " +
+                        "density=${densityProvider().density} " +
+                        "rect=${menu.rect} " +
+                        "items=${menu.itemLabels.size}"
+                )
+                flyout.showAt(host)
+            } catch (_: Throwable) {
+                if (currentMenu?.nativeMenu == flyout) {
+                    currentMenu = null
+                    clearNativeRegistrations(menu)
+                }
+            }
+        }
+    }
+
     private fun clearNativeRegistrations(menu: WinUITextToolbarMenu) {
         menu.clickRegistrations.forEach(::clearClickRegistration)
         val closedRegistration = menu.closedRegistration
@@ -197,6 +222,11 @@ private data class NativeMenu(
     val clickRegistrations: List<WinUITextToolbarClickRegistration>,
     val closedRegistration: WinUITextToolbarClosedRegistration,
 )
+
+internal fun Rect.toXamlPoint(density: Density): Point {
+    val scale = density.density.takeIf { it.isFinite() && it > 0f } ?: 1f
+    return Point(left / scale, bottom / scale)
+}
 
 private fun MutableList<WinUITextToolbarRequest>.addRequest(label: String, callback: (() -> Unit)?) {
     if (callback != null) {

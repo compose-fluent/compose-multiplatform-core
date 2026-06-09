@@ -144,7 +144,14 @@ private fun WinUIPopupLayout(
         content = currentContent,
         modifier = Modifier.semantics { popup() },
     ) { measurables, constraints ->
-        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val windowSize = containerSize.takeIf { it != IntSize.Zero }
+            ?: constraints.finiteMaxSizeOr(IntSize.Zero)
+        val looseConstraints = constraints.copy(
+            minWidth = 0,
+            minHeight = 0,
+            maxWidth = constraints.finiteMaxWidthOr(windowSize.width),
+            maxHeight = constraints.finiteMaxHeightOr(windowSize.height),
+        )
         val placeables = measurables.map { measurable ->
             measurable.measure(looseConstraints)
         }
@@ -152,16 +159,16 @@ private fun WinUIPopupLayout(
             width = placeables.maxOfOrNull { it.width } ?: 0,
             height = placeables.maxOfOrNull { it.height } ?: 0,
         )
-        val windowSize = containerSize.takeIf { it != IntSize.Zero }
+        val effectiveWindowSize = windowSize.takeIf { it != IntSize.Zero }
             ?: constraints.finiteMaxSizeOr(contentSize)
         val popupPosition = popupPositionProvider.calculatePosition(
             anchorBounds = parentBoundsInWindow,
-            windowSize = windowSize,
+            windowSize = effectiveWindowSize,
             layoutDirection = layoutDirection,
             popupContentSize = contentSize,
         ).let { position ->
             if (properties.clippingEnabled) {
-                position.clipToWindow(contentSize, windowSize)
+                position.clipToWindow(contentSize, effectiveWindowSize)
             } else {
                 position
             }
@@ -181,6 +188,12 @@ private fun Constraints.finiteMaxSizeOr(fallback: IntSize): IntSize =
         width = if (hasBoundedWidth) maxWidth else fallback.width,
         height = if (hasBoundedHeight) maxHeight else fallback.height,
     )
+
+private fun Constraints.finiteMaxWidthOr(fallback: Int): Int =
+    if (hasBoundedWidth) maxWidth else fallback.takeIf { it > 0 } ?: Constraints.Infinity
+
+private fun Constraints.finiteMaxHeightOr(fallback: Int): Int =
+    if (hasBoundedHeight) maxHeight else fallback.takeIf { it > 0 } ?: Constraints.Infinity
 
 private fun IntOffset.clipToWindow(contentSize: IntSize, windowSize: IntSize): IntOffset =
     IntOffset(

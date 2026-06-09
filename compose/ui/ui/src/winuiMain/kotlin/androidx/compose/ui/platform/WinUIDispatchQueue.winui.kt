@@ -16,8 +16,10 @@
 
 package androidx.compose.ui.platform
 
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import kotlin.time.Duration.Companion.milliseconds
 import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.dispatching.DispatcherQueueTimer
 import windows.foundation.TypedEventHandler
 
 internal class WinUIDispatchQueue(
@@ -27,16 +29,23 @@ internal class WinUIDispatchQueue(
     private val pending = ArrayDeque<() -> Unit>()
     private var isScheduled = false
     private var isDraining = false
+    private var isClosed = false
+    private val tickHandler = TypedEventHandler<DispatcherQueueTimer, Any?> { _, _ ->
+        runCatching {
+            drain()
+        }.onFailure { throwable ->
+            logDispatchFailure(throwable)
+        }
+    }
     private val timer = dispatcherQueue.createTimer().also { timer ->
         timer.interval = 1.milliseconds
         timer.isRepeating = false
-        timer.tick.add(TypedEventHandler { _, _ ->
-            drain()
-        })
     }
+    private val tickToken: EventRegistrationToken = timer.tick.add(tickHandler)
 
     fun dispatch(block: () -> Unit): Boolean {
         synchronized(lock) {
+            if (isClosed) return false
             pending.addLast(block)
             if (isScheduled || isDraining) return true
             isScheduled = true
@@ -70,11 +79,17 @@ internal class WinUIDispatchQueue(
             }
         }
         try {
-            tasks.forEach { task -> task() }
+            tasks.forEach { task ->
+                runCatching {
+                    task()
+                }.onFailure { throwable ->
+                    logDispatchFailure(throwable)
+                }
+            }
         } finally {
             val shouldSchedule = synchronized(lock) {
                 isDraining = false
-                if (pending.isNotEmpty() && !isScheduled) {
+                if (!isClosed && pending.isNotEmpty() && !isScheduled) {
                     isScheduled = true
                     true
                 } else {
@@ -85,5 +100,21 @@ internal class WinUIDispatchQueue(
                 timer.start()
             }
         }
+    }
+
+    fun close() {
+        synchronized(lock) {
+            if (isClosed) return
+            isClosed = true
+            isScheduled = false
+            pending.clear()
+        }
+        runCatching { timer.stop() }
+        runCatching { timer.tick.remove(tickToken) }
+    }
+
+    private fun logDispatchFailure(throwable: Throwable) {
+        System.err.println("WinUIDispatchQueue task failed: ${throwable::class.qualifiedName}: ${throwable.message}")
+        throwable.printStackTrace(System.err)
     }
 }

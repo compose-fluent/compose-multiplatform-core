@@ -23,6 +23,7 @@ import microsoft.ui.dispatching.DispatcherQueue
 
 internal class WinUIFrameClock(
     dispatcherQueue: DispatcherQueue,
+    private val onFrame: () -> Unit = {},
 ) : MonotonicFrameClock {
     private val dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
     private var isFrameScheduled = false
@@ -34,6 +35,7 @@ internal class WinUIFrameClock(
 
     fun cancel() {
         isCancelled = true
+        dispatchQueue.close()
         frameClock.cancel(CancellationException("WinUIComposeView disposed"))
     }
 
@@ -44,6 +46,7 @@ internal class WinUIFrameClock(
                 isFrameScheduled = false
                 if (!isCancelled) {
                     frameClock.sendFrame(System.nanoTime())
+                    onFrame()
                 }
             }
         ) {

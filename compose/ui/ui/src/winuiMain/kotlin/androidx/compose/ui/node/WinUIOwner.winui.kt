@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.retain.RetainedValuesStore
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.SessionMutex
 import androidx.compose.ui.autofill.Autofill
@@ -142,6 +143,9 @@ internal class WinUIOwner(
     private val accessibilityBridge = WinUIAccessibilityBridge(
         onUpdate = onAccessibilityUpdate,
     )
+    private val snapshotInvalidationTracker = WinUISnapshotInvalidationTracker {
+        schedule(::invalidateRootLayer)
+    }
 
     override val sharedDrawScope = LayoutNodeDrawScope()
     override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
@@ -200,7 +204,7 @@ internal class WinUIOwner(
     override val fontFamilyResolver: FontFamily.Resolver = createFontFamilyResolver()
     override val layoutDirection: LayoutDirection = LayoutDirection.Ltr
     override val localeList: LocaleList = LocaleList.current
-    override val snapshotObserver = OwnerSnapshotObserver { it.invoke() }
+    override val snapshotObserver = snapshotInvalidationTracker.snapshotObserver()
     override val modifierLocalManager: ModifierLocalManager = ModifierLocalManager(this)
     override val dragAndDropManager: DragAndDropManager = winUIDragAndDropManager
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
@@ -217,6 +221,8 @@ internal class WinUIOwner(
     private var lastMousePointerEvent: WinUIPointerEvent? = null
     override val measureIteration: Long
         get() = measureAndLayoutDelegate.measureIteration
+    internal val isMeasureLayoutInProgress: Boolean
+        get() = measureAndLayoutDelegate.duringMeasureLayout
     override val viewConfiguration: ViewConfiguration = WinUIViewConfiguration
 
     @InternalCoreApi
@@ -564,6 +570,12 @@ internal class WinUIOwner(
         onRootInvalidated()
     }
 
+    internal fun sendAndPerformSnapshotChanges() {
+        if (!isShuttingDown) {
+            snapshotInvalidationTracker.sendAndPerformSnapshotChanges()
+        }
+    }
+
     override val outOfFrameExecutor: OutOfFrameExecutor?
         get() = if (isShuttingDown) null else this
 
@@ -655,7 +667,9 @@ internal class WinUIOwner(
         updateLastPointerEvent: Boolean = true,
     ): Boolean {
         if (isShuttingDown) return false
-        inputModeManager.requestInputMode(InputMode.Touch)
+        if (button != null) {
+            inputModeManager.requestInputMode(InputMode.Touch)
+        }
         if (updateLastPointerEvent) {
             updateLastMousePointerEvent(
                 WinUIPointerEvent(
@@ -795,7 +809,6 @@ private class WinUIPointerEventSender(
         trackMousePointerState(event)
         var handled = false
         handled = sendMissingMoveForHover(event) || handled
-        handled = sendHoverExitForMousePress(event) || handled
         handled = sendMissingReleases(event) || handled
         handled = sendMissingPresses(event) || handled
         handled = if (event.shouldSend()) {
@@ -803,7 +816,6 @@ private class WinUIPointerEventSender(
         } else {
             sendNativeEventOnly(event)
         } || handled
-        handled = sendHoverEnterAfterMouseRelease(event) || handled
         return handled
     }
 
@@ -897,33 +909,6 @@ private class WinUIPointerEventSender(
         )
     }
 
-    private fun sendHoverExitForMousePress(currentEvent: PointerInputEvent): Boolean {
-        val previousEvent = previousEvent ?: return false
-        if (currentEvent.eventType != PointerEventType.Press) return false
-        if (currentEvent.pointers.none { it.type == PointerType.Mouse }) return false
-        if (previousEvent.pointers.none { it.type == PointerType.Mouse && it.activeHover && !it.down }) {
-            return false
-        }
-        return sendInternal(
-            previousEvent.copySynthetic(PointerEventType.Exit) { pointer ->
-                pointer.copySynthetic(down = false)
-            }
-        )
-    }
-
-    private fun sendHoverEnterAfterMouseRelease(currentEvent: PointerInputEvent): Boolean {
-        if (currentEvent.eventType != PointerEventType.Release) return false
-        if (!isMousePointerInside) return false
-        if (currentEvent.pointers.none { it.type == PointerType.Mouse && it.activeHover && !it.down }) {
-            return false
-        }
-        return sendInternal(
-            currentEvent.copySynthetic(PointerEventType.Enter) { pointer ->
-                pointer.copySynthetic(down = false)
-            }
-        )
-    }
-
     private fun PointerInputEvent.shouldSend(): Boolean {
         fun areSameParams(first: PointerInputEvent, second: PointerInputEvent): Boolean =
             first.pressedIds().toSet() == second.pressedIds().toSet() &&
@@ -994,4 +979,42 @@ private class WinUIPointerEventSender(
         panGestureOffset = Offset.Zero,
         originalEventPosition = position,
     )
+}
+
+private class WinUISnapshotInvalidationTracker(
+    private val invalidate: () -> Unit,
+) {
+    private val lock = Any()
+    private val commands = mutableListOf<() -> Unit>()
+    private val commandsToRun = mutableListOf<() -> Unit>()
+    private var isPerforming = false
+
+    fun snapshotObserver(): OwnerSnapshotObserver = OwnerSnapshotObserver { command ->
+        if (isPerforming) {
+            command()
+        } else {
+            synchronized(lock) {
+                commands += command
+            }
+            invalidate()
+        }
+    }
+
+    fun sendAndPerformSnapshotChanges() {
+        Snapshot.sendApplyNotifications()
+        while (true) {
+            synchronized(lock) {
+                if (commands.isEmpty()) return
+                commandsToRun += commands
+                commands.clear()
+            }
+            isPerforming = true
+            try {
+                commandsToRun.forEach { command -> command() }
+            } finally {
+                commandsToRun.clear()
+                isPerforming = false
+            }
+        }
+    }
 }
