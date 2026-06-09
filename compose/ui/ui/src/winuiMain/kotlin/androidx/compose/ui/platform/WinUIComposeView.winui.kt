@@ -45,6 +45,7 @@ import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.node.WinUICoordinateMapper
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.skiko.RecordDrawRectRenderDecorator
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.WinUIInteropAction
 import androidx.compose.ui.viewinterop.WinUIInteropTransaction
@@ -58,6 +59,8 @@ import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
 import microsoft.ui.xaml.RoutedEventHandler
+import microsoft.ui.xaml.XamlRoot
+import microsoft.ui.xaml.XamlRootChangedEventArgs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -67,6 +70,7 @@ import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
+import windows.foundation.TypedEventHandler
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -206,6 +210,10 @@ class WinUIComposeView internal constructor(
     private var isDisposed = false
     private var loadedRenderSchedulerHandler: RoutedEventHandler? = null
     private var loadedRenderSchedulerToken: EventRegistrationToken? = null
+    private var xamlRoot: XamlRoot? = null
+    private var xamlRootChangedHandler: TypedEventHandler<XamlRoot, XamlRootChangedEventArgs>? =
+        null
+    private var xamlRootChangedToken: EventRegistrationToken? = null
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
     private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner.winUIDragAndDropManager)
@@ -282,6 +290,7 @@ class WinUIComposeView internal constructor(
         pointerCursorAdapter.dispose()
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
+        clearXamlRootDensityObserver()
         owner.dispose()
         clearLoadedRenderSchedulerRequest()
         renderHost.close()
@@ -292,6 +301,7 @@ class WinUIComposeView internal constructor(
     }
 
     internal fun setWindowContainerSize(size: IntSize) {
+        updateDensityFromXamlRoot()
         owner.setWindowContainerSize(size)
         renderHost.setSize(size)
         requestRender()
@@ -368,6 +378,7 @@ class WinUIComposeView internal constructor(
             val handler = RoutedEventHandler { _, _ ->
                 clearLoadedRenderSchedulerRequest()
                 if (!isDisposed) {
+                    updateDensityFromXamlRoot()
                     startRenderScheduler()
                     requestRender()
                 }
@@ -390,6 +401,42 @@ class WinUIComposeView internal constructor(
             loadedRenderSchedulerToken = null
         }
         loadedRenderSchedulerHandler = null
+    }
+
+    private fun updateDensityFromXamlRoot() {
+        val currentXamlRoot = runCatching { rootContentControl.xamlRoot }.getOrNull()
+        if (currentXamlRoot != xamlRoot) {
+            clearXamlRootDensityObserver()
+            xamlRoot = currentXamlRoot
+            if (currentXamlRoot != null) {
+                val handler = TypedEventHandler<XamlRoot, XamlRootChangedEventArgs> { _, _ ->
+                    if (!isDisposed) {
+                        updateDensityFromXamlRoot()
+                        scheduleRootContentSync()
+                        requestRender()
+                    }
+                }
+                xamlRootChangedHandler = handler
+                xamlRootChangedToken = runCatching { currentXamlRoot.changed.add(handler) }
+                    .getOrNull()
+            }
+        }
+
+        val scale = currentXamlRoot?.rasterizationScale?.toFloat()
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?: 1f
+        owner.updateDensity(Density(scale, owner.density.fontScale))
+    }
+
+    private fun clearXamlRootDensityObserver() {
+        val currentXamlRoot = xamlRoot
+        val token = xamlRootChangedToken
+        xamlRootChangedToken = null
+        xamlRootChangedHandler = null
+        if (currentXamlRoot != null && token != null) {
+            runCatching { currentXamlRoot.changed.remove(token) }
+        }
+        xamlRoot = null
     }
 
     private fun requestRender() {

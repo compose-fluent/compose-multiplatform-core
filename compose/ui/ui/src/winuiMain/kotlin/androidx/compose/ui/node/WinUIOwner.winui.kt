@@ -19,7 +19,10 @@ package androidx.compose.ui.node
 import androidx.collection.IntObjectMap
 import androidx.collection.MutableIntObjectMap
 import androidx.collection.mutableIntObjectMapOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.retain.RetainedValuesStore
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.SessionMutex
 import androidx.compose.ui.autofill.Autofill
@@ -171,7 +174,8 @@ internal class WinUIOwner(
     @Suppress("DEPRECATION")
     override val autofill: Autofill? = null
     override val autofillManager: AutofillManager? = null
-    override val density: Density = Density(1f)
+    override var density: Density by mutableStateOf(Density(1f))
+        private set
     @Suppress("DEPRECATION")
     override val textInputService: TextInputService = TextInputService(WinUIPlatformTextInputService)
     override val softwareKeyboardController: SoftwareKeyboardController = WinUISoftwareKeyboardController
@@ -219,6 +223,7 @@ internal class WinUIOwner(
     override var showLayoutBounds: Boolean = false
 
     init {
+        root.density = density
         root.layoutDirection = layoutDirection
         root.viewConfiguration = viewConfiguration
         root.modifier = focusOwner.modifier.then(dragAndDropManager.modifier)
@@ -262,15 +267,38 @@ internal class WinUIOwner(
 
     fun setWindowContainerSize(size: IntSize) {
         if (isShuttingDown) return
-        mutableWindowInfo.containerSize = size
-        mutableWindowInfo.containerDpSize = with(density) {
-            DpSize(size.width.toDp(), size.height.toDp())
-        }
+        updateWindowContainerSize(size)
         if (size.width > 0 && size.height > 0) {
             measureAndLayoutDelegate.updateRootConstraints(
                 Constraints(maxWidth = size.width, maxHeight = size.height)
             )
             onMeasureAndLayoutRequested()
+        }
+    }
+
+    fun updateDensity(density: Density) {
+        if (isShuttingDown || this.density == density) return
+        this.density = density
+        root.density = density
+        updateWindowContainerSize(mutableWindowInfo.containerSize)
+        if (
+            mutableWindowInfo.containerSize.width > 0 &&
+                mutableWindowInfo.containerSize.height > 0
+        ) {
+            measureAndLayoutDelegate.updateRootConstraints(
+                Constraints(
+                    maxWidth = mutableWindowInfo.containerSize.width,
+                    maxHeight = mutableWindowInfo.containerSize.height,
+                )
+            )
+            onMeasureAndLayoutRequested()
+        }
+    }
+
+    private fun updateWindowContainerSize(size: IntSize) {
+        mutableWindowInfo.containerSize = size
+        mutableWindowInfo.containerDpSize = with(density) {
+            DpSize(size.width.toDp(), size.height.toDp())
         }
     }
 

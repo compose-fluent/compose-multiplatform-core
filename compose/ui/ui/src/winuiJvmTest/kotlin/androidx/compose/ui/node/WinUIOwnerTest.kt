@@ -79,7 +79,9 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -595,6 +597,38 @@ class WinUIOwnerTest {
 
             assertTrue(owner.ownerStateForTest().rootInvalidationCount > firstResizeInvalidations)
             assertTrue(events.rootInvalidated > firstResizePlatformInvalidations)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun densityUpdatesWindowDpSizeAndRequestsLayout() {
+        var measureRequests = 0
+        val owner = createOwner(
+            onMeasureAndLayoutRequested = { measureRequests += 1 },
+        )
+        try {
+            owner.setWindowContainerSize(IntSize(200, 100))
+
+            assertEquals(Density(1f), owner.density)
+            assertEquals(200.dp, owner.windowInfo.containerDpSize.width)
+            assertEquals(100.dp, owner.windowInfo.containerDpSize.height)
+            assertTrue(measureRequests > 0)
+            val requestsAfterResize = measureRequests
+
+            owner.updateDensity(Density(2f))
+
+            assertEquals(Density(2f), owner.density)
+            assertEquals(Density(2f), owner.root.density)
+            assertEquals(100.dp, owner.windowInfo.containerDpSize.width)
+            assertEquals(50.dp, owner.windowInfo.containerDpSize.height)
+            assertTrue(measureRequests > requestsAfterResize)
+            val requestsAfterDensity = measureRequests
+
+            owner.updateDensity(Density(2f))
+
+            assertEquals(requestsAfterDensity, measureRequests)
         } finally {
             owner.dispose()
         }
