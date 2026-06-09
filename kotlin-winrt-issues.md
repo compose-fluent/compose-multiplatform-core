@@ -11,8 +11,7 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** none known for the current compose-winui
   validation path.
-- **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, and
-  `KWINRT-033`.
+- **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, and `KWINRT-032`.
 - **Open compose-side workarounds:** `KWINRT-030`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
@@ -22,7 +21,7 @@ baseline, not every retest attempt.
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
   `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`,
-  `KWINRT-037`, and `KWINRT-025`.
+  `KWINRT-037`, `KWINRT-025`, and `KWINRT-033`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -990,8 +989,8 @@ baseline, not every retest attempt.
 
 ## KWINRT-033: Groovy DSL cannot consume explicit WinUI type declarations without generateProjection
 
-- **Status:** Open upstream/plugin in kotlin-winrt Maven snapshot
-  `0.1.0-SNAPSHOT` as of 2026-06-08.
+- **Status:** Fixed for compose-winui with kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-09.
 - **Observed in:** `compose/ui/ui/build.gradle` and
   `compose/ui/ui/winui-samples/build.gradle` after trying to follow the current
   `compose-fluent/kotlin-winrt` README WinUI setup, which uses
@@ -1010,20 +1009,16 @@ baseline, not every retest attempt.
   declare WinMD sources and `type(...)` entries without enabling full NuGet or
   Windows SDK projection generation, while still exposing the declared types to
   compilation.
-- **compose-winui workaround:** keep the legacy
-  `windowsSdk(version, false, true)` and `nugetPackage(...) {
-  generateProjection = true }` configuration in Groovy build scripts until the
-  plugin supports the README path for these modules. `compose/mpp/demo-winui`,
-  which uses Kotlin DSL, already uses the no-`generateProjection` form.
-- **2026-06-08 retest:** still open. The current Maven snapshot still does not
-  expose the README's `windowsSdk(version, includeExtensions)` path to Groovy
-  builds (`Could not find method windowsSdk() for arguments [10.0.26100.0,
-  false]`). The legacy three-argument form with projection generation disabled
-  configures, but `:compose:ui:ui:compileKotlinWinuiJvm` still fails with
-  unresolved explicit types including `FocusManager`, `Clipboard`,
-  `UISettings`, `InputSystemCursor`, `MenuFlyout`, `Launcher`, `Canvas`, and
-  `ContentControl`. Keep the compose-ui and winui-samples full-projection
-  workaround for now.
+- **Resolution:** compose-ui now uses Groovy `winmd(...)` metadata inputs plus
+  explicit `type(...)` declarations and no `generateProjection` setting. The
+  repository-local WinUI samples also no longer enable NuGet full projection
+  generation.
+- **Validation:** repository search finds no `generateProjection` usage in
+  `compose/ui/ui/build.gradle`, `compose/ui/ui/winui-samples/build.gradle`, or
+  `compose/mpp/demo-winui/build.gradle.kts`.
+  `:compose:ui:ui:winui-samples:runWinUISkikoSample` and
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` pass with `skiko-winui`
+  `0.0.0-20260609.030224-9` and `skiko` `0.148.0`.
 
 ## KWINRT-034: WinUI direct WinMD inputs leave CompositionTarget unsupported
 
