@@ -24,24 +24,22 @@ import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class WinUIPointerEventProcessorTest {
     @Test
-    fun skipsAlreadyHandledNativeEvents() {
+    fun dispatchesHandledRenderSurfaceEvents() {
         val processor = WinUIPointerEventProcessor()
         var dispatchCount = 0
 
         val handled = processor.process(
             event = samplePointerEvent(),
-            isHandled = true,
         ) { _, _, _, _, _, _, _, _, _, _, _, _ ->
             dispatchCount += 1
             true
         }
 
-        assertNull(handled)
-        assertEquals(0, dispatchCount)
+        assertEquals(true, handled)
+        assertEquals(1, dispatchCount)
     }
 
     @Test
@@ -52,7 +50,6 @@ class WinUIPointerEventProcessorTest {
 
         val handled = processor.process(
             event = event,
-            isHandled = false,
         ) { eventType, position, uptimeMillis, pointerId, down, type, buttons,
                 keyboardModifiers, button, scrollDelta, isInBounds, nativeEvent ->
             dispatchedEvent = WinUIPointerEvent(
@@ -77,14 +74,18 @@ class WinUIPointerEventProcessorTest {
     }
 }
 
-private fun samplePointerEvent() = WinUIPointerEvent(
-    eventType = PointerEventType.Press,
+private fun samplePointerEvent(
+    eventType: PointerEventType = PointerEventType.Press,
+    down: Boolean = true,
+    buttons: PointerButtons = PointerButtons(isPrimaryPressed = true),
+) = WinUIPointerEvent(
+    eventType = eventType,
     position = Offset(3f, 4f),
     uptimeMillis = 17L,
     pointerId = 23L,
-    down = true,
+    down = down,
     type = PointerType.Mouse,
-    buttons = PointerButtons(isPrimaryPressed = true),
+    buttons = buttons,
     keyboardModifiers = PointerKeyboardModifiers(isCtrlPressed = true),
     button = PointerButton.Primary,
     scrollDelta = Offset.Zero,

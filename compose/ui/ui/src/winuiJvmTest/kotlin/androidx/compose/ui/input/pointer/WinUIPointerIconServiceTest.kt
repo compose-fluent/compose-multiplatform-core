@@ -16,18 +16,18 @@
 
 package androidx.compose.ui.input.pointer
 
-import windows.ui.core.CoreCursorType
+import microsoft.ui.input.InputSystemCursorShape
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class WinUIPointerIconServiceTest {
     @Test
-    fun pointerIconsMapToWinUICoreCursorTypes() {
-        assertEquals(CoreCursorType.Arrow, (PointerIcon.Default as WinUIPointerIcon).cursorType)
-        assertEquals(CoreCursorType.Cross, (PointerIcon.Crosshair as WinUIPointerIcon).cursorType)
-        assertEquals(CoreCursorType.IBeam, (PointerIcon.Text as WinUIPointerIcon).cursorType)
-        assertEquals(CoreCursorType.Hand, (PointerIcon.Hand as WinUIPointerIcon).cursorType)
+    fun pointerIconsMapToWinUICursorShapes() {
+        assertEquals(InputSystemCursorShape.Arrow, (PointerIcon.Default as WinUIPointerIcon).cursorShape)
+        assertEquals(InputSystemCursorShape.Cross, (PointerIcon.Crosshair as WinUIPointerIcon).cursorShape)
+        assertEquals(InputSystemCursorShape.IBeam, (PointerIcon.Text as WinUIPointerIcon).cursorShape)
+        assertEquals(InputSystemCursorShape.Hand, (PointerIcon.Hand as WinUIPointerIcon).cursorShape)
     }
 
     @Test

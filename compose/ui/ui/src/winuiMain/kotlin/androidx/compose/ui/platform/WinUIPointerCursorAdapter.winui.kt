@@ -21,7 +21,6 @@ import androidx.compose.ui.input.pointer.WinUIPointerIcon
 import androidx.compose.ui.viewinterop.WinUIRootContentControl
 import microsoft.ui.input.InputSystemCursor
 import microsoft.ui.input.InputSystemCursorShape
-import windows.ui.core.CoreCursorType
 
 internal class WinUIPointerCursorAdapter(
     private val root: WinUIRootContentControl,
@@ -48,11 +47,5 @@ internal class WinUIPointerCursorAdapter(
 }
 
 private fun PointerIcon.toInputSystemCursorShape(): InputSystemCursorShape {
-    val cursorType = (this as? WinUIPointerIcon)?.cursorType ?: CoreCursorType.Arrow
-    return when (cursorType) {
-        CoreCursorType.Cross -> InputSystemCursorShape.Cross
-        CoreCursorType.Hand -> InputSystemCursorShape.Hand
-        CoreCursorType.IBeam -> InputSystemCursorShape.IBeam
-        else -> InputSystemCursorShape.Arrow
-    }
+    return (this as? WinUIPointerIcon)?.cursorShape ?: InputSystemCursorShape.Arrow
 }
