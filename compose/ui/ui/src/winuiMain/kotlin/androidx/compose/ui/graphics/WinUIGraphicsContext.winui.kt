@@ -16,25 +16,24 @@
 
 package androidx.compose.ui.graphics
 
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 
+@OptIn(InternalComposeUiApi::class)
 internal object WinUIGraphicsContext : GraphicsContext {
-    var activeGraphicsLayersCount = 0
-        private set
+    private var skiaGraphicsContext = SkiaGraphicsContext()
 
-    override fun createGraphicsLayer(): GraphicsLayer {
-        activeGraphicsLayersCount++
-        return GraphicsLayer()
-    }
+    val activeGraphicsLayersCount: Int
+        get() = skiaGraphicsContext.activeGraphicsLayersCount
 
-    override fun releaseGraphicsLayer(layer: GraphicsLayer) {
-        if (!layer.isReleased) {
-            activeGraphicsLayersCount--
-            layer.isReleased = true
-        }
-    }
+    override fun createGraphicsLayer(): GraphicsLayer =
+        skiaGraphicsContext.createGraphicsLayer()
+
+    override fun releaseGraphicsLayer(layer: GraphicsLayer) =
+        skiaGraphicsContext.releaseGraphicsLayer(layer)
 
     internal fun resetForTest() {
-        activeGraphicsLayersCount = 0
+        skiaGraphicsContext.dispose()
+        skiaGraphicsContext = SkiaGraphicsContext()
     }
 }

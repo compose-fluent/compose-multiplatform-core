@@ -21,8 +21,8 @@ baseline, not every retest attempt.
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
-  `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, and
-  `KWINRT-036`.
+  `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`, and
+  `KWINRT-037`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -1093,24 +1093,20 @@ baseline, not every retest attempt.
 
 ## KWINRT-037: Authored override parameters using Windows.Foundation.Size have no metadata
 
-- **Status:** Open upstream/generator in kotlin-winrt Maven snapshot
-  `0.1.0-SNAPSHOT` as of 2026-06-09.
+- **Status:** Closed/not reproducible after completing the Maven snapshot
+  download/cache population on 2026-06-09.
 - **Observed in:** `:compose:ui:ui:generateWinRtProjections` after refreshing to
   current kotlin-winrt runtime `0.1.0-SNAPSHOT:20260609.020911-47` and trying
   skiko-winui `0.0.0-20260609.030224-9`.
 - **Symptom:** projection generation fails before Kotlin compilation with
   `Authored WinRT override parameter 'availableSize' of type
   'Windows.Foundation.Size' has no metadata.`
-- **Evidence:** compose-ui explicitly declares `type("Windows.Foundation.Size")`
-  together with `Windows.Foundation.Point` and `Windows.Foundation.Rect`, and
-  supplies the Windows SDK metadata through `windowsSdk(version, false, false)`.
-  The failure appears while the authoring scanner processes hosted WinUI
-  classes with XAML measure/arrange override signatures, not because
-  compose-winui omitted the type from the requested projection surface.
-- **Expected behavior:** authored WinRT override validation should resolve
-  metadata for explicitly requested Windows SDK struct types such as
-  `Windows.Foundation.Size`, including when those types appear only in authored
-  override parameters.
+- **Resolution:** this was most likely caused by an incomplete Gradle
+  artifact/cache state after transient Maven snapshot download failures. After
+  retrying the dependency fetch and confirming `skiko-winui`
+  `0.0.0-20260609.030224-9` was fully available in the Gradle cache,
+  `:compose:ui:ui:compileKotlinWinuiJvm` and `:compose:ui:ui:winuiJvmTest`
+  completed successfully with the explicit Windows SDK type declarations.
 - **compose-winui workaround:** none. Do not exclude authored classes or replace
   real XAML measure/arrange participation with no-op wrappers to hide the
-  generator error.
+  generator path.
