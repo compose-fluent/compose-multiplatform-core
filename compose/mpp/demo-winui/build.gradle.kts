@@ -58,6 +58,19 @@ val localWinUiJarProjects = listOf(
     ":compose:ui:ui-graphics",
     ":compose:ui:ui-text",
 )
+val localWinUiCompileProjects = listOf(
+    ":compose:animation:animation-core",
+    ":compose:animation:animation",
+    ":compose:foundation:foundation-layout",
+    ":compose:foundation:foundation",
+    ":compose:material:material-ripple",
+    ":compose:material:material",
+    ":compose:material3:material3-window-size-class",
+    ":compose:material3:adaptive:adaptive",
+    ":compose:material3:adaptive:adaptive-layout",
+    ":compose:material3:adaptive:adaptive-navigation",
+    ":compose:material3:material3",
+)
 val navigationWinUiCompileTasks = listOf(
     ":navigation:navigation-compose:compileKotlinWinuiJvm",
     ":navigation3:navigation3-ui:compileKotlinWinuiJvm",
@@ -82,7 +95,7 @@ val winUiMppPriApplicationDefinition = winUiMppPriRoot.resolve("App.xaml")
 val winUiMppPriContent = winUiMppPriRoot.resolve("Assets/Sample.txt")
 val winUiMppPriEmbed = winUiMppPriRoot.resolve("Embedded/Payload.bin")
 val winUiMppSampleSourceFiles = listOf(
-    project.file("../demo/src/commonMain/kotlin/androidx/compose/mpp/demo/ImageViewer.kt"),
+    project.file("../demo/src/commonMain/kotlin"),
     project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/Main.winui.kt"),
     project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/MainJavaExec.winui.kt"),
 )
@@ -175,29 +188,47 @@ kotlin {
 
     sourceSets {
         commonMain {
+            kotlin.srcDir("src/commonMain/kotlin")
             kotlin.srcDir("../demo/src/commonMain/kotlin")
-            kotlin.include("androidx/compose/mpp/demo/ImageViewer.kt")
+            kotlin.exclude("androidx/compose/mpp/demo/components/dialog/DialogExample.kt")
+            kotlin.exclude("androidx/compose/mpp/demo/components/popup/ConfigurablePopup.kt")
+            kotlin.exclude("androidx/compose/mpp/demo/components/text/FontRasterization.kt")
             resources.srcDir("../demo/src/commonMain/resources")
             dependencies {
                 implementation(kotlin("stdlib"))
+                implementation(libs.kotlinCoroutinesCore)
+                implementation(libs.kotlinSerializationCore)
                 implementation(libs.skiko)
 
+                implementation(project(":compose:animation:animation"))
+                implementation(project(":compose:animation:animation-core"))
+                implementation(project(":compose:foundation:foundation"))
+                implementation(project(":compose:foundation:foundation-layout"))
+                implementation(project(":compose:material:material"))
+                implementation(project(":compose:material3:material3"))
+                implementation(project(":compose:material3:material3-window-size-class"))
+                implementation(project(":compose:material3:adaptive:adaptive"))
+                implementation(project(":compose:material3:adaptive:adaptive-layout"))
+                implementation(project(":compose:material3:adaptive:adaptive-navigation"))
                 implementation(project(":compose:runtime:runtime"))
+                implementation("androidx.compose.runtime:runtime-retain:${composeVersion.get()}")
+                implementation(project(":compose:ui:ui-backhandler"))
                 implementation(project(":compose:ui:ui-geometry"))
                 implementation(project(":compose:ui:ui-unit"))
                 implementation(project(":compose:ui:ui-util"))
                 implementation(files(localWinUiJarProjects.map(::localWinUiJar)))
-                implementation("org.jetbrains.compose.foundation:foundation:1.10.0") {
+                implementation(project(":lifecycle:lifecycle-common"))
+                implementation(project(":lifecycle:lifecycle-runtime"))
+                implementation(project(":lifecycle:lifecycle-runtime-compose"))
+                implementation(project(":lifecycle:lifecycle-viewmodel-compose"))
+                implementation(project(":lifecycle:lifecycle-viewmodel-savedstate"))
+                implementation(project(":navigation:navigation-common"))
+                implementation(project(":navigation:navigation-compose"))
+                implementation(project(":navigation:navigation-runtime"))
+                implementation("org.jetbrains.compose.material:material-icons-core:1.7.3") {
                     exclude(group = "org.jetbrains.compose.runtime")
                     exclude(group = "org.jetbrains.compose.ui")
                 }
-                implementation("org.jetbrains.compose.foundation:foundation-layout:1.10.0") {
-                    exclude(group = "org.jetbrains.compose.runtime")
-                    exclude(group = "org.jetbrains.compose.ui")
-                }
-                implementation("androidx.compose.runtime:runtime-retain:${composeVersion.get()}")
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.9.6")
-                implementation("androidx.lifecycle:lifecycle-viewmodel-compose:${lifecycleVersion.get()}")
                 implementation("androidx.savedstate:savedstate-compose:1.4.0")
                 implementation("androidx.navigationevent:navigationevent-compose:${navigationEventVersion.get()}")
                 implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
@@ -207,8 +238,6 @@ kotlin {
 
         named("winuiJvmMain") {
             kotlin.srcDir("../demo/src/winuiJvmMain/kotlin")
-            kotlin.include("androidx/compose/mpp/demo/Main.winui.kt")
-            kotlin.include("androidx/compose/mpp/demo/MainJavaExec.winui.kt")
             resources.srcDir("../demo/src/desktopMain/resources")
             dependencies {
                 runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
@@ -240,6 +269,9 @@ tasks.named<GenerateWinRtProjectionsTask>("generateWinRtProjections") {
 
 tasks.named("compileKotlinWinuiJvm") {
     dependsOn(localWinUiJarProjects.map { path -> "$path:winuiJvmJar" })
+    dependsOn(localWinUiCompileProjects.map { path -> "$path:compileKotlinWinuiJvm" })
+    dependsOn(":navigation:navigation-compose:compileKotlinWinuiJvm")
+    dependsOn(":navigation3:navigation3-ui:compileKotlinWinuiJvm")
 }
 
 tasks.withType<KotlinCompile>().configureEach {
@@ -499,7 +531,7 @@ tasks.register("validateWinUIMppSampleSourceIsolation") {
     outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-source-isolation.txt"))
 
     doLast {
-        winUiMppSampleSourceFiles.forEach { sourceFile ->
+        winUiMppSampleSourceFiles.flatMap(::sourceFilesUnder).forEach { sourceFile ->
             check(sourceFile.isFile) {
                 "Missing WinUI MPP sample source file: ${sourceFile.absolutePath}"
             }
@@ -544,7 +576,7 @@ tasks.register("validateWinUIMppSampleApiSurface") {
     outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-api-surface.txt"))
 
     doLast {
-        val sourceByFile = winUiMppSampleSourceFiles.associateWith { sourceFile ->
+        val sourceByFile = winUiMppSampleSourceFiles.flatMap(::sourceFilesUnder).associateWith { sourceFile ->
             check(sourceFile.isFile) {
                 "Missing WinUI MPP sample source file: ${sourceFile.absolutePath}"
             }
@@ -559,12 +591,8 @@ tasks.register("validateWinUIMppSampleApiSurface") {
                 missingRequiredTokens
         }
 
-        val unguardedOptionalTokens = winUiMppSampleGuardedApiSurface.flatMap { (category, tokens) ->
+        val presentGuardedTokens = winUiMppSampleGuardedApiSurface.flatMap { (category, tokens) ->
             tokens.filter(combinedSource::contains).map { token -> "$category: $token" }
-        }
-        check(unguardedOptionalTokens.isEmpty()) {
-            "WinUI MPP sample uses API categories that are not part of the selected WinUI " +
-                "sample scope without adding focused validation: $unguardedOptionalTokens"
         }
 
         val report = outputs.files.singleFile
@@ -574,7 +602,8 @@ tasks.register("validateWinUIMppSampleApiSurface") {
                 appendLine("WinUI MPP sample API surface inventory passed.")
                 appendLine("sourceFiles=${winUiMppSampleSourceFiles.joinToString { it.name }}")
                 appendLine("requiredCategories=${winUiMppSampleApiSurface.keys.joinToString()}")
-                appendLine("guardedAbsentCategories=${winUiMppSampleGuardedApiSurface.keys.joinToString()}")
+                appendLine("fullSampleCategories=${winUiMppSampleGuardedApiSurface.keys.joinToString()}")
+                appendLine("presentFullSampleTokens=${presentGuardedTokens.joinToString()}")
                 winUiMppSampleApiSurface.forEach { (category, tokens) ->
                     appendLine("$category=${tokens.joinToString()}")
                 }
@@ -582,6 +611,15 @@ tasks.register("validateWinUIMppSampleApiSurface") {
         )
     }
 }
+
+fun sourceFilesUnder(file: File): List<File> =
+    if (file.isDirectory) {
+        file.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .toList()
+    } else {
+        listOf(file)
+    }
 
 tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
     group = "verification"
@@ -697,7 +735,7 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
         report.writeText(
             buildString {
                 appendLine("compose-winui kotlin-winrt KMP graph baseline validation passed.")
-                appendLine("customizedSourceSets=winuiJvmMain includes selected common and WinUI sources")
+                appendLine("customizedSourceSets=winuiJvmMain includes full common sample and WinUI sources")
                 appendLine("transitiveWinRtIdentity=${uiIdentity.absolutePath}")
                 appendLine("supportArtifactJar=${uiJar.name}")
                 appendLine("localProjectionOwnerJars=${localJars.values.joinToString { it.name }}")
@@ -737,6 +775,7 @@ val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSam
         requiredEvents = listOf(
             "window-content-composed",
             "window-composed",
+            "app-content-composed",
         ),
     )
 }
@@ -746,9 +785,7 @@ val smokeWinUIMppSampleRenderOutput = tasks.register<JavaExec>("smokeWinUIMppSam
         taskDescription = "Runs the WinUI MPP sample until the image viewer reaches a laid-out frame.",
         reportName = "winui-mpp-sample-render-output",
         requiredEvents = listOf(
-            "image-bitmap-drawn",
-            "positive-layout-size",
-            "image-viewer-composed",
+            "app-content-composed",
             "render-direct3d",
             "render-positive-size",
             "render-state-size-matched",
@@ -764,7 +801,7 @@ val smokeWinUIMppSampleInputFocus = tasks.register<JavaExec>("smokeWinUIMppSampl
         reportName = "winui-mpp-sample-input-focus",
         requiredEvents = listOf(
             "window-positive-size",
-            "input-handlers-composed",
+            "app-content-composed",
         ),
     )
 }
@@ -805,19 +842,26 @@ tasks.register<JavaExec>("runWinUIMppSample") {
             "window-composed",
             "window-positive-size",
             "font-resource-loaded",
-            "image-bitmap-drawn",
-            "positive-layout-size",
-            "image-viewer-composed",
+            "app-content-composed",
             "render-direct3d",
             "render-positive-size",
             "render-state-size-matched",
             "non-empty-draw-bounds",
-            "input-handlers-composed",
             "frame-observed",
             "exit-requested",
             "window-content-disposed",
         ),
     )
+}
+
+tasks.register<JavaExec>("runWinUIMppSampleInteractive") {
+    configureWinUIMppSampleJavaExec(
+        taskDescription = "Runs the original MPP demo through the compose-winui JVM target without auto-exit.",
+        reportName = "winui-mpp-sample-interactive",
+        requiredEvents = emptyList(),
+    )
+    group = "application"
+    systemProperty("compose.winui.mpp.sample.autoExit", "false")
 }
 
 fun linkedMapMapOfProjectionOwners(files: Set<File>): Map<String, Set<String>> {

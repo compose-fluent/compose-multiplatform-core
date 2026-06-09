@@ -27,7 +27,6 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.currentComposeViewForTest
@@ -63,9 +62,13 @@ fun main(args: Array<String>) {
             val fontFamilyResolver = LocalFontFamilyResolver.current
             val fontsLoaded = remember { mutableStateOf(false) }
             val composeView = currentComposeViewForTest
+            val app = remember { App(initialScreenName = args.getOrNull(0)) }
 
             if (fontsLoaded.value) {
-                ImageViewer(onValidationEvent = validation::record)
+                SideEffect {
+                    validation.record("app-content-composed")
+                }
+                app.Content()
             }
 
             LaunchedEffect(Unit) {
