@@ -916,6 +916,14 @@ baseline, not every retest attempt.
   dependency resolution. With that workaround, PRI staging, packaging
   validation, `runWinUIMppSample`, and `:compose:ui:ui:compileKotlinWinuiJvm`
   pass.
+- **2026-06-09 Maven snapshot retest:** removing the compose-ui
+  `kmpPartiallyResolvedDependenciesChecker` workaround and running
+  `:compose:ui:ui:compileKotlinWinuiJvm :compose:ui:ui:winuiJvmTest` with
+  `skiko-winui` `0.0.0-20260609.030224-9` and `skiko` `0.148.0` still fails in
+  `:compose:ui:ui:kmpPartiallyResolvedDependenciesChecker` with
+  `Cannot mutate the dependencies of configuration
+  ':compose:ui:ui:kotlinWinRtLibraryDependencyIdentity' after the configuration
+  was resolved`. The compose-ui checker-disable workaround remains required.
 
 ## KWINRT-031: Generated authoring TypeDetails use projection-unsafe runtime casts
 
