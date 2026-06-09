@@ -34,13 +34,21 @@ plugins {
     id("JetBrainsAndroidXPlugin")
 }
 
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
 androidXMultiplatform {
     androidLibrary {
         compileSdk = 35
         namespace = "androidx.compose.material3"
         androidResources.enable = true
     }
-    desktop()
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
     mac()
     ios()
     js()
@@ -191,6 +199,25 @@ androidXMultiplatform {
     }
 }
 
+
+
+
+kotlin {
+    if (composeWinUiGradlePluginAvailable && composeWinUiJvmTargetEnabled) {
+        jvm("winuiJvm")
+
+        sourceSets {
+            winuiJvmMain {
+                dependsOn(skikoMain)
+            }
+
+            winuiJvmTest {
+                dependsOn(skikoTest)
+            }
+        }
+    }
+}
+
 dependencies {
     lintChecks(project(":compose:material3:material3-lint"))
     lintPublish(project(":compose:material3:material3-lint"))
@@ -210,6 +237,16 @@ tasks.withType(KotlinCompile).configureEach {
     def dirToDelete = new File(project.buildDir, "kotlin/${it.name}/cacheable")
     it.doFirst {
         dirToDelete.deleteDir()
+    }
+    if (it.name.contains("Winui")) {
+        it.exclude("**/SkikoMenu.skiko.kt")
+        it.exclude("**/ModalBottomSheet.skiko.kt")
+        it.exclude("**/WideNavigationRail.skiko.kt")
+        it.exclude("**/BasicEdgeToEdgeDialog.skiko.kt")
+        it.compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
+            freeCompilerArgs.add("-Xjdk-release=25")
+        }
     }
 }
 
@@ -324,4 +361,19 @@ tasks.register("updateTranslations", UpdateTranslationsTask.class) {
             "si", "sk", "sl", "sq", "sr", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur",
             "uz", "vi", "zh_CN", "zh_HK", "zh_TW", "zu"
     ]
+}
+
+configurations.configureEach { configuration ->
+    if (configuration.name.toLowerCase(Locale.ROOT).contains("winui")) {
+        configuration.attributes.attribute(
+                org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
+                25
+        )
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.enabled = false
+    }
 }
