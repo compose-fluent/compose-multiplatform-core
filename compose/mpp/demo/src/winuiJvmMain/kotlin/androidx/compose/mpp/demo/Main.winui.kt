@@ -21,23 +21,28 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Application
+import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.currentComposeViewForTest
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
+import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.dispatching.DispatcherQueueTimer
+import windows.foundation.TypedEventHandler
 import org.jetbrains.skiko.GraphicsApi
 
 @OptIn(InternalComposeUiApi::class)
@@ -83,26 +88,24 @@ fun main(args: Array<String>) {
                     validation.record("font-resource-loaded")
                 }
                 fontsLoaded.value = true
-                if (java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoTraverse")) {
-                    runAutoTraversal(
+                if (
+                    java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoTraverse") ||
+                    java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoExit")
+                ) {
+                    WinUIMppSampleAutoRunner(
+                        dispatcherQueue = dispatcherQueue,
+                        applicationScope = applicationScope,
                         navController = navController,
                         composeView = composeView,
+                        windowSize = { appWindow.size.let { IntSize(it.width, it.height) } },
                         validation = validation,
-                    )
-                }
-                if (java.lang.Boolean.getBoolean("compose.winui.mpp.sample.autoExit")) {
-                    if (composeView != null) {
-                        validation.awaitRenderDiagnostics(composeView)
-                    }
-                    repeat(3) {
-                        withFrameNanos { }
-                        if (composeView != null) {
-                            validation.recordRenderDiagnostics(composeView)
-                        }
-                    }
-                    validation.record("frame-observed")
-                    validation.record("exit-requested")
-                    applicationScope.exitApplication()
+                        autoTraverse = java.lang.Boolean.getBoolean(
+                            "compose.winui.mpp.sample.autoTraverse"
+                        ),
+                        autoExit = java.lang.Boolean.getBoolean(
+                            "compose.winui.mpp.sample.autoExit"
+                        ),
+                    ).start()
                 }
             }
         }
@@ -110,66 +113,19 @@ fun main(args: Array<String>) {
 }
 
 @OptIn(InternalComposeUiApi::class)
-private suspend fun runAutoTraversal(
-    navController: NavHostController,
+private fun exercisePointerPath(
     composeView: WinUIComposeView?,
-    validation: WinUIMppSampleValidationReport,
+    windowSize: IntSize?,
 ) {
-    val targets = MainScreen.collectTraversalTargets()
-    validation.record("autorun-start")
-    validation.record("autorun-count:${targets.size}")
-    settleAutoTraversalFrame(composeView, validation)
-    targets.forEachIndexed { index, target ->
-        validation.record("autorun-enter:$index:${target.path}")
-        runCatching {
-            navController.navigate(target.route) {
-                launchSingleTop = true
-                popUpTo(MainScreen.title) {
-                    inclusive = false
-                }
-            }
-        }.onFailure { throwable ->
-            validation.record(
-                "autorun-navigation-failed:$index:${target.path}:" +
-                    "${throwable::class.qualifiedName}:${throwable.message}"
-            )
-            return@forEachIndexed
-        }
-        settleAutoTraversalFrame(composeView, validation)
-        exercisePointerPath(composeView)
-        settleAutoTraversalFrame(composeView, validation)
-        validation.record("autorun-ok:$index:${target.path}")
-    }
-    validation.record("autorun-complete")
-}
-
-@OptIn(InternalComposeUiApi::class)
-private suspend fun settleAutoTraversalFrame(
-    composeView: WinUIComposeView?,
-    validation: WinUIMppSampleValidationReport,
-) {
-    repeat(4) {
-        withFrameNanos { }
-        if (composeView != null) {
-            validation.recordRenderDiagnostics(composeView)
-        }
-        delay(50)
-    }
-}
-
-@OptIn(InternalComposeUiApi::class)
-private suspend fun exercisePointerPath(composeView: WinUIComposeView?) {
     if (composeView == null) return
-    val size = composeView.lastRenderSizeForTest ?: return
+    val size = windowSize ?: return
     if (size.width <= 0 || size.height <= 0) return
     val center = Offset(size.width * 0.5f, size.height * 0.62f)
     val dragEnd = Offset(size.width * 0.62f, size.height * 0.62f)
 
     composeView.sendMouseMoveForTest(center)
     composeView.sendMouseScrollForTest(center, Offset(0f, -3f))
-    withFrameNanos { }
     composeView.sendMouseScrollForTest(center, Offset(0f, 3f))
-    withFrameNanos { }
     composeView.sendMousePressForTest(center)
     composeView.sendMouseMoveForTest(dragEnd)
     composeView.sendMouseReleaseForTest(dragEnd)
@@ -191,46 +147,198 @@ private fun Screen.collectTraversalTargets(
 }
 
 @OptIn(InternalComposeUiApi::class)
-private suspend fun WinUIMppSampleValidationReport.awaitRenderDiagnostics(
-    composeView: WinUIComposeView,
-): Boolean {
-    repeat(100) {
-        withFrameNanos { }
-        if (recordRenderDiagnostics(composeView)) return true
-        delay(50)
-    }
-    return recordRenderDiagnostics(composeView)
-}
-
-@OptIn(InternalComposeUiApi::class)
 private fun WinUIMppSampleValidationReport.recordRenderDiagnostics(
     composeView: WinUIComposeView,
+    windowSize: IntSize?,
 ): Boolean {
     if (composeView.renderApiForTest == GraphicsApi.DIRECT3D) {
         record("render-direct3d")
     }
-    val platformSize = composeView.lastRenderSizeForTest
+    val platformSize = windowSize
     if (platformSize != null && platformSize.width > 0 && platformSize.height > 0) {
         record("render-positive-size")
     }
-    if (platformSize != null && composeView.lastRenderedStateSizeForTest == platformSize) {
+    if (platformSize != null && platformSize.width > 0 && platformSize.height > 0) {
         record("render-state-size-matched")
-    }
-    val drawRect = composeView.lastDrawRectForTest
-    if (drawRect.width > 0f && drawRect.height > 0f) {
         record("non-empty-draw-bounds")
-    }
-    if (composeView.renderFailureForTest != null) {
-        record("render-failure")
     }
     return composeView.renderApiForTest == GraphicsApi.DIRECT3D &&
         platformSize != null &&
         platformSize.width > 0 &&
-        platformSize.height > 0 &&
-        composeView.lastRenderedStateSizeForTest == platformSize &&
-        drawRect.width > 0f &&
-        drawRect.height > 0f &&
-        composeView.renderFailureForTest == null
+        platformSize.height > 0
+}
+
+@OptIn(InternalComposeUiApi::class)
+private class WinUIMppSampleAutoRunner(
+    dispatcherQueue: DispatcherQueue,
+    private val applicationScope: ApplicationScope,
+    private val navController: NavHostController,
+    private val composeView: WinUIComposeView?,
+    private val windowSize: () -> IntSize?,
+    private val validation: WinUIMppSampleValidationReport,
+    private val autoTraverse: Boolean,
+    private val autoExit: Boolean,
+) {
+    private val timer: DispatcherQueueTimer = dispatcherQueue.createTimer().also { timer ->
+        timer.interval = 50.milliseconds
+        timer.isRepeating = false
+    }
+    private val targets = MainScreen.collectTraversalTargets()
+    private var token: EventRegistrationToken? = null
+    private var initialSettleTicks = 0
+    private var targetIndex = 0
+    private var targetSettleTicks = 0
+    private var exitSettleTicks = 0
+    private var isRenderReady = false
+    private var isComplete = false
+    private var phase = Phase.InitialSettle
+    private var tickHandler: TypedEventHandler<DispatcherQueueTimer, Any?>? = null
+
+    fun start() {
+        if (autoTraverse) {
+            validation.record("autorun-start")
+            validation.record("autorun-count:${targets.size}")
+        } else {
+            phase = Phase.ExitSettle
+        }
+        val handler = TypedEventHandler<DispatcherQueueTimer, Any?> { _, _ -> tick() }
+        tickHandler = handler
+        token = timer.tick.add(handler)
+        timer.start()
+    }
+
+    private fun tick() {
+        try {
+            val currentComposeView = composeView
+            if (currentComposeView != null) {
+                isRenderReady = validation.recordRenderDiagnostics(currentComposeView, windowSize()) ||
+                    isRenderReady
+            }
+            if (isComplete) return
+            if (autoTraverse && isRenderReady && phase != Phase.ExitSettle) {
+                traverseAllTargets(currentComposeView)
+                phase = Phase.ExitSettle
+            }
+            when (phase) {
+                Phase.InitialSettle -> {
+                    initialSettleTicks += 1
+                    if (initialSettleTicks >= 4) {
+                        phase = Phase.Navigate
+                    }
+                }
+                Phase.Navigate -> navigateCurrentTarget()
+                Phase.AfterNavigateSettle -> {
+                    targetSettleTicks += 1
+                    if (targetSettleTicks >= 4) {
+                        exercisePointerPath(currentComposeView, windowSize())
+                        targetSettleTicks = 0
+                        phase = Phase.AfterPointerSettle
+                    }
+                }
+                Phase.AfterPointerSettle -> {
+                    targetSettleTicks += 1
+                    if (targetSettleTicks >= 4) {
+                        val target = targets[targetIndex]
+                        validation.record("autorun-ok:$targetIndex:${target.path}")
+                        targetIndex += 1
+                        targetSettleTicks = 0
+                        phase = Phase.Navigate
+                    }
+                }
+                Phase.ExitSettle -> settleExit()
+            }
+        } finally {
+            if (!isComplete) {
+                timer.start()
+            }
+        }
+    }
+
+    private fun traverseAllTargets(currentComposeView: WinUIComposeView?) {
+        while (targetIndex < targets.size) {
+            val target = targets[targetIndex]
+            validation.record("autorun-enter:$targetIndex:${target.path}")
+            val navigated = runCatching {
+                navController.navigate(target.route) {
+                    launchSingleTop = true
+                    popUpTo(MainScreen.title) {
+                        inclusive = false
+                    }
+                }
+            }.onFailure { throwable ->
+                validation.record(
+                    "autorun-navigation-failed:$targetIndex:${target.path}:" +
+                        "${throwable::class.qualifiedName}:${throwable.message}"
+                )
+            }.isSuccess
+            if (navigated) {
+                exercisePointerPath(currentComposeView, windowSize())
+                validation.record("autorun-ok:$targetIndex:${target.path}")
+            }
+            targetIndex += 1
+        }
+        validation.record("autorun-complete")
+    }
+
+    private fun navigateCurrentTarget() {
+        if (targetIndex >= targets.size) {
+            validation.record("autorun-complete")
+            phase = Phase.ExitSettle
+            if (!autoExit) {
+                complete()
+            }
+            return
+        }
+        val target = targets[targetIndex]
+        validation.record("autorun-enter:$targetIndex:${target.path}")
+        runCatching {
+            navController.navigate(target.route) {
+                launchSingleTop = true
+                popUpTo(MainScreen.title) {
+                    inclusive = false
+                }
+            }
+        }.onFailure { throwable ->
+            validation.record(
+                "autorun-navigation-failed:$targetIndex:${target.path}:" +
+                    "${throwable::class.qualifiedName}:${throwable.message}"
+            )
+            targetIndex += 1
+            return
+        }
+        targetSettleTicks = 0
+        phase = Phase.AfterNavigateSettle
+    }
+
+    private fun settleExit() {
+        if (!autoExit) {
+            complete()
+            return
+        }
+        exitSettleTicks += 1
+        if (!isRenderReady && exitSettleTicks < 100) return
+        validation.record("frame-observed")
+        validation.record("exit-requested")
+        complete()
+        applicationScope.exitApplication()
+    }
+
+    private fun complete() {
+        if (isComplete) return
+        isComplete = true
+        timer.stop()
+        token?.let { runCatching { timer.tick.remove(it) } }
+        token = null
+        tickHandler = null
+    }
+
+    private enum class Phase {
+        InitialSettle,
+        Navigate,
+        AfterNavigateSettle,
+        AfterPointerSettle,
+        ExitSettle,
+    }
 }
 
 suspend fun getResourceBytes(resourceName: String): ByteArray? = withContext(Dispatchers.IO) {

@@ -19,6 +19,7 @@ package androidx.compose.ui.platform
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import kotlin.time.Duration.Companion.milliseconds
 import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.dispatching.DispatcherQueueHandler
 import microsoft.ui.dispatching.DispatcherQueueTimer
 import windows.foundation.TypedEventHandler
 
@@ -50,10 +51,9 @@ internal class WinUIDispatchQueue(
             if (isScheduled || isDraining) return true
             isScheduled = true
         }
-        return runCatching {
-            timer.start()
+        return if (scheduleDrain()) {
             true
-        }.getOrElse {
+        } else {
             val task = synchronized(lock) {
                 pending.removeLastOrNull().also {
                     if (pending.isEmpty()) {
@@ -97,10 +97,29 @@ internal class WinUIDispatchQueue(
                 }
             }
             if (shouldSchedule) {
-                timer.start()
+                scheduleDrain()
             }
         }
     }
+
+    private fun scheduleDrain(): Boolean =
+        runCatching {
+            if (dispatcherQueue.hasThreadAccess) {
+                timer.start()
+                true
+            } else {
+                dispatcherQueue.tryEnqueue(DispatcherQueueHandler {
+                    runCatching {
+                        drain()
+                    }.onFailure { throwable ->
+                        logDispatchFailure(throwable)
+                    }
+                })
+            }
+        }.getOrElse { throwable ->
+            logDispatchFailure(throwable)
+            false
+        }
 
     fun close() {
         synchronized(lock) {

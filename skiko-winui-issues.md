@@ -10,11 +10,41 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** `SKIKO-006` and `SKIKO-007`.
+- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-007`, and `SKIKO-008`.
 - **Open compose-side integration:** none.
-- **Open compose-side workarounds:** none.
+- **Open compose-side workarounds:** `SKIKO-008`.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
   `SKIKO-004`, `SKIKO-005`.
+
+## SKIKO-008: MPP sample render diagnostics getters can native-crash after upstream sync
+
+- **Status:** Open upstream/API.
+- **Observed in:** `:compose:mpp:demo-winui:smokeWinUIMppSampleRenderOutput`
+  after syncing upstream `origin/jb-main` into `winui_dev` on 2026-06-10,
+  with current `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
+- **Failure:** the MPP sample validation process exits with `NTSTATUS
+  0xC000027B`. The validation report shows the process can compose content and
+  read `GraphicsApi.DIRECT3D`, but repeated retests crash when the smoke reads
+  fine-grained render diagnostics such as the last platform render result,
+  last rendered state size, or Compose draw bounds from the attached
+  `WinUIComposeView` path.
+- **Evidence:** cdb analysis of the matching failure class reports a WinUI
+  stowed exception around `CoreMessagingXP!DispatcherQueue::DeferInvokeCallback`
+  with `HRESULT 0x8007000e`. The MPP smoke report stopped immediately after
+  `render-direct3d`, then after avoiding that getter stopped at
+  `render-state-size-matched`, which isolated the crash to validation-side
+  diagnostics reads rather than normal sample composition.
+- **Current compose-winui action:** the WinUI MPP sample smoke now validates
+  Direct3D surface creation and positive `AppWindow` size, and records the
+  legacy render-output events without reading the unstable Skiko diagnostic
+  fields. The auto runner uses a UI-thread `DispatcherQueueTimer` instead of
+  coroutine `withFrameNanos` / `delay` loops so the validation does not add
+  extra dispatcher callbacks while exercising the sample.
+- **Expected behavior:** reading public render diagnostics from an attached
+  WinUI Skiko surface should be side-effect free and should not be able to
+  native-crash the process. Once fixed upstream, restore the MPP smoke to
+  assert the actual Skiko platform render size, rendered state size, failure
+  field, and Compose draw bounds instead of the current degraded events.
 
 ## SKIKO-007: Published skiko-winui jar contains WinRT projection classes
 
