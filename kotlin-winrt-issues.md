@@ -11,9 +11,9 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** none known for the current compose-winui
   validation path.
-- **Open upstream/plugin:** `KWINRT-025`, `KWINRT-030`, `KWINRT-031`,
-  `KWINRT-032`, and `KWINRT-033`.
-- **Open compose-side workarounds:** `KWINRT-025` and `KWINRT-030`.
+- **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, and
+  `KWINRT-033`.
+- **Open compose-side workarounds:** `KWINRT-030`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
@@ -21,8 +21,8 @@ baseline, not every retest attempt.
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
-  `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`, and
-  `KWINRT-037`.
+  `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`,
+  `KWINRT-037`, and `KWINRT-025`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -671,8 +671,8 @@ baseline, not every retest attempt.
 
 ## KWINRT-025: Authored TypeDetails validation compares formatting differences
 
-- **Status:** Open upstream/plugin in kotlin-winrt Maven snapshot
-  `0.1.0-SNAPSHOT` as of 2026-06-02.
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot `0.1.0-SNAPSHOT`
+  as of 2026-06-09.
 - **Observed in:** `validateCompileKotlinWinuiJvmWinRtAuthoredCandidates` after
   clean regeneration with `--no-build-cache --rerun-tasks`.
 - **Symptom:** scanner and compiler IR authored TypeDetails handoff files are
@@ -680,13 +680,11 @@ baseline, not every retest attempt.
   `WinRT_WinUIRootContentControl_TypeDetails.kt` and
   `WinRT_WinUIXamlApplication_TypeDetails.kt`, even though the generated files
   differ only by KotlinPoet line wrapping/formatting.
-- **compose-winui workaround:** `compose/ui/ui/build.gradle` normalizes this
-  handoff immediately before validation by copying the scanner TypeDetails text
-  to the matching compiler file only when the two files are equal after
-  whitespace removal. Semantic mismatches still fail validation.
-- **Validation:** reproduced after clearing `out/compose-multiplatform-core`
-  module build directories and rerunning the sample with `--no-build-cache
-  --rerun-tasks`.
+- **Resolution:** compose-winui removed the validation normalization workaround;
+  scanner and compiler TypeDetails now match without compose-side rewriting.
+- **Validation:** `:compose:ui:ui:compileKotlinWinuiJvm --rerun-tasks` passes
+  with `skiko-winui` `0.0.0-20260609.030224-9` and `skiko` `0.148.0` after the
+  workaround is removed.
 
 ## KWINRT-026: Core text input focus registration fail-fast after full smoke
 

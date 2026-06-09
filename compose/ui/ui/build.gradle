@@ -626,31 +626,6 @@ if (composeWinUiGradlePluginAvailable) {
         authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
     }
 
-    tasks.matching { it.name == "validateCompileKotlinWinuiJvmWinRtAuthoredCandidates" }.configureEach {
-        doFirst {
-            def scannerDir = scannerAuthoringTypeDetails.singleFile
-            def compilerDir = compilerAuthoringTypeDetails.singleFile
-            if (!scannerDir.isDirectory() || !compilerDir.isDirectory()) return
-
-            scannerDir.eachFileRecurse(groovy.io.FileType.FILES) { scannerFile ->
-                if (!scannerFile.name.endsWith("_TypeDetails.kt")) return
-
-                def relativePath = scannerDir.toPath().relativize(scannerFile.toPath()).toString()
-                def compilerFile = new File(compilerDir, relativePath)
-                if (!compilerFile.isFile()) return
-
-                def scannerText = scannerFile.getText("UTF-8")
-                def compilerText = compilerFile.getText("UTF-8")
-                if (scannerText == compilerText) return
-
-                // KWINRT-025: current snapshot scanner and compiler generators can
-                // emit semantically identical TypeDetails with different wrapping.
-                if (scannerText.replaceAll("\\s+", "") == compilerText.replaceAll("\\s+", "")) {
-                    compilerFile.setText(scannerText, "UTF-8")
-                }
-            }
-        }
-    }
 }
 
 // This task updates the translations of the localizable strings for the desktopMain target.
