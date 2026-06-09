@@ -109,7 +109,7 @@ internal class WinUIOwner(
     override val root: LayoutNode,
     platformFocusOwner: PlatformFocusOwner,
     override val retainedValuesStore: RetainedValuesStore,
-    override val coroutineContext: CoroutineContext = EmptyCoroutineContext,
+    private val coroutineContextProvider: () -> CoroutineContext = { EmptyCoroutineContext },
     private val onMeasureAndLayoutRequested: () -> Unit = {},
     private val onInteropTreeChanged: () -> Unit = {},
     private val onRootInvalidated: () -> Unit = {},
@@ -126,6 +126,9 @@ internal class WinUIOwner(
     override val pointerIconService: PointerIconService = WinUIPointerIconService(),
     internal val winUIDragAndDropManager: WinUIDragAndDropManager = WinUIDragAndDropManager(),
 ) : Owner, OutOfFrameExecutor, MatrixPositionCalculator {
+    override val coroutineContext: CoroutineContext
+        get() = coroutineContextProvider()
+
     private val onEndApplyChangesListeners = mutableListOf<(() -> Unit)?>()
     private val outOfFrameQueue = ArrayDeque<() -> Unit>()
     private var hasPendingLayoutCompletedListener = false
@@ -187,6 +190,7 @@ internal class WinUIOwner(
     override val rectManager: RectManager = RectManager(layoutNodes)
     private val textInputSessionMutex = SessionMutex<WinUIPlatformTextInputSession>()
     private val pointerInputEventProcessor = PointerInputEventProcessor(root)
+    private val pointerEventSender = WinUIPointerEventSender(::processPointerInputEvent)
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val fontLoader: Font.ResourceLoader = WinUIFontResourceLoader
     override val fontFamilyResolver: FontFamily.Resolver = createFontFamilyResolver()
@@ -353,7 +357,8 @@ internal class WinUIOwner(
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
             rectManager.dispatchCallbacks()
             if (sendPointerUpdate) {
-                resendLastMousePointerEvent()
+                pointerEventSender.needUpdatePointerPosition = true
+                pointerEventSender.updatePointerPosition()
             }
         }
     }
@@ -362,7 +367,8 @@ internal class WinUIOwner(
         if (isShuttingDown) return
         hasPendingLayoutCompletedListener = false
         measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
-        resendLastMousePointerEvent()
+        pointerEventSender.needUpdatePointerPosition = true
+        pointerEventSender.updatePointerPosition()
         if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
             measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
         }
@@ -667,10 +673,15 @@ internal class WinUIOwner(
             button = button,
             nativeEvent = nativeEvent,
         )
+        return pointerEventSender.send(event)
+    }
+
+    @OptIn(InternalComposeUiApi::class)
+    private fun processPointerInputEvent(event: PointerInputEvent): Boolean {
         val result = pointerInputEventProcessor.process(
             pointerEvent = event,
             positionCalculator = this,
-            isInBounds = isInBounds,
+            isInBounds = event.eventType != PointerEventType.Exit,
         )
         return result.dispatchedToAPointerInputModifier || result.anyChangeConsumed
     }
@@ -689,25 +700,6 @@ internal class WinUIOwner(
         )
     }
 
-    private fun resendLastMousePointerEvent() {
-        val event = lastMousePointerEvent ?: return
-        sendPointerEvent(
-            eventType = PointerEventType.Move,
-            position = event.position,
-            uptimeMillis = event.uptimeMillis,
-            pointerId = event.pointerId,
-            down = event.down,
-            type = event.type,
-            buttons = event.buttons,
-            keyboardModifiers = event.keyboardModifiers,
-            button = null,
-            scrollDelta = Offset.Zero,
-            isInBounds = event.isInBounds,
-            nativeEvent = null,
-            updateLastPointerEvent = false,
-        )
-    }
-
     private fun isInInteropViewBounds(position: Offset): Boolean =
         interopViewBounds.values.any { bounds ->
             position.x >= bounds.left &&
@@ -718,6 +710,7 @@ internal class WinUIOwner(
 
     internal fun cancelPointerInput() {
         lastMousePointerEvent = null
+        pointerEventSender.reset()
         pointerInputEventProcessor.processCancel()
     }
 
@@ -755,3 +748,222 @@ internal data class WinUIOwnerStateForTest(
     val interopViewBounds: List<Rect>,
     val lastMousePointerEvent: WinUIPointerEvent?,
 )
+
+@OptIn(InternalCoreApi::class)
+private class WinUIPointerEventSender(
+    private val dispatch: (PointerInputEvent) -> Boolean,
+) {
+    private var previousEvent: PointerInputEvent? = null
+    private var isMousePointerInside = false
+    var needUpdatePointerPosition: Boolean = false
+
+    fun reset() {
+        needUpdatePointerPosition = false
+        previousEvent = null
+        isMousePointerInside = false
+    }
+
+    fun send(event: PointerInputEvent): Boolean {
+        trackMousePointerState(event)
+        var handled = false
+        handled = sendMissingMoveForHover(event) || handled
+        handled = sendHoverExitForMousePress(event) || handled
+        handled = sendMissingReleases(event) || handled
+        handled = sendMissingPresses(event) || handled
+        handled = if (event.shouldSend()) {
+            sendInternal(event)
+        } else {
+            sendNativeEventOnly(event)
+        } || handled
+        handled = sendHoverEnterAfterMouseRelease(event) || handled
+        return handled
+    }
+
+    fun updatePointerPosition(): Boolean {
+        if (!needUpdatePointerPosition) return false
+        needUpdatePointerPosition = false
+        val previousEvent = previousEvent ?: return false
+        val mousePointer = previousEvent.pointers.firstOrNull { it.type == PointerType.Mouse }
+            ?: return false
+        return if (isMousePointerInside || mousePointer.down) {
+            sendSyntheticMove(previousEvent)
+        } else {
+            false
+        }
+    }
+
+    private fun trackMousePointerState(event: PointerInputEvent) {
+        if (event.pointers.none { it.type == PointerType.Mouse }) return
+        when (event.eventType) {
+            PointerEventType.Enter,
+            PointerEventType.Move,
+            PointerEventType.Press,
+            PointerEventType.Scroll -> isMousePointerInside = true
+            PointerEventType.Exit -> isMousePointerInside = false
+            else -> Unit
+        }
+    }
+
+    private fun sendMissingMoveForHover(currentEvent: PointerInputEvent): Boolean =
+        if (currentEvent.pointers.any { it.activeHover } &&
+            !currentEvent.isMove() &&
+            !currentEvent.isSamePosition(previousEvent)
+        ) {
+            sendSyntheticMove(currentEvent)
+        } else {
+            false
+        }
+
+    private fun sendMissingReleases(currentEvent: PointerInputEvent): Boolean {
+        val previousEvent = previousEvent ?: return false
+        val previousPressed = previousEvent.pressedIds()
+        val currentPressed = currentEvent.pressedIds()
+        val newReleased = previousPressed - currentPressed.toSet()
+        val sendingAsUp = HashSet<PointerId>(newReleased.size)
+        var handled = false
+        val lastIndex = when (currentEvent.eventType) {
+            PointerEventType.Release -> newReleased.lastIndex - 1
+            else -> newReleased.lastIndex
+        }
+        for (index in lastIndex downTo 0) {
+            sendingAsUp.add(newReleased[index])
+            handled = sendInternal(
+                previousEvent.copySynthetic(PointerEventType.Release) { pointer ->
+                    pointer.copySynthetic(down = pointer.down && pointer.id !in sendingAsUp)
+                }
+            ) || handled
+        }
+        return handled
+    }
+
+    private fun sendMissingPresses(currentEvent: PointerInputEvent): Boolean {
+        val previousPressed = previousEvent?.pressedIds().orEmpty().toSet()
+        val currentPressed = currentEvent.pressedIds()
+        val newPressed = currentPressed - previousPressed
+        val sendingAsDown = HashSet<PointerId>(newPressed.size)
+        var handled = false
+        val lastIndex = when (currentEvent.eventType) {
+            PointerEventType.Press -> newPressed.lastIndex - 1
+            else -> newPressed.lastIndex
+        }
+        for (index in 0..lastIndex) {
+            sendingAsDown.add(newPressed[index])
+            handled = sendInternal(
+                currentEvent.copySynthetic(PointerEventType.Press) { pointer ->
+                    pointer.copySynthetic(
+                        down = pointer.id in previousPressed || pointer.id in sendingAsDown
+                    )
+                }
+            ) || handled
+        }
+        return handled
+    }
+
+    private fun sendSyntheticMove(pointersSourceEvent: PointerInputEvent): Boolean {
+        val previousEvent = previousEvent ?: return false
+        val idToPosition = pointersSourceEvent.pointers.associate { it.id to it.position }
+        return sendInternal(
+            previousEvent.copySynthetic(PointerEventType.Move) { pointer ->
+                pointer.copySynthetic(position = idToPosition[pointer.id] ?: pointer.position)
+            }
+        )
+    }
+
+    private fun sendHoverExitForMousePress(currentEvent: PointerInputEvent): Boolean {
+        val previousEvent = previousEvent ?: return false
+        if (currentEvent.eventType != PointerEventType.Press) return false
+        if (currentEvent.pointers.none { it.type == PointerType.Mouse }) return false
+        if (previousEvent.pointers.none { it.type == PointerType.Mouse && it.activeHover && !it.down }) {
+            return false
+        }
+        return sendInternal(
+            previousEvent.copySynthetic(PointerEventType.Exit) { pointer ->
+                pointer.copySynthetic(down = false)
+            }
+        )
+    }
+
+    private fun sendHoverEnterAfterMouseRelease(currentEvent: PointerInputEvent): Boolean {
+        if (currentEvent.eventType != PointerEventType.Release) return false
+        if (!isMousePointerInside) return false
+        if (currentEvent.pointers.none { it.type == PointerType.Mouse && it.activeHover && !it.down }) {
+            return false
+        }
+        return sendInternal(
+            currentEvent.copySynthetic(PointerEventType.Enter) { pointer ->
+                pointer.copySynthetic(down = false)
+            }
+        )
+    }
+
+    private fun PointerInputEvent.shouldSend(): Boolean {
+        fun areSameParams(first: PointerInputEvent, second: PointerInputEvent): Boolean =
+            first.pressedIds().toSet() == second.pressedIds().toSet() &&
+                first.buttons == second.buttons &&
+                first.keyboardModifiers == second.keyboardModifiers
+
+        return when (eventType) {
+            PointerEventType.Press -> previousEvent?.let { !areSameParams(this, it) } ?: true
+            PointerEventType.Release -> previousEvent?.let { !areSameParams(this, it) } ?: false
+            else -> true
+        }
+    }
+
+    private fun sendNativeEventOnly(event: PointerInputEvent): Boolean =
+        event.nativeEvent != null && dispatch(event.copy(eventType = PointerEventType.Unknown))
+
+    private fun sendInternal(event: PointerInputEvent): Boolean {
+        val handled = dispatch(event)
+        if (!handled) {
+            sendNativeEventOnly(event)
+        }
+        previousEvent = event.copy(
+            nativeEvent = null,
+            pointers = event.pointers.toList(),
+        )
+        return handled
+    }
+
+    private fun PointerInputEvent.pressedIds(): List<PointerId> =
+        pointers.mapNotNull { pointer -> if (pointer.down) pointer.id else null }
+
+    private fun PointerInputEvent.isMove(): Boolean =
+        eventType == PointerEventType.Move ||
+            eventType == PointerEventType.Enter ||
+            eventType == PointerEventType.Exit
+
+    private fun PointerInputEvent.isSamePosition(previousEvent: PointerInputEvent?): Boolean {
+        val previousIdToPosition = previousEvent?.pointers?.associate { it.id to it.position }
+        return pointers.all { pointer ->
+            val previousPosition = previousIdToPosition?.get(pointer.id)
+            previousPosition == null || pointer.position == previousPosition
+        }
+    }
+
+    private fun PointerInputEvent.copySynthetic(
+        eventType: PointerEventType,
+        copyPointer: (PointerInputEventData) -> PointerInputEventData,
+    ): PointerInputEvent = PointerInputEvent(
+        eventType = eventType,
+        uptime = uptime,
+        pointers = pointers.map(copyPointer),
+        buttons = buttons,
+        keyboardModifiers = keyboardModifiers,
+        nativeEvent = null,
+        button = null,
+    )
+
+    private fun PointerInputEventData.copySynthetic(
+        position: Offset = this.position,
+        down: Boolean = this.down,
+    ): PointerInputEventData = copy(
+        positionOnScreen = position,
+        position = position,
+        down = down,
+        historical = emptyList(),
+        scrollDelta = Offset.Zero,
+        scaleGestureFactor = 1f,
+        panGestureOffset = Offset.Zero,
+        originalEventPosition = position,
+    )
+}

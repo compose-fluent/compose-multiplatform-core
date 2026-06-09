@@ -17,6 +17,7 @@
 package androidx.compose.ui.node
 
 import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -68,6 +69,14 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.TextEditingScope
+import androidx.compose.ui.text.input.TextEditorState
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
@@ -931,6 +940,81 @@ class WinUIOwnerTest {
     }
 
     @Test
+    fun mousePressAtNewPositionClearsHoverBeforePressAndRestoresAfterRelease() {
+        val owner = createOwner()
+        val events = mutableListOf<PointerEventType>()
+        try {
+            val pointerNode = LayoutNode().also {
+                it.modifier = PointerRecorderElement(events)
+                it.measurePolicy = fixedMeasurePolicy(100, 100)
+            }
+            owner.root.insertAt(0, pointerNode)
+            owner.setWindowContainerSize(IntSize(100, 100))
+            owner.measureAndLayout()
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(150f, 150f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+            )
+
+            assertEquals(emptyList(), events)
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(10f, 10f),
+                uptimeMillis = 2L,
+                pointerId = 1L,
+                down = true,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(isPrimaryPressed = true),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = PointerButton.Primary,
+            )
+
+            assertEquals(
+                listOf(
+                    PointerEventType.Enter,
+                    PointerEventType.Exit,
+                    PointerEventType.Press,
+                ),
+                events,
+            )
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Release,
+                position = Offset(10f, 10f),
+                uptimeMillis = 3L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = PointerButton.Primary,
+            )
+
+            assertEquals(
+                listOf(
+                    PointerEventType.Enter,
+                    PointerEventType.Exit,
+                    PointerEventType.Press,
+                    PointerEventType.Release,
+                    PointerEventType.Enter,
+                ),
+                events,
+            )
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
     fun measureAndLayoutCanResendLastMousePointerPosition() {
         val owner = createOwner()
         val events = mutableListOf<PointerEventType>()
@@ -1170,7 +1254,29 @@ private class PointerRecorderNode(
     override fun onCancelPointerInput() = Unit
 }
 
-private object WinUITestInputMethodRequest : PlatformTextInputMethodRequest
+@OptIn(ExperimentalComposeUiApi::class)
+private object WinUITestInputMethodRequest : PlatformTextInputMethodRequest {
+    private val textValue = TextFieldValue("")
+
+    override val value: () -> TextFieldValue = { textValue }
+    override val state: TextEditorState = object : TextEditorState {
+        override val selection: TextRange = TextRange.Zero
+        override val composition: TextRange? = null
+        override val length: Int = 0
+        override fun get(index: Int): Char = throw IndexOutOfBoundsException(index)
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = ""
+        override fun toString(): String = ""
+    }
+    override val imeOptions: ImeOptions = ImeOptions.Default
+    override val onEditCommand: (List<EditCommand>) -> Unit = {}
+    override val onImeAction: ((ImeAction) -> Unit)? = null
+    override val textLayoutResult: () -> TextLayoutResult? = { null }
+    override val focusedRectInRoot: () -> Rect? = { null }
+    override val textFieldRectInRoot: () -> Rect? = { null }
+    override val textClippingRectInRoot: () -> Rect? = { null }
+    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    override val editText: (TextEditingScope.() -> Unit) -> Unit = {}
+}
 
 private object TestPlatformFocusOwner : PlatformFocusOwner {
     override fun requestOwnerFocus(
