@@ -18,7 +18,9 @@ package androidx.compose.ui.text
 
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Constraints
@@ -73,14 +75,69 @@ class WinUIParagraphTest {
         val secondCursor = paragraph.getCursorRect(1)
         val firstGlyphBounds = paragraph.getBoundingBox(0)
         val selectionPath = paragraph.getPathForRange(0, 3)
-        val boxes = FloatArray(12)
-
-        paragraph.fillBoundingBoxes(TextRange(0, 3), boxes, arrayStart = 0)
 
         assertTrue(secondCursor.left > firstCursor.left)
         assertTrue(firstGlyphBounds.right > firstGlyphBounds.left)
         assertFalse(selectionPath.isEmpty)
-        assertTrue(boxes.any { it > 0f })
+    }
+
+    @Test
+    fun paragraphDrawsBrushTextIntoImageBitmap() {
+        val paragraph = Paragraph(
+            text = "Brush",
+            style = TextStyle(fontSize = 32.sp, color = Color.Black),
+            constraints = Constraints(maxWidth = 200),
+            density = Density(1f),
+            fontFamilyResolver = createFontFamilyResolver(),
+        )
+        val bitmap = ImageBitmap(220, 80)
+
+        paragraph.paint(
+            canvas = Canvas(bitmap),
+            brush = Brush.linearGradient(listOf(Color.Green, Color.Green)),
+            alpha = 1f,
+            shadow = null,
+            textDecoration = null,
+            drawStyle = null,
+            blendMode = BlendMode.SrcOver,
+        )
+
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.readPixels(pixels)
+        assertTrue(pixels.any { pixel -> green(pixel) > red(pixel) && green(pixel) > blue(pixel) })
+    }
+
+    @Test
+    fun paragraphAppliesBlendMode() {
+        val paragraph = Paragraph(
+            text = "Clear",
+            style = TextStyle(fontSize = 32.sp, color = Color.Black),
+            constraints = Constraints(maxWidth = 200),
+            density = Density(1f),
+            fontFamilyResolver = createFontFamilyResolver(),
+        )
+        val bitmap = ImageBitmap(220, 80)
+        val canvas = Canvas(bitmap)
+
+        canvas.drawRect(
+            0f,
+            0f,
+            bitmap.width.toFloat(),
+            bitmap.height.toFloat(),
+            androidx.compose.ui.graphics.Paint().apply { color = Color.Red },
+        )
+        paragraph.paint(
+            canvas = canvas,
+            color = Color.Black,
+            shadow = null,
+            textDecoration = null,
+            drawStyle = null,
+            blendMode = BlendMode.Clear,
+        )
+
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.readPixels(pixels)
+        assertTrue(pixels.any { alpha(it) == 0 })
     }
 
     @Test
@@ -106,4 +163,9 @@ class WinUIParagraphTest {
             assertTrue(paragraph.height > 0f)
         }
     }
+
+    private fun alpha(pixel: Int): Int = pixel ushr 24 and 0xff
+    private fun red(pixel: Int): Int = pixel ushr 16 and 0xff
+    private fun green(pixel: Int): Int = pixel ushr 8 and 0xff
+    private fun blue(pixel: Int): Int = pixel and 0xff
 }

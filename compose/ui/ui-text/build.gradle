@@ -226,11 +226,7 @@ kotlin {
 
         sourceSets {
             winuiMain {
-                dependsOn(commonMain)
-                dependencies {
-                    implementation(libs.skiko)
-                    implementation(libs.atomicFu)
-                }
+                dependsOn(skikoMain)
             }
 
             winuiTest {

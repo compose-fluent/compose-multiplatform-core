@@ -21,7 +21,8 @@ baseline, not every retest attempt.
   `KWINRT-010`, `KWINRT-011`, `KWINRT-013`, `KWINRT-014`, `KWINRT-015`,
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
-  `KWINRT-028`, and `KWINRT-029`.
+  `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, and
+  `KWINRT-036`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -987,7 +988,7 @@ baseline, not every retest attempt.
   `0.1.0-SNAPSHOT` as of 2026-06-08.
 - **Observed in:** `compose/ui/ui/build.gradle` and
   `compose/ui/ui/winui-samples/build.gradle` after trying to follow the current
-  `external/kotlin-winrt/README.md` WinUI setup, which uses
+  `compose-fluent/kotlin-winrt` README WinUI setup, which uses
   `windowsSdk(...)`, `nugetPackage(...)`, and explicit `type(...)` declarations
   without `generateProjection = true`.
 - **Symptom:** the Groovy DSL does not expose the two-argument
@@ -1017,3 +1018,99 @@ baseline, not every retest attempt.
   `UISettings`, `InputSystemCursor`, `MenuFlyout`, `Launcher`, `Canvas`, and
   `ContentControl`. Keep the compose-ui and winui-samples full-projection
   workaround for now.
+
+## KWINRT-034: WinUI direct WinMD inputs leave CompositionTarget unsupported
+
+- **Status:** Closed/superseded on 2026-06-08. This failure was caused by
+  compose-winui still passing `generateWindowsSdkProjection=true` to the
+  snapshot three-argument `windowsSdk(...)` DSL while moving to the requested
+  explicit `type(...)` surface.
+- **Observed in:** `:compose:ui:ui:generateWinRtProjections` after removing the
+  temporary `winrt-projections-windows-app-sdk` dependency and supplying the
+  Windows App SDK WinMDs directly through `winmd(...)` metadata inputs while
+  keeping compose-ui's explicit `type(...)` projection surface.
+- **Symptom:** projection generation fails with
+  `Generator requires runtime class Windows.UI.Composition.Compositor ABI
+  binding CREATETARGETFORCURRENTVIEW_SLOT return to use supported ABI metadata
+  before projection rendering; found
+  Unsupported(Microsoft.UI.Composition.CompositionTarget)`. Adding
+  `type("Microsoft.UI.Composition.CompositionTarget")` does not change the
+  failure.
+- **Expected behavior:** when `Microsoft.UI.winmd` is present and
+  `Microsoft.UI.Composition.CompositionTarget` is explicitly declared, the
+  generator should classify the WinUI composition return type with supported
+  ABI metadata instead of leaving it unsupported through the
+  `Windows.UI.Composition.Compositor` binding path.
+- **compose-winui fix:** use `windowsSdk(version, false, false)` so Windows SDK
+  metadata remains available for explicitly requested types without generating
+  the broad Windows SDK projection surface.
+
+## KWINRT-035: ItemCollection VectorChanged event binding is not planned
+
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-09.
+- **Observed in:** `:compose:ui:ui:generateWinRtProjections` with
+  `windowsSdk(version, false, false)`, direct Windows App SDK WinMD inputs, and
+  compose-ui's explicit `type(...)` projection surface.
+- **Symptom:** projection generation fails with
+  `Generator requires runtime class Microsoft.UI.Xaml.Controls.ItemCollection
+  event VectorChanged add binding VECTORCHANGED_ADD_SLOT to be present before
+  projection rendering.` Adding the Windows Foundation collection types and the
+  WinUI XAML bindable collection/event types does not change the failure.
+- **Expected behavior:** `ItemCollection` should either receive a valid
+  `VectorChanged` event accessor binding from its WinUI collection interface
+  metadata, or the generator should recognize the mapped collection runtime
+  class shape and avoid requiring an event binding it cannot render.
+- **Resolution:** latest Maven snapshot allows
+  `:compose:ui:ui:generateWinRtProjections` to complete with the real WinUI
+  `MenuFlyout` context-menu/text-toolbar path still projected.
+
+## KWINRT-036: Windows.UI.Composition projections bind Microsoft.UI.Composition interfaces
+
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-09.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` after KWINRT-035 was
+  fixed and projection generation completed.
+- **Symptom:** generated `windows.ui.composition` runtime classes import and
+  implement `microsoft.ui.composition` interfaces. For example,
+  `windows.ui.composition.CompositionObject` emits `override val dispatcher`
+  while implementing a Microsoft composition interface that does not declare
+  that property, and `dispatcherQueue` has a `windows.system.DispatcherQueue?`
+  return type that does not match the Microsoft interface return type. Other
+  generated files import unresolved Microsoft composition symbols such as
+  `microsoft.ui.composition.CompositionTarget` for Windows composition APIs.
+- **Expected behavior:** Windows SDK `Windows.UI.Composition` projections should
+  consistently reference `windows.ui.composition` interfaces and runtime
+  classes, while Windows App SDK `Microsoft.UI.Composition` projections should
+  consistently reference `microsoft.ui.composition`.
+- **Validation:** after refreshing Maven snapshots on 2026-06-09 and cleaning
+  generated output, `:compose:ui:ui:compileKotlinWinuiJvm` completes with
+  compose-ui's explicit projection surface and no generated-interface
+  exclusions.
+- **compose-winui workaround:** none. Compose-winui keeps the real
+  CoreText/input functionality and does not exclude generated interfaces to hide
+  the generator namespace mapping issue.
+
+## KWINRT-037: Authored override parameters using Windows.Foundation.Size have no metadata
+
+- **Status:** Open upstream/generator in kotlin-winrt Maven snapshot
+  `0.1.0-SNAPSHOT` as of 2026-06-09.
+- **Observed in:** `:compose:ui:ui:generateWinRtProjections` after refreshing to
+  current kotlin-winrt runtime `0.1.0-SNAPSHOT:20260609.020911-47` and trying
+  skiko-winui `0.0.0-20260609.030224-9`.
+- **Symptom:** projection generation fails before Kotlin compilation with
+  `Authored WinRT override parameter 'availableSize' of type
+  'Windows.Foundation.Size' has no metadata.`
+- **Evidence:** compose-ui explicitly declares `type("Windows.Foundation.Size")`
+  together with `Windows.Foundation.Point` and `Windows.Foundation.Rect`, and
+  supplies the Windows SDK metadata through `windowsSdk(version, false, false)`.
+  The failure appears while the authoring scanner processes hosted WinUI
+  classes with XAML measure/arrange override signatures, not because
+  compose-winui omitted the type from the requested projection surface.
+- **Expected behavior:** authored WinRT override validation should resolve
+  metadata for explicitly requested Windows SDK struct types such as
+  `Windows.Foundation.Size`, including when those types appear only in authored
+  override parameters.
+- **compose-winui workaround:** none. Do not exclude authored classes or replace
+  real XAML measure/arrange participation with no-op wrappers to hide the
+  generator error.
