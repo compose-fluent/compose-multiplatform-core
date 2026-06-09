@@ -579,16 +579,6 @@ includeProject(":internal-testutils-xctest", "testutils/testutils-xctest")
 // Workaround for b/203825166
 includeBuild("placeholder")
 
-// Optional local compose-winui dependency source for kotlin-winrt development.
-// The default path consumes kotlin-winrt artifacts from Maven snapshots.
-def runningJavaVersion = JavaVersion.current()
-if (settings.providers.gradleProperty("kotlinWinRt.useLocalComposite").map { it.toBoolean() }.orElse(false).get()
-        && runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
-    includeBuild("external/kotlin-winrt")
-} else if (!runningJavaVersion.isCompatibleWith(JavaVersion.VERSION_22)) {
-    logger.lifecycle("Skipping external/kotlin-winrt included build: JDK 22+ is required, current JVM is ${runningJavaVersion}.")
-}
-
 includeProject(":mpp")
 
 // stubs needed for android source sets (Android currently doesn't work in the fork)
