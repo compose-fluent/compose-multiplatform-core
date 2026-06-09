@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.GlobalSnapshotManager
+import androidx.compose.ui.platform.WinUIDispatchQueue
 import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
@@ -78,6 +79,7 @@ private class WinUIApplicationRuntime(
     private val dispatcherQueue: DispatcherQueue,
 ) : WinUIApplicationContext {
     private val frameClock = WinUIFrameClock(dispatcherQueue)
+    private val dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
     private val recomposerParentJob = SupervisorJob()
     private val recomposerContext =
         WinUIDispatcher(dispatcherQueue) + frameClock + recomposerParentJob
@@ -109,7 +111,7 @@ private class WinUIApplicationRuntime(
     override fun exitApplication() {
         if (isDisposeRequested) return
         isDisposeRequested = true
-        val enqueued = dispatcherQueue.tryEnqueue {
+        val enqueued = dispatchQueue.dispatch {
             dispose()
             application.exit()
         }

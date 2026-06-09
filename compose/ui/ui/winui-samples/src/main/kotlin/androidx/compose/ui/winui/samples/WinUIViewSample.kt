@@ -33,6 +33,7 @@ import androidx.compose.runtime.retain.LocalRetainedValuesStore
 import androidx.compose.runtime.retain.retain
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.FillableData
@@ -111,6 +112,14 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.sensitiveContent
 import androidx.compose.ui.spatial.RelativeLayoutBounds
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.TextEditingScope
+import androidx.compose.ui.text.input.TextEditorState
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
@@ -3167,7 +3176,29 @@ private class WinUITextInputSessionSmokeProbe {
     var secondInputCancelled: Boolean = false
 }
 
-private object WinUITextInputSmokeRequest : PlatformTextInputMethodRequest
+@OptIn(ExperimentalComposeUiApi::class)
+private object WinUITextInputSmokeRequest : PlatformTextInputMethodRequest {
+    private val textValue = TextFieldValue("")
+
+    override val value: () -> TextFieldValue = { textValue }
+    override val state: TextEditorState = object : TextEditorState {
+        override val selection: TextRange = TextRange.Zero
+        override val composition: TextRange? = null
+        override val length: Int = 0
+        override fun get(index: Int): Char = throw IndexOutOfBoundsException(index)
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = ""
+        override fun toString(): String = ""
+    }
+    override val imeOptions: ImeOptions = ImeOptions.Default
+    override val onEditCommand: (List<EditCommand>) -> Unit = {}
+    override val onImeAction: ((ImeAction) -> Unit)? = null
+    override val textLayoutResult: () -> TextLayoutResult? = { null }
+    override val focusedRectInRoot: () -> ComposeRect? = { null }
+    override val textFieldRectInRoot: () -> ComposeRect? = { null }
+    override val textClippingRectInRoot: () -> ComposeRect? = { null }
+    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    override val editText: (TextEditingScope.() -> Unit) -> Unit = {}
+}
 
 private class WinUISavedStateViewModel(
     val savedStateHandle: SavedStateHandle,

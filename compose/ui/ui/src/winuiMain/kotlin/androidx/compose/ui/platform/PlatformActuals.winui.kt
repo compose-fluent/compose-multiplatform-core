@@ -18,14 +18,47 @@ package androidx.compose.ui.platform
 
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeOptions
+import androidx.compose.ui.text.input.TextEditingScope
+import androidx.compose.ui.text.input.TextEditorState
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.LifecycleOwner
 
 actual val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>
     get() = androidx.lifecycle.compose.LocalLifecycleOwner
 
-actual interface PlatformTextInputMethodRequest
+actual interface PlatformTextInputMethodRequest {
+    @ExperimentalComposeUiApi
+    val value: () -> TextFieldValue
+    @ExperimentalComposeUiApi
+    val state: TextEditorState
+    @ExperimentalComposeUiApi
+    val imeOptions: ImeOptions
+    @ExperimentalComposeUiApi
+    val onEditCommand: (List<EditCommand>) -> Unit
+    @ExperimentalComposeUiApi
+    val onImeAction: ((ImeAction) -> Unit)?
+    @ExperimentalComposeUiApi
+    val textLayoutResult: () -> TextLayoutResult?
+    @ExperimentalComposeUiApi
+    val focusedRectInRoot: () -> Rect?
+    @ExperimentalComposeUiApi
+    val textFieldRectInRoot: () -> Rect?
+    @ExperimentalComposeUiApi
+    val textClippingRectInRoot: () -> Rect?
+    @ExperimentalComposeUiApi
+    val unclippedTextOffsetInRoot: () -> Offset?
+    @ExperimentalComposeUiApi
+    val editText: (block: TextEditingScope.() -> Unit) -> Unit
+}
 
 actual interface PlatformTextInputSession {
     actual suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing

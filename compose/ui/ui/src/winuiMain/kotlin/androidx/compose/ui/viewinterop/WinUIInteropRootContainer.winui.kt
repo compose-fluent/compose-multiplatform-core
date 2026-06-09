@@ -18,11 +18,17 @@ package androidx.compose.ui.viewinterop
 
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.controls.Canvas
+import microsoft.ui.xaml.media.SolidColorBrush
+import windows.ui.Color
 
 internal class WinUIInteropRootContainer(
     private val scheduleUpdate: (() -> Unit) -> Unit,
 ) {
-    val root = Canvas()
+    val root = Canvas().also {
+        it.background = SolidColorBrush().also { brush ->
+            brush.color = Color(a = 0u, r = 0u, g = 0u, b = 0u)
+        }
+    }
     private var baseChildrenCount = 0
     private val children = mutableListOf<UIElement>()
 

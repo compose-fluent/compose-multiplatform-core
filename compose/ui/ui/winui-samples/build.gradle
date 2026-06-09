@@ -63,9 +63,7 @@ winRt {
         mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
     windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
-    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
-        generateProjection = true
-    }
+    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
     type("Windows.Foundation.Uri")
 }
 

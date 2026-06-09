@@ -21,10 +21,13 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LocalHostDefaultProvider
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.runtime.retain.LocalRetainedValuesStoreProvider
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.WinUIPlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
@@ -64,6 +67,8 @@ import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
 import org.jetbrains.skiko.winui.WinUIAccessibilityActionRequest
 import org.jetbrains.skiko.winui.WinUIAccessibilitySnapshot
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Root host for a Compose hierarchy embedded in a WinUI tree.
@@ -162,11 +167,14 @@ class WinUIComposeView internal constructor(
     init {
         setRenderContent(renderHost.component)
     }
+    private val dispatchQueue by lazy { WinUIDispatchQueue(requireRootDispatcherQueue()) }
+    private var ownerCoroutineContext: CoroutineContext = EmptyCoroutineContext
 
     internal val owner = WinUIOwner(
         root = rootNode,
         platformFocusOwner = WinUIPlatformFocusOwner(root),
         retainedValuesStore = retainedValuesStore,
+        coroutineContextProvider = { ownerCoroutineContext },
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
         onInteropTreeChanged = ::syncRootContent,
         onRootInvalidated = ::invalidateRootLayer,
@@ -190,13 +198,16 @@ class WinUIComposeView internal constructor(
     private var saveableState: Map<String, List<Any?>>? = null
     private var saveableStateRegistry: SaveableStateRegistry? = null
     private var content: (@Composable () -> Unit)? = null
+    private var platformWindowInsets: PlatformWindowInsets by mutableStateOf(EmptyPlatformWindowInsets)
     private var currentInteropRoots: List<UIElement> = emptyList()
     private var isRootContentSyncScheduled = false
+    private var isApplyingOwnerChanges = false
+    private var hasPendingRenderRequest = false
     private var isDisposed = false
     private var loadedRenderSchedulerHandler: RoutedEventHandler? = null
     private var loadedRenderSchedulerToken: EventRegistrationToken? = null
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
-    private val pointerInputAdapter = WinUIPointerInputAdapter(root, owner)
+    private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner.winUIDragAndDropManager)
 
     fun setContent(content: @Composable () -> Unit) {
@@ -220,6 +231,8 @@ class WinUIComposeView internal constructor(
                     architectureComponentsOwner.savedStateRegistryOwner,
                 LocalSaveableStateRegistry provides registry,
                 LocalHostDefaultProvider provides hostDefaultProvider,
+                LocalPlatformWindowInsets provides platformWindowInsets,
+                LocalWinUIRoot provides root,
             ) {
                 LocalRetainedValuesStoreProvider(retainedValuesStore) {
                     ProvideCommonCompositionLocals(
@@ -242,6 +255,7 @@ class WinUIComposeView internal constructor(
             saveableStateRegistry = null
             currentComposition.dispose()
         }
+        ownerCoroutineContext = EmptyCoroutineContext
         composition = null
         recomposer?.close()
         recomposer = null
@@ -283,6 +297,18 @@ class WinUIComposeView internal constructor(
         requestRender()
     }
 
+    internal fun setWindowTitleBarInsets(
+        height: Int,
+        leftPadding: Int,
+        rightPadding: Int,
+    ) {
+        platformWindowInsets = WinUIPlatformWindowInsets(
+            captionBarHeight = height,
+            captionBarLeftPadding = leftPadding,
+            captionBarRightPadding = rightPadding,
+        )
+    }
+
     @InternalComposeUiApi
     fun setWindowContainerSizeForTest(size: IntSize) {
         setWindowContainerSize(size)
@@ -296,6 +322,7 @@ class WinUIComposeView internal constructor(
         val currentFrameClock = WinUIFrameClock(dispatcherQueue)
         val recomposerParentJob = SupervisorJob()
         val recomposerContext = dispatcher + currentFrameClock + recomposerParentJob
+        ownerCoroutineContext = recomposerContext
         val currentRecomposer = Recomposer(recomposerContext)
         recomposer = currentRecomposer
         recomposerJob = CoroutineScope(recomposerContext).launch {
@@ -310,18 +337,22 @@ class WinUIComposeView internal constructor(
     }
 
     private fun syncRootContent() {
-        updateRootContent(rootNode.collectWinUIInteropRoots())
-        owner.measureAndLayout(sendPointerUpdate = false)
-        updateRootContent(rootNode.collectWinUIInteropRoots())
-        requestRender()
+        applyOwnerChanges {
+            updateRootContent(rootNode.collectWinUIInteropRoots())
+            owner.measureAndLayout(sendPointerUpdate = false)
+            updateRootContent(rootNode.collectWinUIInteropRoots())
+            requestRender()
+        }
     }
 
     private fun render(canvas: Canvas) {
         renderHost.performDrawSubmission {
             if (isDisposed) return@performDrawSubmission
-            owner.measureAndLayout(sendPointerUpdate = false)
-            updateRootContent(rootNode.collectWinUIInteropRoots())
-            rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+            applyOwnerChanges {
+                owner.measureAndLayout(sendPointerUpdate = false)
+                updateRootContent(rootNode.collectWinUIInteropRoots())
+                rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+            }
         }
     }
 
@@ -362,15 +393,34 @@ class WinUIComposeView internal constructor(
     }
 
     private fun requestRender() {
-        if (!isDisposed) {
+        if (!isDisposed && isApplyingOwnerChanges) {
+            hasPendingRenderRequest = true
+        } else if (!isDisposed) {
             renderHost.requestRender()
+        }
+    }
+
+    private fun applyOwnerChanges(block: () -> Unit) {
+        if (isApplyingOwnerChanges) {
+            block()
+            return
+        }
+        isApplyingOwnerChanges = true
+        try {
+            block()
+        } finally {
+            isApplyingOwnerChanges = false
+            if (hasPendingRenderRequest && !isDisposed) {
+                hasPendingRenderRequest = false
+                renderHost.requestRender()
+            }
         }
     }
 
     private fun scheduleRootContentSync() {
         if (isDisposed || isRootContentSyncScheduled) return
         isRootContentSyncScheduled = true
-        if (!requireRootDispatcherQueue().tryEnqueue {
+        if (!dispatchQueue.dispatch {
                 isRootContentSyncScheduled = false
                 if (!isDisposed) {
                     syncRootContent()
@@ -385,7 +435,7 @@ class WinUIComposeView internal constructor(
     }
 
     private fun scheduleOutOfFrame(block: () -> Unit) {
-        if (!requireRootDispatcherQueue().tryEnqueue { block() }) {
+        if (!dispatchQueue.dispatch { block() }) {
             block()
         }
     }

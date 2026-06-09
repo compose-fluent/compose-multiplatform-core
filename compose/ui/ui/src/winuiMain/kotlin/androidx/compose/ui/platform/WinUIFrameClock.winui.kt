@@ -22,8 +22,9 @@ import kotlinx.coroutines.CancellationException
 import microsoft.ui.dispatching.DispatcherQueue
 
 internal class WinUIFrameClock(
-    private val dispatcherQueue: DispatcherQueue,
+    dispatcherQueue: DispatcherQueue,
 ) : MonotonicFrameClock {
+    private val dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
     private var isFrameScheduled = false
     private var isCancelled = false
     private val frameClock = BroadcastFrameClock(::scheduleFrame)
@@ -39,7 +40,7 @@ internal class WinUIFrameClock(
     private fun scheduleFrame() {
         if (isCancelled || isFrameScheduled) return
         isFrameScheduled = true
-        if (!dispatcherQueue.tryEnqueue {
+        if (!dispatchQueue.dispatch {
                 isFrameScheduled = false
                 if (!isCancelled) {
                     frameClock.sendFrame(System.nanoTime())

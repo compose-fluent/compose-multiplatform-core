@@ -16,21 +16,9 @@
 
 package androidx.compose.ui.platform
 
-import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.CoroutineDispatcher
-import microsoft.ui.dispatching.DispatcherQueue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.InternalComposeUiApi
+import microsoft.ui.xaml.UIElement
 
-internal class WinUIDispatcher(
-    private val dispatcherQueue: DispatcherQueue,
-) : CoroutineDispatcher() {
-    private val dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
-
-    override fun isDispatchNeeded(context: CoroutineContext): Boolean =
-        runCatching { !dispatcherQueue.hasThreadAccess }.getOrDefault(true)
-
-    override fun dispatch(context: CoroutineContext, block: Runnable) {
-        if (!dispatchQueue.dispatch { block.run() }) {
-            block.run()
-        }
-    }
-}
+@InternalComposeUiApi
+val LocalWinUIRoot = staticCompositionLocalOf<UIElement?> { null }

@@ -19,6 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.MultiParagraph
 import androidx.compose.ui.text.TextLayoutInput
@@ -30,12 +31,15 @@ import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
+import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
+import androidx.compose.ui.text.input.TextEditingScope
+import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -576,7 +580,29 @@ class WinUIPlatformTextInputServiceTest {
     }
 }
 
-private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodRequest
+@OptIn(ExperimentalComposeUiApi::class)
+private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodRequest {
+    private val textValue = TextFieldValue("")
+
+    override val value: () -> TextFieldValue = { textValue }
+    override val state: TextEditorState = object : TextEditorState {
+        override val selection: TextRange = TextRange.Zero
+        override val composition: TextRange? = null
+        override val length: Int = 0
+        override fun get(index: Int): Char = throw IndexOutOfBoundsException(index)
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = ""
+        override fun toString(): String = ""
+    }
+    override val imeOptions: ImeOptions = ImeOptions.Default
+    override val onEditCommand: (List<EditCommand>) -> Unit = {}
+    override val onImeAction: ((ImeAction) -> Unit)? = null
+    override val textLayoutResult: () -> TextLayoutResult? = { null }
+    override val focusedRectInRoot: () -> Rect? = { null }
+    override val textFieldRectInRoot: () -> Rect? = { null }
+    override val textClippingRectInRoot: () -> Rect? = { null }
+    override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    override val editText: (TextEditingScope.() -> Unit) -> Unit = {}
+}
 
 private fun testTextLayoutResult(text: String): TextLayoutResult {
     val annotatedString = AnnotatedString(text)

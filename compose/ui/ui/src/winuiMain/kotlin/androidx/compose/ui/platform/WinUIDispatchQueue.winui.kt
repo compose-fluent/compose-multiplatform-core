@@ -1,0 +1,89 @@
+/*
+ * Copyright 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.ui.platform
+
+import kotlin.time.Duration.Companion.milliseconds
+import microsoft.ui.dispatching.DispatcherQueue
+import windows.foundation.TypedEventHandler
+
+internal class WinUIDispatchQueue(
+    private val dispatcherQueue: DispatcherQueue,
+) {
+    private val lock = Any()
+    private val pending = ArrayDeque<() -> Unit>()
+    private var isScheduled = false
+    private var isDraining = false
+    private val timer = dispatcherQueue.createTimer().also { timer ->
+        timer.interval = 1.milliseconds
+        timer.isRepeating = false
+        timer.tick.add(TypedEventHandler { _, _ ->
+            drain()
+        })
+    }
+
+    fun dispatch(block: () -> Unit): Boolean {
+        synchronized(lock) {
+            pending.addLast(block)
+            if (isScheduled || isDraining) return true
+            isScheduled = true
+        }
+        return runCatching {
+            timer.start()
+            true
+        }.getOrElse {
+            val task = synchronized(lock) {
+                pending.removeLastOrNull().also {
+                    if (pending.isEmpty()) {
+                        isScheduled = false
+                    }
+                }
+            }
+            if (task === block) {
+                block()
+            }
+            false
+        }
+    }
+
+    private fun drain() {
+        val tasks = synchronized(lock) {
+            isScheduled = false
+            isDraining = true
+            buildList {
+                while (pending.isNotEmpty()) {
+                    add(pending.removeFirst())
+                }
+            }
+        }
+        try {
+            tasks.forEach { task -> task() }
+        } finally {
+            val shouldSchedule = synchronized(lock) {
+                isDraining = false
+                if (pending.isNotEmpty() && !isScheduled) {
+                    isScheduled = true
+                    true
+                } else {
+                    false
+                }
+            }
+            if (shouldSchedule) {
+                timer.start()
+            }
+        }
+    }
+}

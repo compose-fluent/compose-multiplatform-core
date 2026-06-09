@@ -74,21 +74,54 @@ if (composeWinUiGradlePluginAvailable) {
     apply plugin: "io.github.composefluent.winrt"
 
     winRt {
-        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
-        nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get()) {
-            generateProjection = true
-        }
+        restoreNuGetPackages = false
+        def composeWinUiNugetGlobalPackagesRoot = providers.gradleProperty("composeWinUi.nugetGlobalPackagesRoot")
+                .orElse(providers.environmentVariable("NUGET_PACKAGES"))
+                .orElse(providers.provider {
+                    new File(System.getProperty("user.home"), ".nuget/packages").absolutePath
+                })
+                .map { it.trim() }
+                .filter { !it.isEmpty() }
+        nugetGlobalPackagesRoots.add(composeWinUiNugetGlobalPackagesRoot.get())
+        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, false)
+        def composeWinUiWindowsAppSdkPackagesRoot = new File(composeWinUiNugetGlobalPackagesRoot.get())
+        winmd(new File(
+                composeWinUiWindowsAppSdkPackagesRoot,
+                "microsoft.windowsappsdk.winui/2.1.0/metadata/Microsoft.UI.Xaml.winmd",
+        ))
+        winmd(new File(
+                composeWinUiWindowsAppSdkPackagesRoot,
+                "microsoft.windowsappsdk.interactiveexperiences/2.0.13/metadata/10.0.18362.0/Microsoft.Foundation.winmd",
+        ))
+        winmd(new File(
+                composeWinUiWindowsAppSdkPackagesRoot,
+                "microsoft.windowsappsdk.interactiveexperiences/2.0.13/metadata/10.0.18362.0/Microsoft.Graphics.winmd",
+        ))
+        winmd(new File(
+                composeWinUiWindowsAppSdkPackagesRoot,
+                "microsoft.windowsappsdk.interactiveexperiences/2.0.13/metadata/10.0.18362.0/Microsoft.UI.winmd",
+        ))
+        winmd(new File(
+                composeWinUiWindowsAppSdkPackagesRoot,
+                "microsoft.windowsappsdk.foundation/2.0.21/metadata/Microsoft.Windows.ApplicationModel.Resources.winmd",
+        ))
         type("Windows.Foundation.IStringable")
         type("Windows.Foundation.Uri")
+        type("Windows.Foundation.Collections.CollectionChange")
+        type("Windows.Foundation.Collections.IIterable")
+        type("Windows.Foundation.Collections.IIterator")
+        type("Windows.Foundation.Collections.IKeyValuePair")
+        type("Windows.Foundation.Collections.IObservableVector")
+        type("Windows.Foundation.Collections.IVector")
+        type("Windows.Foundation.Collections.IVectorChangedEventArgs")
+        type("Windows.Foundation.Collections.IVectorView")
+        type("Windows.Foundation.Collections.VectorChangedEventHandler")
         type("Windows.ApplicationModel.DataTransfer.Clipboard")
         type("Windows.ApplicationModel.DataTransfer.DataPackage")
         type("Windows.ApplicationModel.DataTransfer.DataPackageView")
         type("Windows.ApplicationModel.DataTransfer.StandardDataFormats")
         type("Windows.System.Display.DisplayRequest")
         type("Windows.System.Launcher")
-        type("Windows.UI.Core.CoreCursor")
-        type("Windows.UI.Core.CoreCursorType")
-        type("Microsoft.UI.Input.InputCursor")
         type("Microsoft.UI.Input.InputSystemCursor")
         type("Microsoft.UI.Input.InputSystemCursorShape")
         type("Microsoft.UI.Xaml.Application")
@@ -121,24 +154,37 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop")
         type("Microsoft.UI.Xaml.Media.MicaBackdrop")
         type("Microsoft.UI.Xaml.Media.RectangleGeometry")
+        type("Microsoft.UI.Xaml.Media.SolidColorBrush")
         type("Microsoft.UI.Xaml.Media.SystemBackdrop")
         type("Microsoft.UI.Dispatching.IDispatcherQueue2")
         type("Microsoft.UI.Windowing.AppWindow")
         type("Microsoft.UI.Windowing.AppWindowClosingEventArgs")
+        type("Microsoft.UI.Windowing.AppWindowTitleBar")
         type("Microsoft.UI.Xaml.Controls.Button")
         type("Microsoft.UI.Xaml.Controls.Canvas")
         type("Microsoft.UI.Xaml.Controls.Control")
         type("Microsoft.UI.Xaml.Controls.ContentControl")
         type("Microsoft.UI.Xaml.Controls.MenuFlyout")
         type("Microsoft.UI.Xaml.Controls.MenuFlyoutItem")
+        type("Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator")
         type("Microsoft.UI.Xaml.Controls.Panel")
         type("Microsoft.UI.Xaml.Controls.TextBox")
         type("Microsoft.UI.Xaml.Controls.ToggleSwitch")
         type("Microsoft.UI.Xaml.Controls.UIElementCollection")
         type("Microsoft.UI.Xaml.Controls.XamlControlsResources")
+        type("Microsoft.UI.Xaml.Interop.IBindableIterable")
+        type("Microsoft.UI.Xaml.Interop.IBindableIterator")
+        type("Microsoft.UI.Xaml.Interop.IBindableObservableVector")
+        type("Microsoft.UI.Xaml.Interop.IBindableVector")
+        type("Microsoft.UI.Xaml.Interop.IBindableVectorView")
+        type("Microsoft.UI.Xaml.Interop.INotifyCollectionChanged")
+        type("Microsoft.UI.Xaml.Interop.NotifyCollectionChangedAction")
+        type("Microsoft.UI.Xaml.Interop.NotifyCollectionChangedEventArgs")
+        type("Microsoft.UI.Xaml.Interop.NotifyCollectionChangedEventHandler")
         type("Windows.Foundation.Point")
         type("Windows.Foundation.Rect")
         type("Windows.Foundation.Size")
+        type("Windows.UI.Color")
         type("Windows.UI.Text.Core.CoreTextCompositionCompletedEventArgs")
         type("Windows.UI.Text.Core.CoreTextCompositionSegment")
         type("Windows.UI.Text.Core.CoreTextCompositionStartedEventArgs")

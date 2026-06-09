@@ -14,20 +14,15 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.platform
+package androidx.compose.ui
 
-import microsoft.ui.dispatching.DispatcherQueue
+import androidx.compose.runtime.staticCompositionLocalOf
 
-internal object WinUIScheduler {
-    private var dispatchQueue: WinUIDispatchQueue? = null
+enum class SystemTheme {
+    Dark, Light, Unknown
+}
 
-    fun register(dispatcherQueue: DispatcherQueue) {
-        if (this.dispatchQueue == null) {
-            this.dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
-        }
-    }
-
-    fun dispatch(block: () -> Unit): Boolean {
-        return dispatchQueue?.dispatch(block) == true
-    }
+@InternalComposeUiApi
+val LocalSystemTheme = staticCompositionLocalOf {
+    SystemTheme.Unknown
 }

@@ -251,7 +251,7 @@ internal class WinUINativeTextInputBridge(
     }
 
     internal fun attachCoreTextForCurrentInputIfAvailable(): Boolean =
-        if (!java.lang.Boolean.getBoolean(CoreTextInputEnabledProperty)) {
+        if (!winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
             false
         } else {
             runCatching {

@@ -146,6 +146,7 @@ private class WinUIWindowNode(
         get() = window.extendsContentIntoTitleBar
         set(value) {
             window.extendsContentIntoTitleBar = value
+            updateWindowInfo()
         }
 
     var backdrop: WindowBackdrop = WindowBackdrop.None
@@ -242,6 +243,20 @@ private class WinUIWindowNode(
                 height = appWindowSize.height,
             )
         )
+        val titleBar = appWindow.titleBar
+        if (window.extendsContentIntoTitleBar && titleBar != null) {
+            view.setWindowTitleBarInsets(
+                height = titleBar.height,
+                leftPadding = titleBar.leftInset,
+                rightPadding = titleBar.rightInset,
+            )
+        } else {
+            view.setWindowTitleBarInsets(
+                height = 0,
+                leftPadding = 0,
+                rightPadding = 0,
+            )
+        }
     }
 
     private fun updateCaptureProtection(isProtected: Boolean) {
