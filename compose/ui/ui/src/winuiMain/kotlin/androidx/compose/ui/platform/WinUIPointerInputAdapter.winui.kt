@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -151,7 +152,7 @@ internal class WinUIPointerInputAdapter(
         val buttons = properties.toComposeButtons()
         return WinUIPointerEvent(
             eventType = eventType,
-            position = Offset(position.x, position.y),
+            position = winUIPositionToComposeOffset(position.x, position.y, owner.density),
             uptimeMillis = point.timestamp.toLong() / MicrosecondsPerMillisecond,
             pointerId = point.pointerId.toLong(),
             down = point.isComposePointerDown(eventType, buttons),
@@ -279,6 +280,15 @@ internal data class WinUIPointerEvent(
     val isInBounds: Boolean,
     val nativeEvent: Any?,
 )
+
+internal fun winUIPositionToComposeOffset(
+    x: Float,
+    y: Float,
+    density: Density,
+): Offset {
+    val scale = density.density
+    return Offset(x * scale, y * scale)
+}
 
 private data class WinUIPointerEventRegistration(
     val event: WinRtEvent<PointerEventHandler>,

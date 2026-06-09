@@ -22,6 +22,7 @@ import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.unit.Density
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -71,6 +72,14 @@ class WinUIPointerEventProcessorTest {
 
         assertEquals(true, handled)
         assertEquals(event, dispatchedEvent)
+    }
+
+    @Test
+    fun convertsWinUIDipsToComposePixels() {
+        assertEquals(
+            Offset(20f, 40f),
+            winUIPositionToComposeOffset(10f, 20f, Density(2f)),
+        )
     }
 }
 

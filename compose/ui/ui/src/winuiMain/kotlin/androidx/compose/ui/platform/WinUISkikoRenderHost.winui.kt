@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import microsoft.ui.xaml.FrameworkElement
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
@@ -42,7 +43,8 @@ internal class WinUISkikoRenderHost(
     private var isClosed = false
     private var isSurfaceAttached = false
     private var requestedSurfaceSize: IntSize? = null
-    private var appliedSurfaceSize: IntSize? = null
+    private var requestedSurfaceDensity: Density = Density(1f)
+    private var appliedSurfaceSize: WinUISkikoSurfaceSize? = null
     private var pendingRenderInvalidation = false
     private var renderInvalidationCount = 0
     private var delegatedRenderInvalidationCount = 0
@@ -99,9 +101,10 @@ internal class WinUISkikoRenderHost(
         }
     }
 
-    fun setSize(size: IntSize) {
+    fun setSize(size: IntSize, density: Density = Density(1f)) {
         if (!isClosed) {
             requestedSurfaceSize = size
+            requestedSurfaceDensity = density
             applyRequestedSurfaceSize()
         }
     }
@@ -151,9 +154,12 @@ internal class WinUISkikoRenderHost(
 
     private fun applyRequestedSurfaceSize() {
         val size = requestedSurfaceSize
-        if (size != null && size != appliedSurfaceSize) {
-            appliedSurfaceSize = size
-            layer.setSize(size)
+        if (size != null) {
+            val surfaceSize = size.toWinUISkikoSurfaceSize(requestedSurfaceDensity)
+            if (surfaceSize != appliedSurfaceSize) {
+                appliedSurfaceSize = surfaceSize
+                layer.setSize(surfaceSize)
+            }
         }
     }
 
@@ -173,7 +179,7 @@ internal class WinUISkikoRenderHost(
             isSurfaceAttached = isSurfaceAttached,
             isFrameSchedulerStarted = frameScheduler != null,
             requestedSurfaceSize = requestedSurfaceSize,
-            appliedSurfaceSize = appliedSurfaceSize,
+            appliedSurfaceSize = appliedSurfaceSize?.physicalSize,
             pendingRenderInvalidation = pendingRenderInvalidation,
             renderInvalidationCount = renderInvalidationCount,
             delegatedRenderInvalidationCount = delegatedRenderInvalidationCount,
@@ -239,9 +245,24 @@ internal interface WinUISkikoLayerAdapter : AutoCloseable {
 
     fun requestRender(throttledToVsync: Boolean)
 
-    fun setSize(size: IntSize)
+    fun setSize(size: WinUISkikoSurfaceSize)
 
     fun startFrameScheduler(): AutoCloseable
+}
+
+internal data class WinUISkikoSurfaceSize(
+    val physicalSize: IntSize,
+    val xamlWidth: Double,
+    val xamlHeight: Double,
+)
+
+internal fun IntSize.toWinUISkikoSurfaceSize(density: Density): WinUISkikoSurfaceSize {
+    val scale = density.density.takeIf { it.isFinite() && it > 0f } ?: 1f
+    return WinUISkikoSurfaceSize(
+        physicalSize = this,
+        xamlWidth = width.toDouble() / scale.toDouble(),
+        xamlHeight = height.toDouble() / scale.toDouble(),
+    )
 }
 
 private class DefaultWinUISkikoLayerAdapter(
@@ -296,9 +317,9 @@ private class DefaultWinUISkikoLayerAdapter(
         layer.needRender(throttledToVsync)
     }
 
-    override fun setSize(size: IntSize) {
-        component.width = size.width.toDouble()
-        component.height = size.height.toDouble()
+    override fun setSize(size: WinUISkikoSurfaceSize) {
+        component.width = size.xamlWidth
+        component.height = size.xamlHeight
     }
 
     override fun startFrameScheduler(): WinUIFrameScheduler =

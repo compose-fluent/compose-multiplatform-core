@@ -216,7 +216,7 @@ class WinUIComposeView internal constructor(
     private var xamlRootChangedToken: EventRegistrationToken? = null
     private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
     private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
-    private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner.winUIDragAndDropManager)
+    private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner)
 
     fun setContent(content: @Composable () -> Unit) {
         check(!isDisposed) {
@@ -303,7 +303,7 @@ class WinUIComposeView internal constructor(
     internal fun setWindowContainerSize(size: IntSize) {
         updateDensityFromXamlRoot()
         owner.setWindowContainerSize(size)
-        renderHost.setSize(size)
+        renderHost.setSize(size, owner.density)
         requestRender()
     }
 
@@ -339,7 +339,7 @@ class WinUIComposeView internal constructor(
             currentRecomposer.runRecomposeAndApplyChanges()
         }
         frameClock = currentFrameClock
-        val applier = UiApplier(rootNode, ::syncRootContent)
+        val applier = UiApplier(rootNode, ::scheduleRootContentSync)
         return Composition(
             applier = applier,
             parent = currentRecomposer,
@@ -426,6 +426,9 @@ class WinUIComposeView internal constructor(
             ?.takeIf { it.isFinite() && it > 0f }
             ?: 1f
         owner.updateDensity(Density(scale, owner.density.fontScale))
+        owner.windowInfo.containerSize.takeIf { it.width > 0 && it.height > 0 }?.let { size ->
+            renderHost.setSize(size, owner.density)
+        }
     }
 
     private fun clearXamlRootDensityObserver() {

@@ -19,7 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.WinUIDragAndDropManager
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.node.WinUIOwner
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.WinRtEvent
 import microsoft.ui.xaml.DragEventArgs
@@ -28,8 +28,9 @@ import microsoft.ui.xaml.UIElement
 
 internal class WinUIDragAndDropAdapter(
     private val root: UIElement,
-    private val dragAndDropManager: WinUIDragAndDropManager,
+    private val owner: WinUIOwner,
 ) {
+    private val dragAndDropManager: WinUIDragAndDropManager = owner.winUIDragAndDropManager
     private var isDisposed = false
     private var isDragSessionActive = false
     private val registrations = listOf(
@@ -116,7 +117,7 @@ internal class WinUIDragAndDropAdapter(
         val position = getPosition(root)
         return DragAndDropEvent(
             nativeEvent = this,
-            positionInRootImpl = Offset(position.x, position.y),
+            positionInRootImpl = winUIPositionToComposeOffset(position.x, position.y, owner.density),
         )
     }
 }

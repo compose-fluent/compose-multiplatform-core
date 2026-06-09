@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Density
 import microsoft.ui.xaml.FrameworkElement
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
@@ -201,6 +202,25 @@ class WinUISkikoRenderHostTest {
         assertEquals(listOf(IntSize(20, 10), IntSize(30, 10)), layer.sizes)
         assertEquals(IntSize(30, 10), host.diagnosticsForTest.requestedSurfaceSize)
         assertEquals(IntSize(30, 10), host.diagnosticsForTest.appliedSurfaceSize)
+    }
+
+    @Test
+    fun convertsPhysicalSizeToXamlDipsForLayer() {
+        val layer = FakeWinUISkikoLayerAdapter()
+        val host = WinUISkikoRenderHost(layer)
+
+        host.setSize(IntSize(300, 150), Density(1.5f))
+
+        assertEquals(IntSize(300, 150), host.diagnosticsForTest.requestedSurfaceSize)
+        assertEquals(IntSize(300, 150), host.diagnosticsForTest.appliedSurfaceSize)
+        assertEquals(
+            WinUISkikoSurfaceSize(
+                physicalSize = IntSize(300, 150),
+                xamlWidth = 200.0,
+                xamlHeight = 100.0,
+            ),
+            layer.surfaceSizes.single(),
+        )
     }
 
     @Test
@@ -403,6 +423,7 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
     val events = mutableListOf<String>()
     val renderRequests = mutableListOf<Boolean>()
     val sizes = mutableListOf<IntSize>()
+    val surfaceSizes = mutableListOf<WinUISkikoSurfaceSize>()
     val scheduler = FakeFrameScheduler(events)
     var startFrameSchedulerCount = 0
     var startFrameSchedulerFailure: Throwable? = null
@@ -424,8 +445,9 @@ private class FakeWinUISkikoLayerAdapter : WinUISkikoLayerAdapter {
         renderRequests += throttledToVsync
     }
 
-    override fun setSize(size: IntSize) {
-        sizes += size
+    override fun setSize(size: WinUISkikoSurfaceSize) {
+        surfaceSizes += size
+        sizes += size.physicalSize
     }
 
     override fun setAccessibilityProvider(provider: WinUIAccessibilityProvider) {
