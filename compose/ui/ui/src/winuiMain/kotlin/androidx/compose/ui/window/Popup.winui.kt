@@ -44,6 +44,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
+import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import microsoft.ui.windowing.AppWindow
+import microsoft.ui.windowing.AppWindowChangedEventArgs
+import microsoft.ui.windowing.OverlappedPresenter
+import microsoft.ui.xaml.WindowActivatedEventArgs
+import microsoft.ui.xaml.WindowActivationState
+import windows.foundation.TypedEventHandler
 import windows.graphics.RectInt32
 import microsoft.ui.xaml.Window as XamlWindow
 
@@ -289,10 +296,17 @@ private class WinUIWindowPopupHost(
         androidx.compose.ui.unit.LayoutDirection.Ltr
     )
     private var currentContent: @Composable () -> Unit by mutableStateOf({})
+    private var parentWindowActivatedHandler: TypedEventHandler<Any?, WindowActivatedEventArgs>? = null
+    private var parentWindowActivatedToken: EventRegistrationToken? = null
+    private var parentAppWindowChangedHandler: TypedEventHandler<AppWindow, AppWindowChangedEventArgs>? = null
+    private var parentAppWindowChangedToken: EventRegistrationToken? = null
+    private var isOwnerApplied = false
 
     init {
         popupWindow.content = composeView.root
-        runCatching { popupWindow.appWindow?.isShownInSwitchers = false }
+        configurePopupWindow()
+        applyPopupOwner()
+        registerParentWindowHandlers()
     }
 
     fun setContent(content: @Composable () -> Unit) {
@@ -340,6 +354,7 @@ private class WinUIWindowPopupHost(
     fun close() {
         shouldBeOpen = false
         isOpen = false
+        removeParentWindowHandlers()
         composeView.dispose()
         popupWindow.content = null
         runCatching { popupWindow.close() }
@@ -368,16 +383,84 @@ private class WinUIWindowPopupHost(
         updateWindow()
     }
 
+    private fun configurePopupWindow() {
+        val appWindow = popupWindow.appWindow ?: return
+        runCatching { popupWindow.extendsContentIntoTitleBar = true }
+        appWindow.title = ""
+        appWindow.isShownInSwitchers = false
+        val presenter = runCatching { OverlappedPresenter.createForContextMenu() }
+            .getOrElse { OverlappedPresenter.createForToolWindow() }
+        runCatching { presenter.setBorderAndTitleBar(hasBorder = false, hasTitleBar = false) }
+        presenter.isResizable = false
+        presenter.isMaximizable = false
+        presenter.isMinimizable = false
+        presenter.isAlwaysOnTop = false
+        runCatching { appWindow.setPresenter(presenter) }
+    }
+
+    private fun applyPopupOwner() {
+        if (isOwnerApplied) return
+        val window = parentWindow ?: return
+        isOwnerApplied = setWindowPopupOwner(
+            popupWindow = popupWindow,
+            parentWindow = window,
+        )
+    }
+
+    private fun registerParentWindowHandlers() {
+        val window = parentWindow ?: return
+        if (parentWindowActivatedToken == null) {
+            val handler = TypedEventHandler<Any?, WindowActivatedEventArgs> { _, args ->
+                if (args.windowActivationState != WindowActivationState.Deactivated) {
+                    updateWindow()
+                    bringToFront()
+                }
+            }
+            parentWindowActivatedHandler = handler
+            parentWindowActivatedToken = window.activated.add(handler)
+        }
+        val appWindow = window.appWindow ?: return
+        if (parentAppWindowChangedToken == null) {
+            val handler = TypedEventHandler<AppWindow, AppWindowChangedEventArgs> { _, args ->
+                if (args.didPositionChange || args.didSizeChange || args.didVisibilityChange) {
+                    updateWindow()
+                    bringToFront()
+                }
+            }
+            parentAppWindowChangedHandler = handler
+            parentAppWindowChangedToken = appWindow.changed.add(handler)
+        }
+    }
+
+    private fun removeParentWindowHandlers() {
+        parentWindowActivatedToken?.let { token ->
+            runCatching { parentWindow?.activated?.remove(token) }
+        }
+        parentWindowActivatedToken = null
+        parentWindowActivatedHandler = null
+        parentAppWindowChangedToken?.let { token ->
+            runCatching { parentWindow?.appWindow?.changed?.remove(token) }
+        }
+        parentAppWindowChangedToken = null
+        parentAppWindowChangedHandler = null
+    }
+
     fun updateContentSize(size: IntSize) {
         if (contentSize == size) return
         contentSize = size
         updateWindow()
     }
 
+    private fun bringToFront() {
+        if (!isOpen) return
+        runCatching { popupWindow.appWindow?.moveInZOrderAtTop() }
+    }
+
     private fun updateWindow() {
         val parentAppWindow = parentWindow?.appWindow ?: return
         val popupAppWindow = popupWindow.appWindow ?: return
         val provider = popupPositionProvider ?: return
+        applyPopupOwner()
         val effectiveWindowSize = windowSize.takeIf { it != IntSize.Zero }
             ?: contentSize
         if (effectiveWindowSize == IntSize.Zero) return
@@ -408,6 +491,7 @@ private class WinUIWindowPopupHost(
             runCatching { popupAppWindow.show(properties.focusable) }
                 .getOrElse { popupWindow.activate() }
         }
+        bringToFront()
     }
 }
 
@@ -436,3 +520,5 @@ private fun IntOffset.clipToWindow(contentSize: IntSize, windowSize: IntSize): I
             0
         },
     )
+
+internal expect fun setWindowPopupOwner(popupWindow: XamlWindow, parentWindow: XamlWindow): Boolean

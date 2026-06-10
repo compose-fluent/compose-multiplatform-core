@@ -3145,6 +3145,7 @@ private object ComposeWinUiSmokeApp {
 
 @Composable
 private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
+    val autoExit = java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")
     var popupMeasured by remember { mutableStateOf(false) }
     var popupClosed by remember { mutableStateOf(false) }
     var popupDisposed by remember { mutableStateOf(false) }
@@ -3153,36 +3154,50 @@ private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
             title = "compose-winui window popup smoke",
             onCloseRequest = { exitApplication() },
         ) {
-            Layout(content = {}) { _, _ ->
-                layout(24, 24) {}
+            Layout(
+                content = {},
+                modifier = Modifier.drawBehind {
+                    drawRect(Color(0xFFE7F1FF))
+                    drawRect(
+                        color = Color(0xFF2563EB),
+                        topLeft = Offset(32f, 32f),
+                        size = androidx.compose.ui.geometry.Size(96f, 56f),
+                    )
+                },
+            ) { _, _ ->
+                layout(360, 240) {}
             }
             if (!popupClosed) {
                 Popup {
                     Layout(
                         content = {},
-                        modifier = Modifier.onPlaced {
-                            popupMeasured = true
-                        },
+                        modifier = Modifier
+                            .onPlaced {
+                                popupMeasured = true
+                            }
+                            .drawBehind {
+                                drawRect(Color(0xFF005BFF))
+                            },
                     ) { _, _ ->
-                        layout(64, 32) {}
+                        layout(168, 72) {}
                     }
                 }
             }
         }
     }
     LaunchedEffect(popupMeasured) {
-        if (popupMeasured) {
+        if (popupMeasured && autoExit) {
             withFrameNanos { }
             popupClosed = true
             withFrameNanos { }
             popupDisposed = true
         }
     }
-    LaunchedEffect(popupDisposed) {
-        if (popupDisposed) {
+    LaunchedEffect(popupMeasured, popupDisposed) {
+        if (popupMeasured && (!autoExit || popupDisposed)) {
             delay(100)
             println("compose-winui-sample: window popup")
-            if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
+            if (autoExit) {
                 applicationScope.exitApplication()
             }
         }

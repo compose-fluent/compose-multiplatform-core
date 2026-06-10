@@ -83,6 +83,25 @@ tasks.named("generateWinRtProjections").configure {
     authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
 }
 
+tasks.named("buildWinRtApplicationHost").configure {
+    doLast {
+        def hostBin = winRtApplicationHostBin.get().asFile
+        def libDir = new File(hostBin, "lib")
+        def uiWinUiJar = libDir.listFiles()?.find { file ->
+            file.name ==~ /ui-winuijvm-.*\.jar/
+        }
+        if (uiWinUiJar == null) {
+            throw new GradleException("WinUI sample application host did not include ui-winuijvm.")
+        }
+        // KWINRT-041: keep this module's projection classes ahead of skiko-winui
+        // until dependency-owned WinRT type shapes are merged coherently.
+        copy {
+            from(uiWinUiJar)
+            into(hostBin)
+        }
+    }
+}
+
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_25)

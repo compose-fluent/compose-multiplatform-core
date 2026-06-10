@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.WinUIDispatcher
 import androidx.compose.ui.platform.WinUIFrameClock
 import androidx.compose.ui.platform.WinUIScheduler
 import microsoft.ui.dispatching.DispatcherQueue
+import microsoft.ui.xaml.DispatcherShutdownMode
 import microsoft.ui.xaml.LaunchActivatedEventArgs
 import microsoft.ui.xaml.ResourceDictionary
 import microsoft.ui.xaml.controls.XamlControlsResources
@@ -58,6 +59,7 @@ class WinUIXamlApplication internal constructor(
     }
 
     override fun onLaunched(args: LaunchActivatedEventArgs) {
+        dispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown
         installDefaultXamlResources()
         runtime = WinUIApplicationRuntime(
             application = this,
@@ -69,7 +71,16 @@ class WinUIXamlApplication internal constructor(
 
     private fun installDefaultXamlResources() {
         val appResources = resources ?: ResourceDictionary().also { resources = it }
-        appResources.mergedDictionaries.add(XamlControlsResources())
+        try {
+            appResources.mergedDictionaries.add(XamlControlsResources())
+        } catch (error: LinkageError) {
+            // KWINRT-041: duplicate dependency-owned ResourceDictionary projections
+            // can make XamlControlsResources fail to link on mixed classpaths.
+            System.err.println(
+                "compose-winui: skipped XamlControlsResources because of KWINRT-041: " +
+                    "${error::class.qualifiedName}: ${error.message}"
+            )
+        }
     }
 }
 

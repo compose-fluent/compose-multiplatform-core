@@ -11,8 +11,10 @@ baseline, not every retest attempt.
 
 - **Open upstream/runtime:** `KWINRT-024` for the current full WinUI sample
   validation path.
-- **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, and `KWINRT-032`.
-- **Open compose-side workarounds:** `KWINRT-030`.
+- **Open upstream/plugin:** `KWINRT-030`, `KWINRT-031`, `KWINRT-032`,
+  `KWINRT-040`, and `KWINRT-041`.
+- **Open compose-side workarounds:** `KWINRT-030`, `KWINRT-040`, and
+  `KWINRT-041`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
@@ -1173,3 +1175,51 @@ baseline, not every retest attempt.
   through normal `project(...)` dependencies and consumes `skiko-winui` from
   Maven snapshots. The filtered Skiko jar workaround was removed. Do not
   reintroduce `files(...)` dependencies for projection-owning WinUI artifacts.
+
+## KWINRT-040: KMP library authoring manifest targets the wrong JVM artifact
+
+- **Status:** Open.
+- **Observed in:** `:compose:ui:ui:winui-samples:buildWinRtApplicationHost`
+  after `WinUIXamlApplication` became an authored `Application` subclass.
+- **Symptom:** the reusable KMP `:compose:ui:ui` module generates
+  `kotlin-winrt-authoring/ui.host.json` with `targetArtifact` set to `ui.jar`,
+  but the staged WinUI JVM artifact is
+  `ui-winuijvm-9999.0.0-SNAPSHOT.jar`. The generated application host starts,
+  enters Kotlin `main`, and then `Application.start { ... }` returns without
+  `onLaunched` because the runtime authoring config maps
+  `androidx.compose.ui.window.WinUIXamlApplication` to a jar that is not on the
+  staged runtime classpath.
+- **Expected behavior:** for Kotlin Multiplatform JVM artifacts, kotlin-winrt
+  should use the target JVM jar archive file that will be staged for runtime
+  instead of falling back to `project.name.jar`.
+- **compose-winui workaround:** `compose/ui/ui/build.gradle` overrides both the
+  scanner-generated and compiler-generated authoring target artifact names to
+  `winuiJvmJar.archiveFileName`. Remove this once kotlin-winrt derives the
+  target artifact name correctly for KMP JVM targets.
+
+## KWINRT-041: Dependency-owned WinRT types can link with incompatible generated shape
+
+- **Status:** Open.
+- **Observed in:** `:compose:ui:ui:winui-samples:buildWinRtApplicationHost`
+  after `Microsoft.UI.Xaml.Application` and `XamlControlsResources` were needed
+  for the authored WinUI application path.
+- **Symptom:** the runtime classpath can load shared WinRT type identities from
+  different projection jars with incompatible generated shapes. Two observed
+  failures are `microsoft.ui.xaml.ResourceDictionary` from `skiko-winui` with
+  `microsoft.ui.xaml.controls.XamlControlsResources` from `ui-winuijvm`, and
+  `microsoft.ui.input.InputCursor` from `skiko-winui` with
+  `microsoft.ui.input.InputSystemCursor` from `ui-winuijvm`. In both cases the
+  upstream dependency owns a final RCW base class while the downstream generated
+  type expects an inheritable/composable base shape, causing
+  `IncompatibleClassChangeError`.
+- **Expected behavior:** kotlin-winrt dependency identity and support merging
+  should prevent one WinRT type identity from being loaded with incompatible
+  generated class shapes across dependency jars. If a downstream module must
+  generate a subclass that depends on an upstream-owned runtime class, the
+  generated shape and classpath ownership need to remain coherent.
+- **compose-winui workaround:** `Application.winui.kt` catches the narrow
+  `XamlControlsResources` linkage failure while installing default WinUI XAML
+  resources. The repository-local WinUI sample also stages `ui-winuijvm` in the
+  application-host root so the generated host scans the current module's
+  projection jar before `lib/skiko-winui`. Remove both workarounds once
+  dependency-owned projection shapes are merged or deduplicated correctly.
