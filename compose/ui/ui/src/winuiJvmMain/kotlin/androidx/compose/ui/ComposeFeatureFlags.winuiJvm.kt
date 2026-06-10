@@ -14,19 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.winui.samples
+package androidx.compose.ui
 
-import io.github.composefluent.winrt.runtime.WinRtWindowsAppSdkBootstrap
-
-/**
- * JavaExec-only launcher. The generated native host performs Windows App SDK
- * bootstrap before creating the JVM; repository-local JavaExec tasks need to
- * do that explicitly before entering the same sample main.
- */
-fun main(args: Array<String>) {
-    WinRtWindowsAppSdkBootstrap.initialize().use {
-        Class.forName("androidx.compose.ui.winui.samples.WinUIViewSampleKt")
-            .getMethod("main", Array<String>::class.java)
-            .invoke(null, args as Any)
-    }
-}
+internal actual fun composeLayerTypeProperty(): String? =
+    System.getProperty("compose.layers.type")

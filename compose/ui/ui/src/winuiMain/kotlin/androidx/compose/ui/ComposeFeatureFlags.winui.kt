@@ -40,9 +40,11 @@ internal object ComposeFeatureFlags {
      * Compose Skia surface.
      */
     val layerType = FeatureFlag {
-        LayerType.parse(System.getProperty("compose.layers.type"))
+        LayerType.parse(composeLayerTypeProperty())
     }
 }
+
+internal expect fun composeLayerTypeProperty(): String?
 
 internal class FeatureFlag<T : Any>(defaultValueGetter: () -> T) {
     private val defaultValue: T by lazy(defaultValueGetter)

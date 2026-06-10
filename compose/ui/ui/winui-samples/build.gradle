@@ -54,17 +54,14 @@ def composeWinUiWindowsAppSdkVersion = providers
         .gradleProperty("composeWinUi.windowsAppSdkVersion")
         .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
         .orElse("2.1.3")
-def composeWinUiWindowsSdkVersion = providers
-        .gradleProperty("composeWinUi.windowsSdkVersion")
-        .orElse("10.0.26100.0")
+def winRtApplicationHostExecutable = layout.buildDirectory.file("kotlin-winrt/application-host/bin/${project.name}.exe")
+def winRtApplicationHostBin = layout.buildDirectory.dir("kotlin-winrt/application-host/bin")
 
 winRt {
     application {
         mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
-    windowsSdk(composeWinUiWindowsSdkVersion.get(), false, true)
     nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
-    type("Windows.Foundation.Uri")
 }
 
 java {
@@ -95,23 +92,35 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 }
 
 def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null, Closure extraConfig = null ->
-    tasks.register(taskName, JavaExec) {
+    tasks.register(taskName, Exec) {
         group = "verification"
         description = descriptionText
-        dependsOn("classes")
-        dependsOn("stageWinRtRuntimeAssets")
-        dependsOn("buildWinRtAuthoringHost")
-        mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleJavaExecKt"
-        classpath = sourceSets.main.runtimeClasspath
-        jvmArgs("--enable-native-access=ALL-UNNAMED")
-        systemProperty("compose.winui.sample.autoExit", "true")
-        systemProperty("compose.winui.textInput.coreText.enabled", "true")
+        dependsOn("buildWinRtApplicationHost")
+        executable = winRtApplicationHostExecutable.get().asFile.absolutePath
         if (mode != null) {
             args(mode)
         }
+        def jvmOptions = [
+                "-Dcompose.winui.sample.autoExit=true",
+                "-Dcompose.winui.textInput.coreText.enabled=true",
+        ]
+        if (mode != null) {
+            jvmOptions.add("-Dcompose.winui.sample.mode=${mode}")
+        }
         if (extraConfig != null) {
-            extraConfig.delegate = delegate
-            extraConfig()
+            extraConfig.delegate = jvmOptions
+            extraConfig(jvmOptions)
+        }
+        doFirst {
+            environment("KOTLIN_WINRT_JVM_OPTIONS", jvmOptions.join(";"))
+            def hostFiles = winRtApplicationHostBin.get().asFileTree.files
+            def classpathNames = hostFiles.findAll { it.name.endsWith(".jar") }.collect { it.name }
+            if (!classpathNames.any { it.contains("skiko-winui") }) {
+                throw new GradleException("WinUI sample application host did not include skiko-winui.")
+            }
+            if (classpathNames.any { it.contains("skiko-awt-runtime") }) {
+                throw new GradleException("WinUI sample application host must not include Skiko AWT runtime artifacts: $classpathNames")
+            }
         }
     }
 }
@@ -164,8 +173,8 @@ registerWinUISampleTask(
     "runWinUIWindowPopupSample",
     "Runs the compose-winui WinUI native popup smoke sample.",
     "window-popup"
-) {
-    systemProperty("compose.layers.type", "WINDOW")
+) { jvmOptions ->
+    jvmOptions.add("-Dcompose.layers.type=WINDOW")
 }
 registerWinUISampleTask(
     "runWinUISkikoSample",

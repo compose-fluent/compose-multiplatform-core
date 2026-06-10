@@ -21,7 +21,7 @@ baseline, not every retest attempt.
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
   `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`,
-  `KWINRT-037`, `KWINRT-025`, and `KWINRT-033`.
+  `KWINRT-037`, `KWINRT-025`, `KWINRT-033`, and `KWINRT-039`.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -806,15 +806,15 @@ baseline, not every retest attempt.
   running inside `microsoft.ui.xaml.Application$Metadata.start`
   (`microsoft_ui_xaml.kt:561`) through the FFM downcall, with no Compose
   sample progress beyond the call into `Application.start`.
-- **Evidence:** direct inspection of the new `skiko-winui` jar reports zero
-  `microsoft/**` or `windows/**` projection classes, so `SKIKO-007` projection
-  ownership shadowing is fixed. The focused JavaExec classpath contains
-  `skiko-winui` followed by
-  `winrt-projections-windows-app-sdk` and
-  `winrt-projections-windows-sdk`, and no overlapping projection classes from
-  skiko. A temporary compose-winui change that retained the created
-  `WinUIXamlApplication` in a module-level variable did not change the hang;
-  the callback still did not reach the sample launch path.
+- **Evidence:** this issue belonged to the old prebuilt full-projection
+  experiment. Later `skiko-winui` snapshots again publish their own WinUI
+  projection classes, which is legitimate for Skiko's authored WinUI surface.
+  The later duplicate-projection symptom was a compose-winui wiring error:
+  the MPP sample imported local WinUI artifacts through `files(...)`, which
+  bypassed Gradle/kotlin-winrt dependency identity propagation. A temporary
+  compose-winui change that retained the created `WinUIXamlApplication` in a
+  module-level variable did not change the hang; the callback still did not
+  reach the sample launch path.
 - **Expected behavior:** `Application.start { ... }` should invoke the
   initialization callback, create the authored `Application` subclass, and then
   dispatch `onLaunched`, matching the current kotlin-winrt README and upstream
@@ -971,9 +971,10 @@ baseline, not every retest attempt.
 
 - **Status:** Open upstream/generator in kotlin-winrt Maven snapshot
   `0.1.0-SNAPSHOT` as of 2026-06-08.
-- **Observed in:** `:compose:mpp:demo-winui:runWinUIMppSample` after removing
-  duplicate projection classes from the `skiko-winui` runtime jar, and
-  `:compose:ui:ui:winui-samples:runWinRtApplicationHost`.
+- **Observed in:** earlier `:compose:mpp:demo-winui:runWinUIMppSample` and
+  `:compose:ui:ui:winui-samples:runWinRtApplicationHost` validation when
+  compose-ui generated projection classes that overlapped types also generated
+  by `skiko-winui`.
 - **Symptom:** adding `type("Microsoft.UI.Xaml.Controls.Grid")` to the
   compose-ui explicit projection surface generates
   `public final class microsoft.ui.xaml.controls.Grid`. The skiko-winui authored
@@ -996,11 +997,11 @@ baseline, not every retest attempt.
   composable/inheritable construction path expected by kotlin-winrt authoring
   and projection inheritance.
 - **compose-winui workaround:** do not add `Grid` to the compose-ui projection
-  surface yet. The MPP sample JavaExec task stages a filtered `skiko-winui` jar
-  that removes projection classes already owned by other runtime jars while
-  keeping skiko-unique support projection classes needed by
-  `WinUISkiaHostPanel`. The broader bundled-projection publication issue is
-  tracked by `SKIKO-007`.
+  surface yet, and do not strip `skiko-winui` projection classes. Keep
+  compose-winui dependencies on normal Maven/project coordinates so
+  kotlin-winrt can consume their identity and compiler-support metadata; do
+  not reintroduce local `files(...)` jar dependencies for WinUI projection
+  owners.
 
 ## KWINRT-033: Groovy DSL cannot consume explicit WinUI type declarations without generateProjection
 
@@ -1146,3 +1147,29 @@ baseline, not every retest attempt.
   narrowly scoped reflection helper to call the generated public setters while
   configuring `Ctrl+X`, `Ctrl+C`, `Ctrl+V`, and `Ctrl+A` native menu
   accelerators. Remove the helper once kotlin-winrt exposes callable setters.
+
+## KWINRT-039: Local jar wiring bypassed kotlin-winrt dependency identity
+
+- **Status:** Closed as compose-winui wiring error.
+- **Observed in:** `:compose:mpp:demo-winui:runWinUIMppSample` while the sample
+  imported local WinUI modules with
+  `implementation(files(localWinUiJarProjects.map(::localWinUiJar)))`.
+- **Symptom:** local compose-winui artifacts were placed on the KMP graph as
+  anonymous jar files instead of Gradle project/Maven components. That bypassed
+  the kotlin-winrt identity and compiler-support dependency path, so downstream
+  projection generation could not reliably see which WinRT types were already
+  owned by upstream WinUI artifacts.
+- **Evidence:** the same classpath also had a compose-side filtered
+  `skiko-winui-projection-free.jar` workaround. Both were symptoms of treating
+  projection ownership as a runtime classpath cleanup problem instead of a
+  Gradle component identity problem.
+- **Failed compose-side experiment:** generating a local identity JSON from a
+  dependency jar's projection class names and feeding it to
+  `generateWinRtProjections`/`mergeWinRtCompilerSupport` is not sufficient. It
+  can suppress base type generation without providing matching compiler-support
+  and inheritable runtime-class shape, leading to final/inaccessible-constructor
+  errors for generated subclasses.
+- **Resolution:** the WinUI MPP sample now depends on local WinUI artifacts
+  through normal `project(...)` dependencies and consumes `skiko-winui` from
+  Maven snapshots. The filtered Skiko jar workaround was removed. Do not
+  reintroduce `files(...)` dependencies for projection-owning WinUI artifacts.

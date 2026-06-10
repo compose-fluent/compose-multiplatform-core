@@ -10,12 +10,12 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-007`, `SKIKO-008`,
-  `SKIKO-009`, and `SKIKO-010`.
+- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-008`, `SKIKO-009`,
+  and `SKIKO-010`.
 - **Open compose-side integration:** none.
 - **Open compose-side workarounds:** `SKIKO-008` and `SKIKO-010`.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
-  `SKIKO-004`, `SKIKO-005`.
+  `SKIKO-004`, `SKIKO-005`, and `SKIKO-007`.
 
 ## SKIKO-010: WinUI popup window surface resize can native-crash
 
@@ -94,39 +94,25 @@ baseline, not every retest attempt.
   assert the actual Skiko platform render size, rendered state size, failure
   field, and Compose draw bounds instead of the current degraded events.
 
-## SKIKO-007: Published skiko-winui jar contains WinRT projection classes
+## SKIKO-007: skiko-winui projection publication was misclassified as a Skiko issue
 
-- **Status:** Open upstream/publication.
-- **Observed in:** `:compose:mpp:demo-winui:runWinUIMppSample` with
-  `skiko-winui` Maven snapshot `0.0.0-20260607.101016-8`.
-- **Failure:** the WinUI MPP sample runtime classpath contains duplicate
-  `microsoft/**` and `windows/**` projection classes owned by both
-  `ui-winuijvm-9999.0.0-SNAPSHOT.jar` and
-  `skiko-winui-0.0.0-SNAPSHOT.jar`.
-- **Evidence:** direct download from Sonatype Central snapshots for
-  `io.github.compose-fluent:skiko-winui:0.0.0-20260607.101016-8` contains
-  2854 classes under `microsoft/**` or `windows/**`. The matching Maven metadata
-  reports `lastUpdated=20260607101016`; no newer snapshot is currently
-  published.
-- **Expected behavior:** `skiko-winui` should publish only the Skiko WinUI API
-  and implementation classes, leaving WinRT/WinUI projection ownership to the
-  consuming kotlin-winrt projection graph or to a single compatible projection
-  artifact.
-- **Current compose-winui action:** `:compose:mpp:demo-winui:runWinUIMppSample`
-  stages a filtered copy of the `skiko-winui` jar for the JavaExec runtime
-  classpath while keeping the duplicate-projection classpath assertion enabled.
-  The staged jar removes bundled projection classes already owned by other
-  runtime jars and keeps skiko-unique support projections needed by skiko's
-  authored `WinUISkiaHostPanel`. The related generated final projection shape
-  is tracked separately as `KWINRT-032`. Remove this workaround once the
-  published snapshot no longer contains shared projection classes and
-  compose-winui can own the required projection surface normally.
-- **2026-06-08 CoreText projection retest:** adding explicit
-  `Windows.UI.Text.Core.*` declarations to compose-ui exposed duplicate
-  `windows/ui/text/core/**`, `windows/ui/text/**`, and
-  `windows/globalization/**` classes in the staged `skiko-winui` jar. The
-  compose-side strip task now compares against local WinUI jars as well as
-  external runtime jars before staging `skiko-winui-projection-free.jar`.
+- **Status:** Closed as compose-winui wiring error.
+- **Observed in:** earlier `:compose:mpp:demo-winui:runWinUIMppSample`
+  validation while compose-winui was still trying to keep the runtime classpath
+  single-owner by filtering `skiko-winui`.
+- **Current finding:** publishing WinRT/WinUI projection classes from
+  `skiko-winui` is expected when those projections are part of Skiko's authored
+  WinUI surface. Compose-winui should not strip those classes or require Skiko
+  to stop publishing them.
+- **Evidence:** the current `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
+  jar legitimately contains `microsoft/**` and `windows/**` projection classes
+  used by Skiko's authored `WinUISkiaHostPanel`. The duplicate class symptom
+  was caused by compose-winui importing local WinUI artifacts as anonymous
+  `files(...)` jar dependencies and then trying to clean up projection
+  ownership at runtime.
+- **compose-winui action:** removed the filtered `skiko-winui` runtime-jar
+  workaround from the sample run tasks and switched the MPP sample back to
+  normal Gradle project dependencies for local WinUI artifacts.
 
 ## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
 

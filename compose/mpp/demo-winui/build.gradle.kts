@@ -16,9 +16,7 @@
 
 import io.github.composefluent.winrt.gradle.GenerateWinRtProjectionsTask
 import java.util.zip.ZipFile
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
-import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.Exec
 import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -97,7 +95,6 @@ val winUiMppPriEmbed = winUiMppPriRoot.resolve("Embedded/Payload.bin")
 val winUiMppSampleSourceFiles = listOf(
     project.file("../demo/src/commonMain/kotlin"),
     project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/Main.winui.kt"),
-    project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/MainJavaExec.winui.kt"),
 )
 val winUiMppSampleForbiddenSourceTokens = listOf(
     "androidx.compose.ui.awt",
@@ -177,6 +174,8 @@ val winUiMppSampleGuardedApiSurface = linkedMapOf(
         "testTag",
     ),
 )
+val winRtApplicationHostExecutable = layout.buildDirectory.file("kotlin-winrt/application-host/bin/${project.name}.exe")
+val winRtApplicationHostBin = layout.buildDirectory.dir("kotlin-winrt/application-host/bin")
 
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
@@ -214,9 +213,11 @@ kotlin {
                 implementation("androidx.compose.runtime:runtime-retain:${composeVersion.get()}")
                 implementation(project(":compose:ui:ui-backhandler"))
                 implementation(project(":compose:ui:ui-geometry"))
+                implementation(project(":compose:ui:ui"))
+                implementation(project(":compose:ui:ui-graphics"))
+                implementation(project(":compose:ui:ui-text"))
                 implementation(project(":compose:ui:ui-unit"))
                 implementation(project(":compose:ui:ui-util"))
-                implementation(files(localWinUiJarProjects.map(::localWinUiJar)))
                 implementation(project(":lifecycle:lifecycle-common"))
                 implementation(project(":lifecycle:lifecycle-runtime"))
                 implementation(project(":lifecycle:lifecycle-runtime-compose"))
@@ -248,6 +249,7 @@ kotlin {
 
 winRt {
     application {
+        mainClass.set("androidx.compose.mpp.demo.Main_winuiKt")
         projectPriIndexName.set("ComposeWinUi.MppDemo")
         projectPriInitialPath.set("Appx")
         enableDefaultProjectPriResources.set(false)
@@ -277,6 +279,7 @@ tasks.named("compileKotlinWinuiJvm") {
 tasks.withType<KotlinCompile>().configureEach {
     if (name.contains("Winui")) {
         dependsOn("generateWinRtProjections")
+        dependsOn("mergeWinRtCompilerSupport")
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_25)
             freeCompilerArgs.add("-Xjdk-release=25")
@@ -284,133 +287,54 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
-// SKIKO-007: keep the sample runtime classpath single-owner for WinRT projections
-// while the published skiko-winui snapshot still bundles projection classes.
-val stripSkikoWinUiProjectionClasses = tasks.register("stripSkikoWinUiProjectionClasses") {
-    val runtimeClasspath = configurations.named("winuiJvmRuntimeClasspath")
-    val skikoWinUiJar = runtimeClasspath.map { classpath ->
-        classpath.filter { file ->
-            file.name.startsWith("skiko-winui-") &&
-                file.name.endsWith(".jar") &&
-                !file.name.startsWith("skiko-winui-windows-")
-        }
-    }
-    val outputFile = layout.buildDirectory.file(
-        "skiko-winui-projection-free/skiko-winui-projection-free.jar"
-    )
-    inputs.files(skikoWinUiJar)
-    outputs.file(outputFile)
-
-    doLast {
-        val sourceJar = skikoWinUiJar.get().files.singleOrNull()
-            ?: error("Unable to find skiko-winui jar on WinUI MPP sample runtime classpath.")
-        val externalProjectionEntries = projectionClassEntries(
-            runtimeClasspath.get().files.filter { it != sourceJar } +
-                localWinUiJarProjects.map { path -> localWinUiJar(path).get() }
-        )
-        val targetJar = outputFile.get().asFile
-        targetJar.parentFile.mkdirs()
-        ZipFile(sourceJar).use { input ->
-            ZipOutputStream(targetJar.outputStream().buffered()).use { output ->
-                val seen = mutableSetOf<String>()
-                input.entries().asSequence()
-                    .filter { entry ->
-                        !isWinRtProjectionClass(entry.name) ||
-                            entry.name !in externalProjectionEntries
-                    }
-                    .forEach { entry ->
-                        if (seen.add(entry.name)) {
-                            output.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
-                            if (!entry.isDirectory) {
-                                input.getInputStream(entry).use { it.copyTo(output) }
-                            }
-                            output.closeEntry()
-                        }
-                    }
-            }
-        }
-    }
-}
-
-fun isWinRtProjectionClass(name: String): Boolean =
-    name.endsWith(".class") &&
-        (name.startsWith("microsoft/") || name.startsWith("windows/"))
-
-fun projectionClassEntries(files: Iterable<File>): Set<String> =
-    buildSet {
-        files.asSequence()
-            .filter { it.isFile && it.extension == "jar" }
-            .forEach { jar ->
-                ZipFile(jar).use { zip ->
-                    zip.entries().asSequence()
-                        .filter { !it.isDirectory }
-                        .map { it.name }
-                        .filter(::isWinRtProjectionClass)
-                        .forEach(::add)
-                }
-            }
-    }
-
-fun JavaExec.configureWinUIMppSampleJavaExec(
+fun Exec.configureWinUIMppSampleApplicationHost(
     taskDescription: String,
     reportName: String,
     requiredEvents: List<String>,
+    autoExit: Boolean = true,
+    autoTraverse: Boolean = false,
 ) {
     group = "verification"
     description = taskDescription
-    dependsOn("compileKotlinWinuiJvm")
-    dependsOn("stageWinRtRuntimeAssets")
-    dependsOn("buildWinRtAuthoringHost")
+    dependsOn("buildWinRtApplicationHost")
     dependsOn("validateWinUIMppSamplePackaging")
-    dependsOn(stripSkikoWinUiProjectionClasses)
-    mainClass.set("androidx.compose.mpp.demo.MainJavaExec_winuiKt")
-    classpath(
-        winUiMppSampleResourcesDir,
-        layout.buildDirectory.dir("classes/kotlin/winuiJvm/main"),
-        configurations.named("winuiJvmRuntimeClasspath").map { runtimeClasspath ->
-            runtimeClasspath.filter { file ->
-                !file.name.startsWith("skiko-winui-") ||
-                    file.name.startsWith("skiko-winui-windows-")
-            }
-        },
-        stripSkikoWinUiProjectionClasses.flatMap {
-            layout.buildDirectory.file("skiko-winui-projection-free/skiko-winui-projection-free.jar")
-        },
-    )
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-    systemProperty("compose.winui.mpp.sample.autoExit", "true")
-    systemProperty("compose.winui.textInput.coreText.enabled", "true")
+    executable = winRtApplicationHostExecutable.get().asFile.absolutePath
     val reportFile = layout.buildDirectory.file("validation/$reportName-events.txt")
     outputs.file(reportFile)
     doFirst {
         val report = reportFile.get().asFile
         report.delete()
-        systemProperty("compose.winui.mpp.sample.validationReport", report.absolutePath)
+        val jvmOptions = mutableListOf(
+            "-Dcompose.winui.mpp.sample.autoExit=$autoExit",
+            "-Dcompose.winui.mpp.sample.autoTraverse=$autoTraverse",
+            "-Dcompose.winui.mpp.sample.validationReport=${report.absolutePath}",
+            "-Dcompose.winui.textInput.coreText.enabled=true",
+        )
+        environment("KOTLIN_WINRT_JVM_OPTIONS", jvmOptions.joinToString(separator = ";"))
 
-        val classpathNames = classpath.files.map { it.name }
+        val hostFiles = winRtApplicationHostBin.get().asFileTree.files
+        val classpathNames = hostFiles.filter { it.isFile && it.extension == "jar" }.map { it.name }
         winUiMppSampleResourceFiles.forEach { resource ->
-            check(classpath.files.any { file ->
-                file.isDirectory && file.resolve(resource.name).isFile
-            }) {
-                "WinUI MPP sample runtime classpath did not include staged resource ${resource.name}."
+            check(
+                hostFiles.any { file ->
+                    file.isFile && file.name == resource.name
+                } || hostFiles.any { file ->
+                    file.isFile && file.extension == "jar" && ZipFile(file).use { zip ->
+                        zip.getEntry(resource.name) != null
+                    }
+                }
+            ) {
+                "WinUI MPP sample application host did not include staged resource ${resource.name}."
             }
+        }
+        check(classpathNames.any { it.contains("demo-winui") }) {
+            "WinUI MPP sample application host did not include the demo-winui application jar."
         }
         check(classpathNames.any { it.contains("skiko-winui") }) {
-            "WinUI MPP sample runtime classpath did not include skiko-winui."
+            "WinUI MPP sample application host did not include skiko-winui."
         }
         check(classpathNames.none { it.contains("skiko-awt-runtime") }) {
-            "WinUI MPP sample runtime classpath must not include Skiko AWT runtime artifacts: $classpathNames"
-        }
-        val projectionOwners = linkedMapMapOfProjectionOwners(classpath.files)
-        val duplicates = projectionOwners
-            .filterValues { it.size > 1 }
-            .entries
-            .sortedBy { it.key }
-        check(duplicates.isEmpty()) {
-            val sample = duplicates.take(50).joinToString(separator = "\n") { (entry, owners) ->
-                "  $entry: ${owners.joinToString()}"
-            }
-            "WinUI MPP sample runtime classpath contains ${duplicates.size} duplicate WinRT projection classes:\n$sample"
+            "WinUI MPP sample application host must not include Skiko AWT runtime artifacts: $classpathNames"
         }
     }
     doLast {
@@ -637,11 +561,19 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
             "kotlin.srcDir(\"../demo/src/commonMain/kotlin\")",
             "kotlin.srcDir(\"../demo/src/winuiJvmMain/kotlin\")",
             "dependsOn(localWinUiJarProjects.map { path -> \"${'$'}path:winuiJvmJar\" })",
+            "implementation(project(\":compose:ui:ui\"))",
+            "implementation(project(\":compose:ui:ui-graphics\"))",
+            "implementation(project(\":compose:ui:ui-text\"))",
         )
         val missingBuildScriptTokens = requiredBuildScriptTokens.filterNot(buildScript::contains)
         check(missingBuildScriptTokens.isEmpty()) {
             "WinUI MPP sample KMP graph is missing expected source-set/task wiring: " +
                 missingBuildScriptTokens
+        }
+        val forbiddenFileDependency = "implementation(files(" + "localWinUiJarProjects"
+        check(!buildScript.contains(forbiddenFileDependency)) {
+            "WinUI MPP sample must use project dependencies for local WinUI artifacts, " +
+                "not anonymous jar files that bypass kotlin-winrt dependency identity."
         }
 
         val uiBuildDir = rootProject.project(":compose:ui:ui").layout.buildDirectory.get().asFile
@@ -652,11 +584,11 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
         val uiIdentityText = uiIdentity.readText()
         val requiredIdentityTokens = listOf(
             "\"model\": \"library\"",
-            "\"Microsoft.UI.Xaml.Application\"",
             "\"Microsoft.UI.Xaml.Controls.Canvas\"",
+            "\"Microsoft.UI.Xaml.Controls.MenuFlyout\"",
+            "\"Windows.Foundation.Uri\"",
             "\"authoredHostManifests\"",
             "\"compilerSupportManifests\"",
-            "ui.host.json",
         )
         val missingIdentityTokens = requiredIdentityTokens.filterNot(uiIdentityText::contains)
         check(missingIdentityTokens.isEmpty()) {
@@ -768,8 +700,8 @@ tasks.register("validateWinUIMppSampleCompileOnly") {
     dependsOn("validateWinUiKotlinWinRtKmpGraphBaseline")
 }
 
-val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSampleLaunchWindow") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleLaunchWindow = tasks.register<Exec>("smokeWinUIMppSampleLaunchWindow") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until the application window composes.",
         reportName = "winui-mpp-sample-launch-window",
         requiredEvents = listOf(
@@ -780,8 +712,8 @@ val smokeWinUIMppSampleLaunchWindow = tasks.register<JavaExec>("smokeWinUIMppSam
     )
 }
 
-val smokeWinUIMppSampleRenderOutput = tasks.register<JavaExec>("smokeWinUIMppSampleRenderOutput") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleRenderOutput = tasks.register<Exec>("smokeWinUIMppSampleRenderOutput") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until the image viewer reaches a laid-out frame.",
         reportName = "winui-mpp-sample-render-output",
         requiredEvents = listOf(
@@ -795,8 +727,8 @@ val smokeWinUIMppSampleRenderOutput = tasks.register<JavaExec>("smokeWinUIMppSam
     )
 }
 
-val smokeWinUIMppSampleInputFocus = tasks.register<JavaExec>("smokeWinUIMppSampleInputFocus") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleInputFocus = tasks.register<Exec>("smokeWinUIMppSampleInputFocus") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until pointer/input handlers compose on a live window.",
         reportName = "winui-mpp-sample-input-focus",
         requiredEvents = listOf(
@@ -806,16 +738,16 @@ val smokeWinUIMppSampleInputFocus = tasks.register<JavaExec>("smokeWinUIMppSampl
     )
 }
 
-val smokeWinUIMppSampleResourceLoading = tasks.register<JavaExec>("smokeWinUIMppSampleResourceLoading") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleResourceLoading = tasks.register<Exec>("smokeWinUIMppSampleResourceLoading") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until bundled resources load through the runtime classpath.",
         reportName = "winui-mpp-sample-resource-loading",
         requiredEvents = listOf("font-resource-loaded"),
     )
 }
 
-val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMppSampleShutdownDisposal") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleShutdownDisposal = tasks.register<Exec>("smokeWinUIMppSampleShutdownDisposal") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until auto-exit disposes the window content.",
         reportName = "winui-mpp-sample-shutdown-disposal",
         requiredEvents = listOf(
@@ -825,8 +757,8 @@ val smokeWinUIMppSampleShutdownDisposal = tasks.register<JavaExec>("smokeWinUIMp
     )
 }
 
-val smokeWinUIMppSampleAutoTraverse = tasks.register<JavaExec>("smokeWinUIMppSampleAutoTraverse") {
-    configureWinUIMppSampleJavaExec(
+val smokeWinUIMppSampleAutoTraverse = tasks.register<Exec>("smokeWinUIMppSampleAutoTraverse") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Automatically traverses WinUI MPP sample demo screens and exercises pointer input.",
         reportName = "winui-mpp-sample-auto-traverse",
         requiredEvents = listOf(
@@ -837,11 +769,11 @@ val smokeWinUIMppSampleAutoTraverse = tasks.register<JavaExec>("smokeWinUIMppSam
             "render-state-size-matched",
             "non-empty-draw-bounds",
         ),
+        autoTraverse = true,
     )
-    systemProperty("compose.winui.mpp.sample.autoTraverse", "true")
 }
 
-tasks.register<JavaExec>("runWinUIMppSample") {
+tasks.register<Exec>("runWinUIMppSample") {
     dependsOn("validateWinUIMppSampleCompileOnly")
     dependsOn("validateWinUIMppSampleSourceIsolation")
     dependsOn("validateWinUIMppSampleApiSurface")
@@ -851,7 +783,7 @@ tasks.register<JavaExec>("runWinUIMppSample") {
     dependsOn(smokeWinUIMppSampleResourceLoading)
     dependsOn(smokeWinUIMppSampleShutdownDisposal)
     dependsOn(smokeWinUIMppSampleAutoTraverse)
-    configureWinUIMppSampleJavaExec(
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the original MPP demo through the compose-winui JVM target.",
         reportName = "winui-mpp-sample",
         requiredEvents = listOf(
@@ -870,18 +802,18 @@ tasks.register<JavaExec>("runWinUIMppSample") {
             "exit-requested",
             "window-content-disposed",
         ),
+        autoTraverse = true,
     )
-    systemProperty("compose.winui.mpp.sample.autoTraverse", "true")
 }
 
-tasks.register<JavaExec>("runWinUIMppSampleInteractive") {
-    configureWinUIMppSampleJavaExec(
+tasks.register<Exec>("runWinUIMppSampleInteractive") {
+    configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the original MPP demo through the compose-winui JVM target without auto-exit.",
         reportName = "winui-mpp-sample-interactive",
         requiredEvents = emptyList(),
+        autoExit = false,
     )
     group = "application"
-    systemProperty("compose.winui.mpp.sample.autoExit", "false")
 }
 
 fun linkedMapMapOfProjectionOwners(files: Set<File>): Map<String, Set<String>> {

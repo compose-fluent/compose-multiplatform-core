@@ -149,23 +149,29 @@ private fun Screen.collectTraversalTargets(
 @OptIn(InternalComposeUiApi::class)
 private fun WinUIMppSampleValidationReport.recordRenderDiagnostics(
     composeView: WinUIComposeView,
-    windowSize: IntSize?,
 ): Boolean {
     if (composeView.renderApiForTest == GraphicsApi.DIRECT3D) {
         record("render-direct3d")
     }
-    val platformSize = windowSize
+    val platformSize = composeView.lastRenderSizeForTest
     if (platformSize != null && platformSize.width > 0 && platformSize.height > 0) {
         record("render-positive-size")
     }
-    if (platformSize != null && platformSize.width > 0 && platformSize.height > 0) {
+    val renderedStateSize = composeView.lastRenderedStateSizeForTest
+    if (platformSize != null && renderedStateSize == platformSize) {
         record("render-state-size-matched")
+    }
+    val drawRect = composeView.lastDrawRectForTest
+    if (drawRect.width > 0f && drawRect.height > 0f) {
         record("non-empty-draw-bounds")
     }
     return composeView.renderApiForTest == GraphicsApi.DIRECT3D &&
         platformSize != null &&
         platformSize.width > 0 &&
-        platformSize.height > 0
+        platformSize.height > 0 &&
+        renderedStateSize == platformSize &&
+        drawRect.width > 0f &&
+        drawRect.height > 0f
 }
 
 @OptIn(InternalComposeUiApi::class)
@@ -211,7 +217,7 @@ private class WinUIMppSampleAutoRunner(
         try {
             val currentComposeView = composeView
             if (currentComposeView != null) {
-                isRenderReady = validation.recordRenderDiagnostics(currentComposeView, windowSize()) ||
+                isRenderReady = validation.recordRenderDiagnostics(currentComposeView) ||
                     isRenderReady
             }
             if (isComplete) return
