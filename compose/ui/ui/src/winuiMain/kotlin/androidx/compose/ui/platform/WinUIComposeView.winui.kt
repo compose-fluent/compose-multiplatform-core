@@ -266,6 +266,7 @@ class WinUIComposeView internal constructor(
     private var isRootContentSyncScheduled = false
     private var isRenderRequestFlushScheduled = false
     private var isApplyingOwnerChanges = false
+    private var isDrawingFrame = false
     private var hasPendingRenderRequest = false
     private var isDisposed = false
     private var loadedRenderSchedulerHandler: RoutedEventHandler? = null
@@ -413,13 +414,25 @@ class WinUIComposeView internal constructor(
     private fun render(canvas: Canvas, nanoTime: Long) {
         renderHost.performDrawSubmission {
             if (isDisposed) return@performDrawSubmission
-            applyOwnerChanges {
-                frameRecomposer?.performFrame(nanoTime)
-                owner.sendAndPerformSnapshotChanges()
-                owner.measureAndLayout(sendPointerUpdate = false)
-                owner.sendAndPerformSnapshotChanges()
-                updateRootContent(rootNode.collectWinUIInteropRoots())
-                rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+            check(!isDrawingFrame) {
+                "WinUIComposeView cannot render recursively."
+            }
+            isDrawingFrame = true
+            try {
+                applyOwnerChanges {
+                    frameRecomposer?.performFrame(nanoTime)
+                    owner.sendAndPerformSnapshotChanges()
+                    owner.measureAndLayout(sendPointerUpdate = false)
+                    owner.sendAndPerformSnapshotChanges()
+                    updateRootContent(rootNode.collectWinUIInteropRoots())
+                    rootNode.draw(canvas.asComposeCanvas(), graphicsLayer = null)
+                }
+            } finally {
+                isDrawingFrame = false
+                if (hasPendingRenderRequest) {
+                    debugRender { "drawSubmit schedule pending render after draw" }
+                    scheduleRenderRequestFlush()
+                }
             }
         }
     }
@@ -448,7 +461,6 @@ class WinUIComposeView internal constructor(
 
     private fun startRenderScheduler() {
         if (!isDisposed && content != null) {
-            renderHost.attachSurface()
             renderHost.startFrameScheduler()
         }
     }
@@ -502,12 +514,12 @@ class WinUIComposeView internal constructor(
 
     private fun requestRender() {
         if (isDisposed) return
-        if (isApplyingOwnerChanges || owner.isMeasureLayoutInProgress) {
-            hasPendingRenderRequest = true
-            scheduleRenderRequestFlush()
-        } else {
-            renderHost.requestRender()
+        hasPendingRenderRequest = true
+        debugRender {
+            "requestRender scheduled drawing=$isDrawingFrame applying=$isApplyingOwnerChanges " +
+                "measureLayout=${owner.isMeasureLayoutInProgress}"
         }
+        scheduleRenderRequestFlush()
     }
 
     private fun applyOwnerChanges(block: () -> Unit) {
@@ -520,17 +532,26 @@ class WinUIComposeView internal constructor(
             block()
         } finally {
             isApplyingOwnerChanges = false
-            flushPendingRenderRequest()
+            if (hasPendingRenderRequest) {
+                scheduleRenderRequestFlush()
+            }
         }
     }
 
     private fun flushPendingRenderRequest() {
         if (isDisposed || !hasPendingRenderRequest) return
-        if (isApplyingOwnerChanges || owner.isMeasureLayoutInProgress) {
-            scheduleRenderRequestFlush()
+        if (isDrawingFrame || isApplyingOwnerChanges || owner.isMeasureLayoutInProgress) {
+            debugRender {
+                "flushRender deferred drawing=$isDrawingFrame applying=$isApplyingOwnerChanges " +
+                    "measureLayout=${owner.isMeasureLayoutInProgress}"
+            }
+            if (!isDrawingFrame) {
+                scheduleRenderRequestFlush()
+            }
             return
         }
         hasPendingRenderRequest = false
+        debugRender { "flushRender delegated" }
         renderHost.requestRender()
     }
 
@@ -543,7 +564,7 @@ class WinUIComposeView internal constructor(
             }
         ) {
             isRenderRequestFlushScheduled = false
-            if (!isApplyingOwnerChanges && !owner.isMeasureLayoutInProgress) {
+            if (!isDrawingFrame && !isApplyingOwnerChanges && !owner.isMeasureLayoutInProgress) {
                 flushPendingRenderRequest()
             }
         }

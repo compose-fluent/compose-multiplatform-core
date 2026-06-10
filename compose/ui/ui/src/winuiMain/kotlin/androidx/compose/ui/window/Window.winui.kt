@@ -21,6 +21,7 @@ import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.platform.WinUIComposeView
+import androidx.compose.ui.platform.debugRender
 import androidx.compose.ui.unit.IntSize
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.composition.Compositor
@@ -226,17 +227,23 @@ private class WinUIWindowNode(
     private fun handleActivated(activationState: WindowActivationState) {
         if (isReleased) return
         hasActivated = true
+        debugRender { "window activated state=$activationState" }
         updateWindowFocus(activationState != WindowActivationState.Deactivated)
     }
 
     private fun updateWindowFocus(isFocused: Boolean) {
         isWindowFocused = isFocused
+        debugRender { "window focus focused=$isFocused" }
         composeView?.setWindowFocused(isFocused)
     }
 
     private fun updateWindowInfo() {
         val view = composeView ?: return
         val appWindowSize = appWindow.size
+        debugRender {
+            "window info size=${appWindowSize.width}x${appWindowSize.height} " +
+                "extendsTitleBar=${window.extendsContentIntoTitleBar}"
+        }
         view.setWindowContainerSize(
             IntSize(
                 width = appWindowSize.width,

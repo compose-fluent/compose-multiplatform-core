@@ -156,10 +156,10 @@ baseline, not every retest attempt.
   `-PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
   --no-configure-on-demand`.
 
-## SKIKO-004: unattached WinUI Skiko surface can hang in flushAndSubmit
+## SKIKO-004: WinUI Skiko surface can hang in flushAndSubmit
 
-- **Status:** Mitigated locally; not an active upstream/open issue for the
-  current compose-winui path.
+- **Status:** Mitigated locally on 2026-06-10 by async-coalescing
+  Compose-origin render requests before delegating to Skiko WinUI.
 - **Observed in:** `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
   while adding render diagnostics to the repository-local
   `runWinUIViewSample` smoke path on 2026-06-03.
@@ -209,12 +209,40 @@ baseline, not every retest attempt.
   `runWinUIViewSample` still reaches the final smoke log and exits with the
   known non-blocking `KWINRT-024` `NTSTATUS 0xC0000005` teardown crash, without
   producing a newer WER dump.
-- **Current assessment:** do not keep this as proof that the latest upstream
-  `skiko-winui` still hangs. The validated current behavior is that
-  compose-winui no longer starts Skiko presentation for unattached roots, and
-  attached Skiko rendering passes in the focused repository-local sample. Reopen
-  only if a deliberate upstream-style unattached scheduler probe reproduces the
-  original `flushAndSubmit` hang on the current snapshot.
+- **2026-06-10 interactive retest:** the full attached
+  `:compose:mpp:demo-winui:runWinUIMppSampleInteractive` sample became
+  unresponsive after inactive/active window interaction. The actual Java
+  process was still alive, but `jcmd Thread.print` showed the WinUI main thread
+  runnable inside `org.jetbrains.skia.DirectContext.flushAndSubmit`, through
+  `WinUISkiaLayerPlatformInterop.drawAndPresent`,
+  `WinUISkiaLayer.renderNow`, and `WinUIRenderDispatcher.needRender`. This was
+  not just the earlier unattached smoke path and was unrelated to the old
+  context-menu interaction logs still present in the process output.
+- **Current compose-winui action:** keep using the real Skiko WinUI rendering
+  layer and keep `WinUISkiaLayer.startFrameScheduler()` enabled for attached
+  roots. Disabling the continuous scheduler is not a correct fix because Skiko
+  may need to drive frames independently of Compose invalidations. Compose-winui
+  now has opt-in `compose.winui.render.debug` logging around window activation,
+  size changes, render-request coalescing, and draw submission so the next
+  interactive reproduction can identify whether the hang is tied to a specific
+  activation/resize state or to `flushAndSubmit(surface, true)` itself.
+- **2026-06-10 pointer retest:** after delaying render requests raised during
+  Skiko draw callbacks, the taskbar click could show the window again, but
+  Windows still marked it unresponsive. A fresh `jcmd Thread.print` showed a
+  second synchronous entry into `flushAndSubmit(surface, true)`, this time from
+  a pointer click/navigation callback:
+  `PointerInputAdapter -> ClickableNode.performClick -> NavController.navigate
+  -> FrameRecomposer.onNewAwaiters -> WinUIComposeView.requestRender ->
+  WinUISkiaLayer.needRender -> flushAndSubmit`. Compose-winui now coalesces all
+  Compose-origin render requests through `WinUIDispatchQueue` before delegating
+  to Skiko, so pointer, navigation, activation, and other WinRT callbacks do not
+  synchronously present from their current native event stack.
+- **2026-06-10 mitigation retest:** with Compose-origin render requests
+  coalesced through `WinUIDispatchQueue`, the full interactive MPP sample no
+  longer becomes unresponsive during the previously failing taskbar activation
+  and pointer/navigation path. Keep this entry as upstream evidence because
+  `WinUISkiaLayer.needRender()` can synchronously enter
+  `flushAndSubmit(surface, true)` when called from a WinUI event callback.
 
 ## SKIKO-001: skiko-winui artifact coordinates were not obvious
 

@@ -96,7 +96,16 @@ internal class WinUISkikoRenderHost(
             if (!pendingRenderInvalidation) {
                 pendingRenderInvalidation = true
                 delegatedRenderInvalidationCount += 1
+                debugRender {
+                    "layer.requestRender throttled=$throttledToVsync " +
+                        "invalidations=$renderInvalidationCount delegated=$delegatedRenderInvalidationCount"
+                }
                 layer.requestRender(throttledToVsync)
+            } else {
+                debugRender {
+                    "layer.requestRender coalesced throttled=$throttledToVsync " +
+                        "invalidations=$renderInvalidationCount delegated=$delegatedRenderInvalidationCount"
+                }
             }
         }
     }
@@ -129,6 +138,7 @@ internal class WinUISkikoRenderHost(
             "Cannot start a WinUI Skiko frame scheduler after the render host is closed."
         }
         attachSurface()
+        debugRender { "startFrameScheduler alreadyStarted=${frameScheduler != null}" }
         return frameScheduler ?: layer.startFrameScheduler().also { frameScheduler = it }
     }
 
@@ -136,9 +146,21 @@ internal class WinUISkikoRenderHost(
         if (isClosed) return
         drawSubmissionCount += 1
         interopTransactionDrainCount += 1
+        debugRender {
+            "drawSubmit begin submissions=$drawSubmissionCount " +
+                "renderVersion=${layer.renderVersion} size=${layer.lastRenderSize}"
+        }
         beforeDrawSubmission()
         pendingRenderInvalidation = false
-        draw()
+        try {
+            draw()
+        } finally {
+            debugRender {
+                "drawSubmit end submissions=$drawSubmissionCount " +
+                    "renderVersion=${layer.renderVersion} size=${layer.lastRenderSize} " +
+                    "failure=${layer.renderFailure}"
+            }
+        }
     }
 
     override fun close() {
@@ -170,6 +192,7 @@ internal class WinUISkikoRenderHost(
     private fun closeFrameSchedulerPreserving(previousFailure: Throwable?): Throwable? {
         val scheduler = frameScheduler
         frameScheduler = null
+        debugRender { "closeFrameScheduler hadScheduler=${scheduler != null}" }
         return scheduler.closePreserving(previousFailure)
     }
 
@@ -202,6 +225,16 @@ internal class WinUISkikoRenderHost(
             failure?.addSuppressed(e) ?: run { failure = e }
         }
         return failure
+    }
+}
+
+internal val isWinUIRenderDebugEnabled: Boolean by lazy {
+    winUISystemBooleanProperty("compose.winui.render.debug")
+}
+
+internal inline fun debugRender(message: () -> String) {
+    if (isWinUIRenderDebugEnabled) {
+        println("[compose-winui:render] ${message()}")
     }
 }
 
