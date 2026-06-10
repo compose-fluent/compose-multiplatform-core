@@ -586,6 +586,7 @@ private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodReques
 
     override val value: () -> TextFieldValue = { textValue }
     override val state: TextEditorState = object : TextEditorState {
+        override val text: String = ""
         override val selection: TextRange = TextRange.Zero
         override val composition: TextRange? = null
         override val length: Int = 0

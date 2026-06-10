@@ -20,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LocalHostDefaultProvider
-import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,10 +60,6 @@ import microsoft.ui.xaml.Window
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.XamlRoot
 import microsoft.ui.xaml.XamlRootChangedEventArgs
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkikoRenderDelegate
@@ -222,7 +217,7 @@ class WinUIComposeView internal constructor(
     private val renderDelegate = RecordDrawRectRenderDecorator(
         object : SkikoRenderDelegate {
             override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
-                render(canvas)
+                render(canvas, nanoTime)
             }
         },
         onDrawRectChange = { lastDrawRect = it },
@@ -261,9 +256,7 @@ class WinUIComposeView internal constructor(
         renderHost.setAccessibilityProvider(owner.accessibilityProvider)
     }
 
-    private var recomposer: Recomposer? = null
-    private var recomposerJob: Job? = null
-    private var frameClock: WinUIFrameClock? = null
+    private var frameRecomposer: FrameRecomposer? = null
     private var composition: Composition? = null
     private var saveableState: Map<String, List<Any?>>? = null
     private var saveableStateRegistry: SaveableStateRegistry? = null
@@ -332,12 +325,8 @@ class WinUIComposeView internal constructor(
         }
         ownerCoroutineContext = EmptyCoroutineContext
         composition = null
-        recomposer?.close()
-        recomposer = null
-        recomposerJob?.cancel()
-        recomposerJob = null
-        frameClock?.cancel()
-        frameClock = null
+        frameRecomposer?.close()
+        frameRecomposer = null
         content = null
         clearLoadedRenderSchedulerRequest()
         renderHost.detachSurface()
@@ -396,20 +385,13 @@ class WinUIComposeView internal constructor(
         WinUIScheduler.register(dispatcherQueue)
         GlobalSnapshotManager.ensureStarted(dispatcherQueue)
         val dispatcher = WinUIDispatcher(dispatcherQueue)
-        val currentFrameClock = WinUIFrameClock(dispatcherQueue, ::requestRender)
-        val recomposerParentJob = SupervisorJob()
-        val recomposerContext = dispatcher + currentFrameClock + recomposerParentJob
-        ownerCoroutineContext = recomposerContext
-        val currentRecomposer = Recomposer(recomposerContext)
-        recomposer = currentRecomposer
-        recomposerJob = CoroutineScope(recomposerContext).launch {
-            currentRecomposer.runRecomposeAndApplyChanges()
-        }
-        frameClock = currentFrameClock
+        val currentFrameRecomposer = FrameRecomposer(dispatcher, ::requestRender)
+        frameRecomposer = currentFrameRecomposer
+        ownerCoroutineContext = currentFrameRecomposer.compositionContext.effectCoroutineContext
         val applier = UiApplier(rootNode, ::scheduleRootContentSync)
         return Composition(
             applier = applier,
-            parent = currentRecomposer,
+            parent = currentFrameRecomposer.compositionContext,
         )
     }
 
@@ -428,10 +410,11 @@ class WinUIComposeView internal constructor(
         }
     }
 
-    private fun render(canvas: Canvas) {
+    private fun render(canvas: Canvas, nanoTime: Long) {
         renderHost.performDrawSubmission {
             if (isDisposed) return@performDrawSubmission
             applyOwnerChanges {
+                frameRecomposer?.performFrame(nanoTime)
                 owner.sendAndPerformSnapshotChanges()
                 owner.measureAndLayout(sendPointerUpdate = false)
                 owner.sendAndPerformSnapshotChanges()

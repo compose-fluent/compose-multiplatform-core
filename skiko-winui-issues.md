@@ -10,11 +10,34 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-007`, and `SKIKO-008`.
+- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-007`, `SKIKO-008`,
+  and `SKIKO-009`.
 - **Open compose-side integration:** none.
 - **Open compose-side workarounds:** `SKIKO-008`.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
   `SKIKO-004`, `SKIKO-005`.
+
+## SKIKO-009: WinUI JVM tests resolve incompatible Skiko/Skia API shape
+
+- **Status:** Open upstream/API or dependency alignment.
+- **Observed in:** `:compose:ui:ui:winuiJvmTest` on 2026-06-10 after aligning
+  WinUI rendering to the upstream `FrameRecomposer` pipeline, with current
+  `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` and Skiko snapshot
+  dependencies.
+- **Failure:** the WinUI JVM test task compiles and runs 137 tests, but fails
+  four tests with `NoSuchMethodError` from Skia/Skiko API calls:
+  `TextStyle.setFontEdging(FontEdging)` during paragraph layout, and
+  `Canvas.drawPicture(..., Paint)` from the draw-bounds recorder path.
+- **Evidence:** `runWinUISkikoSample` and the full
+  `runWinUIMppSample` validation both pass in the same workspace, so this is
+  currently isolated to test paths that exercise these Skia APIs directly. The
+  runtime classpath still loads Skiko classes from snapshot artifacts such as
+  `skiko-awt-0.0.0-SNAPSHOT.jar` for JVM API classes, while WinUI rendering
+  consumes `skiko-winui`.
+- **Expected behavior:** the Skiko JVM API artifact used by compose-winui tests
+  and the Skiko/Skia implementation on the runtime classpath should expose the
+  same public methods. Once the snapshots are aligned, re-enable the full
+  `winuiJvmTest` validation as a passing gate for these draw/text diagnostics.
 
 ## SKIKO-008: MPP sample render diagnostics getters can native-crash after upstream sync
 
