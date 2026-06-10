@@ -16,6 +16,8 @@
 
 package androidx.compose.ui.window
 
+import androidx.compose.ui.ComposeFeatureFlags
+import androidx.compose.ui.LayerType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -51,6 +53,16 @@ class WinUIWindowPropertiesTest {
         assertNotEquals(baseline, PopupProperties(dismissOnClickOutside = false))
         assertNotEquals(baseline, PopupProperties(clippingEnabled = false))
         assertNotEquals(baseline, PopupProperties(usePlatformDefaultWidth = true))
+    }
+
+    @Test
+    fun popupPropertiesFollowLayerFeatureFlag() {
+        ComposeFeatureFlags.layerType.withOverride(LayerType.OnWindow) {
+            assertEquals(LayerType.OnWindow, PopupProperties().layerType)
+        }
+        ComposeFeatureFlags.layerType.withOverride(LayerType.OnSameCanvas) {
+            assertEquals(LayerType.OnSameCanvas, PopupProperties().layerType)
+        }
     }
 
     @Test

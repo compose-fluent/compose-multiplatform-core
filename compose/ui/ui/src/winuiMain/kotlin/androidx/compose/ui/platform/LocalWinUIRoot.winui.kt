@@ -18,7 +18,11 @@ package androidx.compose.ui.platform
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.InternalComposeUiApi
-import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.FrameworkElement
+import microsoft.ui.xaml.Window
 
 @InternalComposeUiApi
-val LocalWinUIRoot = staticCompositionLocalOf<UIElement?> { null }
+val LocalWinUIRoot = staticCompositionLocalOf<FrameworkElement?> { null }
+
+@InternalComposeUiApi
+val LocalWinUIWindow = staticCompositionLocalOf<Window?> { null }

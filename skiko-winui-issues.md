@@ -11,11 +11,36 @@ baseline, not every retest attempt.
 
 - **Open upstream/publication coordinates:** none.
 - **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-007`, `SKIKO-008`,
-  and `SKIKO-009`.
+  `SKIKO-009`, and `SKIKO-010`.
 - **Open compose-side integration:** none.
-- **Open compose-side workarounds:** `SKIKO-008`.
+- **Open compose-side workarounds:** `SKIKO-008` and `SKIKO-010`.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
   `SKIKO-004`, `SKIKO-005`.
+
+## SKIKO-010: WinUI popup window surface resize can native-crash
+
+- **Status:** Open upstream/API or surface lifecycle.
+- **Observed in:** `:compose:ui:ui:winui-samples:runWinUIWindowPopupSample`
+  while adding `compose.layers.type=WINDOW` popup support on 2026-06-10, with
+  current `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
+- **Failure:** creating a separate WinUI `Window` for popup content, opening it
+  after composition, and then shrinking the attached `WinUIComposeView` /
+  Skiko root from the parent-window-sized layout surface to the measured popup
+  content size exited the sample JVM with `NTSTATUS 0xC000027B`.
+- **Evidence:** temporary diagnostics showed the process survived popup window
+  creation, content assignment, `AppWindow.show(false)`, and the first zero-size
+  layout pass, then crashed immediately after the popup content first measured
+  to `64 x 32` and before the smoke could dispose the popup. Keeping the popup
+  Compose root sized to the parent window while moving/resizing only the native
+  popup `AppWindow` to the measured content size makes the same smoke pass.
+- **Current compose-winui action:** WinUI window-backed popups keep their
+  Compose/Skiko root sized to the parent window as a stable layout coordinate
+  space, and use the measured popup content size only for the native popup
+  `AppWindow.moveAndResize(...)`. Remove this workaround once resizing an
+  attached skiko-winui surface during popup placement is proven stable.
+- **Expected behavior:** resizing an attached skiko-winui surface from an
+  initial layout size to the popup content size should not native-crash the
+  process.
 
 ## SKIKO-009: WinUI JVM tests resolve incompatible Skiko/Skia API shape
 

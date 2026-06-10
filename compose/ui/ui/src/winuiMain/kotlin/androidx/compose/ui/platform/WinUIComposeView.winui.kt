@@ -55,6 +55,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
 import microsoft.ui.xaml.RoutedEventHandler
@@ -82,6 +83,7 @@ class WinUIComposeView internal constructor(
     private val scheduleInteropUpdate: (WinUIInteropAction) -> Unit,
     private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
     private val onSensitiveContentChanged: (Boolean) -> Unit = {},
+    private val window: Window? = null,
 ) {
     constructor() : this(WinUIRootContentHost())
 
@@ -89,10 +91,17 @@ class WinUIComposeView internal constructor(
         onSensitiveContentChanged: (Boolean) -> Unit,
     ) : this(WinUIRootContentHost(), onSensitiveContentChanged)
 
+    internal constructor(
+        window: Window,
+        onSensitiveContentChanged: (Boolean) -> Unit,
+    ) : this(WinUIRootContentHost(), onSensitiveContentChanged, window)
+
     internal val rootNode = LayoutNode().also {
         it.measurePolicy = RootMeasurePolicy
     }
     val root: UIElement
+        get() = rootContentControl
+    internal val rootFrameworkElement: FrameworkElement
         get() = rootContentControl
 
     @InternalComposeUiApi
@@ -301,7 +310,8 @@ class WinUIComposeView internal constructor(
                 LocalSaveableStateRegistry provides registry,
                 LocalHostDefaultProvider provides hostDefaultProvider,
                 LocalPlatformWindowInsets provides platformWindowInsets,
-                LocalWinUIRoot provides root,
+                LocalWinUIRoot provides rootContentControl,
+                LocalWinUIWindow provides window,
             ) {
                 LocalRetainedValuesStoreProvider(retainedValuesStore) {
                     ProvideCommonCompositionLocals(
@@ -634,6 +644,7 @@ class WinUIComposeView internal constructor(
     private constructor(
         host: WinUIRootContentHost,
         onSensitiveContentChanged: (Boolean) -> Unit,
+        window: Window? = null,
     ) : this(
         host.root,
         host::setRenderContent,
@@ -641,11 +652,12 @@ class WinUIComposeView internal constructor(
         host::scheduleUpdate,
         host::retrieveTransaction,
         onSensitiveContentChanged,
+        window,
     )
 }
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {
-    val composeView = WinUIComposeView()
+    val composeView = WinUIComposeView(this) {}
     this.content = composeView.root
     composeView.setContent(content)
     return composeView

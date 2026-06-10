@@ -72,6 +72,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.OnPlacedModifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.node.RootForTest
@@ -128,6 +129,7 @@ import androidx.compose.ui.viewinterop.WinUIInteropProperties
 import androidx.compose.ui.viewinterop.WinUIView
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.ApplicationScope
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
@@ -468,6 +470,7 @@ private enum class WinUIViewSampleMode(
     Rendering("rendering"),
     Shutdown("shutdown"),
     TextInput("text-input"),
+    WindowPopup("window-popup"),
     Skiko("skiko");
 
     companion object {
@@ -504,6 +507,10 @@ private object ComposeWinUiSmokeApp {
             }
             return
         }
+        if (sampleMode == WinUIViewSampleMode.WindowPopup) {
+            RunWindowPopupSmoke(applicationScope)
+            return
+        }
         if (sampleMode != WinUIViewSampleMode.Full && sampleMode != WinUIViewSampleMode.Window) {
             LaunchedEffect(Unit) {
                 runSmoke(applicationScope) {
@@ -517,6 +524,7 @@ private object ComposeWinUiSmokeApp {
                         WinUIViewSampleMode.TextInput -> runTextInputSmokeSuite()
                         WinUIViewSampleMode.Full,
                         WinUIViewSampleMode.Window,
+                        WinUIViewSampleMode.WindowPopup,
                         WinUIViewSampleMode.Skiko -> error("Unexpected focused sample mode $sampleMode.")
                     }
                     if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
@@ -3131,6 +3139,52 @@ private object ComposeWinUiSmokeApp {
         }
         check(condition()) {
             "Timed out waiting for $label."
+        }
+    }
+}
+
+@Composable
+private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
+    var popupMeasured by remember { mutableStateOf(false) }
+    var popupClosed by remember { mutableStateOf(false) }
+    var popupDisposed by remember { mutableStateOf(false) }
+    with(applicationScope) {
+        Window(
+            title = "compose-winui window popup smoke",
+            onCloseRequest = { exitApplication() },
+        ) {
+            Layout(content = {}) { _, _ ->
+                layout(24, 24) {}
+            }
+            if (!popupClosed) {
+                Popup {
+                    Layout(
+                        content = {},
+                        modifier = Modifier.onPlaced {
+                            popupMeasured = true
+                        },
+                    ) { _, _ ->
+                        layout(64, 32) {}
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(popupMeasured) {
+        if (popupMeasured) {
+            withFrameNanos { }
+            popupClosed = true
+            withFrameNanos { }
+            popupDisposed = true
+        }
+    }
+    LaunchedEffect(popupDisposed) {
+        if (popupDisposed) {
+            delay(100)
+            println("compose-winui-sample: window popup")
+            if (java.lang.Boolean.getBoolean("compose.winui.sample.autoExit")) {
+                applicationScope.exitApplication()
+            }
         }
     }
 }

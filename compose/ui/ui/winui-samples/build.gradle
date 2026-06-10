@@ -94,7 +94,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null ->
+def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null, Closure extraConfig = null ->
     tasks.register(taskName, JavaExec) {
         group = "verification"
         description = descriptionText
@@ -108,6 +108,10 @@ def registerWinUISampleTask = { String taskName, String descriptionText, String 
         systemProperty("compose.winui.textInput.coreText.enabled", "true")
         if (mode != null) {
             args(mode)
+        }
+        if (extraConfig != null) {
+            extraConfig.delegate = delegate
+            extraConfig()
         }
     }
 }
@@ -156,6 +160,13 @@ registerWinUISampleTask(
     "Runs the compose-winui text input and keyboard smoke sample.",
     "text-input"
 )
+registerWinUISampleTask(
+    "runWinUIWindowPopupSample",
+    "Runs the compose-winui WinUI native popup smoke sample.",
+    "window-popup"
+) {
+    systemProperty("compose.layers.type", "WINDOW")
+}
 registerWinUISampleTask(
     "runWinUISkikoSample",
     "Runs the compose-winui Skiko render smoke sample.",

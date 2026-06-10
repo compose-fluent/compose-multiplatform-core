@@ -165,7 +165,7 @@ private class WinUIWindowNode(
         set(value) {
             field = value
             if (isReleased) return
-            val view = composeView ?: WinUIComposeView(::updateCaptureProtection).also {
+            val view = composeView ?: WinUIComposeView(window, ::updateCaptureProtection).also {
                 composeView = it
                 setWindowContent(window, it.root)
                 registerAppWindowChangedHandler()
