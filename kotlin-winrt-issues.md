@@ -19,9 +19,9 @@ baseline, not every retest attempt.
   `KWINRT-016`, `KWINRT-017`, `KWINRT-018`, `KWINRT-020`, `KWINRT-021`,
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
   `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`,
-  `KWINRT-037`, `KWINRT-025`, `KWINRT-033`, `KWINRT-039`,
+  `KWINRT-037`, `KWINRT-025`, `KWINRT-033`, `KWINRT-039`, `KWINRT-042`,
   `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, `KWINRT-038`, `KWINRT-040`,
-  `KWINRT-044`, `KWINRT-045`, `KWINRT-046`, and
+  `KWINRT-043`, `KWINRT-044`, `KWINRT-045`, `KWINRT-046`, and
   `KWINRT-047`.
 
 ## KWINRT-046: Dependency authored activatable classes are omitted from app manifest
@@ -1301,6 +1301,49 @@ baseline, not every retest attempt.
   application-host root so the generated host scans the current module's
   projection jar before `lib/skiko-winui`. Remove both workarounds once
   dependency-owned projection shapes are merged or deduplicated correctly.
+
+## KWINRT-042: Authored SystemBackdrop override bridge wraps interface arguments as IInspectable
+
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot `0.1.0-SNAPSHOT`
+  as of the 2026-06-18 retest.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` after adding
+  `WinUITransparentBackdrop : Microsoft.UI.Xaml.Media.SystemBackdrop` for
+  WinUI window-popup transparency.
+- **Symptom:** generated
+  `WinRT_WinUITransparentBackdrop_TypeDetails.kt` does not compile because the
+  authoring bridge calls
+  `ICompositionSupportsSystemBackdrop.Metadata.wrap(IInspectableReference(...))`,
+  while that generated `wrap` overload expects `IUnknownReference`.
+- **Expected behavior:** generated authoring bridges should wrap interface
+  override arguments with the reference type expected by the target interface
+  projection, or the interface projection should expose a matching inspectable
+  wrapper overload.
+- **Resolution:** the generated
+  `WinRT_WinUITransparentBackdrop_TypeDetails.kt` now wraps
+  `ICompositionSupportsSystemBackdrop` override arguments with
+  `IUnknownReference` directly; the compose-side generated-source patch has
+  been removed.
+- **Validation:** `:compose:ui:ui:compileKotlinWinuiJvm` passes with
+  `--refresh-dependencies --no-configuration-cache --no-configure-on-demand`
+  and the generated TypeDetails source contains `IUnknownReference` for the
+  backdrop target argument.
+
+## KWINRT-043: Nullable struct projection setter fails for FlyoutShowOptions.Position
+
+- **Status:** Fixed upstream in kotlin-winrt Maven snapshot `0.1.0-SNAPSHOT`
+  as of the 2026-06-18 retest.
+- **Observed in:** diagnostic WinUI Flyout popup host while calling
+  `FlyoutShowOptions.position = Windows.Foundation.Point(...)`.
+- **Symptom:** setting the nullable struct property throws
+  `WinRtUnsupportedOperationException: Managed COM object does not implement
+  interface 'BA5CFAD3-43D4-5FF2-94B0-5223818BDF04'` from
+  `WinRtReferenceProjectionInterop.setReferenceValue(...)`, before
+  `FlyoutBase.showAt(target, options)` can be called.
+- **Expected behavior:** generated nullable value/struct property setters
+  should box authored JVM values such as `Windows.Foundation.Point` into the
+  WinRT reference type accepted by the ABI setter.
+- **Resolution:** the diagnostic Flyout popup workaround was removed from the
+  active issue triage; reopen only with fresh native validation evidence.
 
 ## KWINRT-044: Non-WinUI authored-candidate validation checks WinUI authored types
 

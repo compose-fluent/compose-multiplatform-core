@@ -49,6 +49,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.indirect.IndirectPointerEvent
 import androidx.compose.ui.input.indirect.IndirectPointerEventPrimaryDirectionalMotionAxis
@@ -1105,6 +1106,7 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: navigation event dispatcher owner provided")
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUISaveableStateSmoke() {
         val currentComposeView = WinUIComposeView()
         var savedState: MutableState<String>? = null
@@ -1251,6 +1253,7 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.dispose()
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewContainerSyncSmoke() {
         val firstProbe = WinUIViewLifecycleProbe()
         val secondProbe = WinUIViewLifecycleProbe()
@@ -1555,6 +1558,7 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewReuseSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1638,6 +1642,7 @@ private object ComposeWinUiSmokeApp {
         )
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewStateUpdateSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1681,6 +1686,7 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewRelayoutSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1759,6 +1765,7 @@ private object ComposeWinUiSmokeApp {
         }
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUILayoutSnapshotInvalidationSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -1807,6 +1814,7 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: layout snapshot invalidation")
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUILayoutCompletedListenerSmoke() {
         val currentComposeView = WinUIComposeView()
         val includeOnPlaced: MutableState<Boolean> = mutableStateOf(false)
@@ -1836,6 +1844,7 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: layout completed listener")
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUILayoutRectChangedSmoke() {
         val currentComposeView = WinUIComposeView()
         val showTarget: MutableState<Boolean> = mutableStateOf(true)
@@ -1886,6 +1895,7 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: layout rect changed")
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIOwnerLayerTransformSmoke() {
         val currentComposeView = WinUIComposeView()
         val translationX: MutableState<Float> = mutableStateOf(0f)
@@ -2787,6 +2797,7 @@ private object ComposeWinUiSmokeApp {
         )
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewDensitySmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -2879,6 +2890,7 @@ private object ComposeWinUiSmokeApp {
         )
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewPropertiesUpdateSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -3169,12 +3181,12 @@ private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
     with(applicationScope) {
         Window(
             title = "compose-winui window popup smoke",
+            backdrop = WindowBackdrop.Mica,
             onCloseRequest = { exitApplication() },
         ) {
             Layout(
                 content = {},
                 modifier = Modifier.drawBehind {
-                    drawRect(Color(0xFFE7F1FF))
                     drawRect(
                         color = Color(0xFF2563EB),
                         topLeft = Offset(32f, 32f),
@@ -3193,7 +3205,11 @@ private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
                                 popupMeasured = true
                             }
                             .drawBehind {
-                                drawRect(Color(0xFF005BFF))
+                                drawRect(Color(0x80005BFF))
+                                drawRect(
+                                    color = Color(0xFF003EA8),
+                                    style = Stroke(width = 2f),
+                                )
                             },
                     ) { _, _ ->
                         layout(168, 72) {}

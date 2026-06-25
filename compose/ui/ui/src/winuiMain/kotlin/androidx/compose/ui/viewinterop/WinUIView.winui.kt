@@ -335,7 +335,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     override fun onDeactivate() {
-        deactivateView()
+        deactivateView(notifyOwner = true)
         resetBlock(view)
     }
 
@@ -532,7 +532,7 @@ private class WinUIViewHolder<T : UIElement>(
         }
     }
 
-    fun deactivateView() {
+    fun deactivateView(notifyOwner: Boolean) {
         cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
@@ -541,7 +541,9 @@ private class WinUIViewHolder<T : UIElement>(
         }
         isViewAttachedToGroup = false
         isNativeChildAttachedToGroup = false
-        notifyInteropTreeChanged()
+        if (notifyOwner) {
+            notifyInteropTreeChanged()
+        }
     }
 
     private fun clearNativeState() {
@@ -666,7 +668,7 @@ private class TrackWinUIInteropPlacementModifierNode(
     }
 
     override fun onUnplaced() {
-        holder.deactivateView()
+        holder.deactivateView(notifyOwner = false)
         isPlaced = false
     }
 

@@ -28,12 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWinUIRoot
 import androidx.compose.ui.platform.LocalWinUIWindow
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WinUIComposeView
@@ -45,13 +45,18 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import microsoft.ui.windowing.AppWindow
-import microsoft.ui.windowing.AppWindowChangedEventArgs
-import microsoft.ui.windowing.OverlappedPresenter
-import microsoft.ui.xaml.WindowActivatedEventArgs
-import microsoft.ui.xaml.WindowActivationState
-import windows.foundation.TypedEventHandler
-import windows.graphics.RectInt32
+import microsoft.ui.xaml.FrameworkElement
+import microsoft.ui.xaml.RoutedEventHandler
+import microsoft.ui.xaml.controls.Control
+import microsoft.ui.xaml.controls.Flyout
+import microsoft.ui.xaml.controls.FlyoutPresenter
+import microsoft.ui.xaml.controls.LightDismissOverlayMode
+import microsoft.ui.xaml.controls.primitives.FlyoutPlacementMode
+import microsoft.ui.xaml.controls.primitives.FlyoutShowMode
+import microsoft.ui.xaml.controls.primitives.FlyoutShowOptions
+import microsoft.ui.xaml.media.SolidColorBrush
+import windows.foundation.Point
+import windows.ui.Color
 import microsoft.ui.xaml.Window as XamlWindow
 
 @Immutable
@@ -226,7 +231,6 @@ private fun WinUICanvasPopupLayout(
     }
 }
 
-@OptIn(InternalComposeUiApi::class)
 @Composable
 private fun WinUIWindowPopupLayout(
     popupPositionProvider: PopupPositionProvider,
@@ -248,10 +252,11 @@ private fun WinUIWindowPopupLayout(
     }
 
     val parentWindow = LocalWinUIWindow.current
+    val parentRoot = LocalWinUIRoot.current
     val containerSize = LocalWindowInfo.current.containerSize
     val layoutDirection = LocalLayoutDirection.current
     val currentContent by rememberUpdatedState(content)
-    val popupHost = rememberNativePopupHost(parentWindow)
+    val popupHost = rememberNativePopupHost(parentWindow, parentRoot)
 
     SideEffect {
         popupHost.update(
@@ -275,16 +280,26 @@ private fun WinUIWindowPopupLayout(
 }
 
 @Composable
-private fun rememberNativePopupHost(parentWindow: XamlWindow?): WinUIWindowPopupHost =
-    remember(parentWindow) {
-        WinUIWindowPopupHost(parentWindow)
+private fun rememberNativePopupHost(
+    parentWindow: XamlWindow?,
+    parentRoot: FrameworkElement?,
+): WinUIFlyoutPopupHost =
+    remember(parentWindow, parentRoot) {
+        WinUIFlyoutPopupHost(parentWindow, parentRoot)
     }
 
-private class WinUIWindowPopupHost(
-    private val parentWindow: XamlWindow?,
+private class WinUIFlyoutPopupHost(
+    parentWindow: XamlWindow?,
+    private val parentRoot: FrameworkElement?,
 ) {
-    private val popupWindow = XamlWindow()
-    private val composeView = WinUIComposeView(popupWindow) {}
+    private val composeView = WinUIComposeView()
+    private val flyout = TransparentComposeFlyout(composeView.root)
+    private val transparentBackdrop = parentWindow?.let {
+        WinUITransparentBackdrop(
+            window = it,
+            enableWindowTransparentBackdrop = false,
+        )
+    }
     private var shouldBeOpen = false
     private var isOpen = false
     private var contentSize = IntSize.Zero
@@ -296,17 +311,23 @@ private class WinUIWindowPopupHost(
         androidx.compose.ui.unit.LayoutDirection.Ltr
     )
     private var currentContent: @Composable () -> Unit by mutableStateOf({})
-    private var parentWindowActivatedHandler: TypedEventHandler<Any?, WindowActivatedEventArgs>? = null
-    private var parentWindowActivatedToken: EventRegistrationToken? = null
-    private var parentAppWindowChangedHandler: TypedEventHandler<AppWindow, AppWindowChangedEventArgs>? = null
-    private var parentAppWindowChangedToken: EventRegistrationToken? = null
-    private var isOwnerApplied = false
+    private var closedToken: EventRegistrationToken? = null
+    private var parentRootLoadedHandler: RoutedEventHandler? = null
+    private var parentRootLoadedToken: EventRegistrationToken? = null
 
     init {
-        popupWindow.content = composeView.root
-        configurePopupWindow()
-        applyPopupOwner()
-        registerParentWindowHandlers()
+        composeView.setTransparentRootBackground()
+        flyout.content = composeView.root
+        flyout.areOpenCloseAnimationsEnabled = false
+        flyout.lightDismissOverlayMode = LightDismissOverlayMode.Off
+        flyout.shouldConstrainToRootBounds = false
+        flyout.placement = FlyoutPlacementMode.BottomEdgeAlignedLeft
+        flyout.showMode = FlyoutShowMode.Transient
+        flyout.systemBackdrop = transparentBackdrop
+        closedToken = flyout.closed.add { _, _ ->
+            isOpen = false
+        }
+        registerParentRootLoadedHandler()
     }
 
     fun setContent(content: @Composable () -> Unit) {
@@ -348,16 +369,25 @@ private class WinUIWindowPopupHost(
 
     fun open() {
         shouldBeOpen = true
-        updateWindow()
+        updateFlyout()
     }
 
     fun close() {
         shouldBeOpen = false
         isOpen = false
-        removeParentWindowHandlers()
+        closedToken?.let { token ->
+            runCatching { flyout.closed.remove(token) }
+        }
+        closedToken = null
+        parentRootLoadedToken?.let { token ->
+            runCatching { parentRoot?.loaded?.remove(token) }
+        }
+        parentRootLoadedToken = null
+        parentRootLoadedHandler = null
+        runCatching { flyout.hide() }
+        flyout.popupContent = null
+        flyout.systemBackdrop = null
         composeView.dispose()
-        popupWindow.content = null
-        runCatching { popupWindow.close() }
     }
 
     fun update(
@@ -374,97 +404,44 @@ private class WinUIWindowPopupHost(
         this.windowSize = windowSize
         this.layoutDirection = layoutDirection
         this.currentContent = content
+        flyout.allowFocusOnInteraction = properties.focusable
         if (windowSize != IntSize.Zero) {
-            // SKIKO-010: keep the Skiko root size stable; resize only the native popup window.
             composeView.setWindowContainerSize(windowSize)
             composeView.rootFrameworkElement.width = windowSize.width.toDouble()
             composeView.rootFrameworkElement.height = windowSize.height.toDouble()
         }
-        updateWindow()
-    }
-
-    private fun configurePopupWindow() {
-        val appWindow = popupWindow.appWindow ?: return
-        runCatching { popupWindow.extendsContentIntoTitleBar = true }
-        appWindow.title = ""
-        appWindow.isShownInSwitchers = false
-        val presenter = runCatching { OverlappedPresenter.createForContextMenu() }
-            .getOrElse { OverlappedPresenter.createForToolWindow() }
-        runCatching { presenter.setBorderAndTitleBar(hasBorder = false, hasTitleBar = false) }
-        presenter.isResizable = false
-        presenter.isMaximizable = false
-        presenter.isMinimizable = false
-        presenter.isAlwaysOnTop = false
-        runCatching { appWindow.setPresenter(presenter) }
-    }
-
-    private fun applyPopupOwner() {
-        if (isOwnerApplied) return
-        val window = parentWindow ?: return
-        isOwnerApplied = setWindowPopupOwner(
-            popupWindow = popupWindow,
-            parentWindow = window,
-        )
-    }
-
-    private fun registerParentWindowHandlers() {
-        val window = parentWindow ?: return
-        if (parentWindowActivatedToken == null) {
-            val handler = TypedEventHandler<Any?, WindowActivatedEventArgs> { _, args ->
-                if (args.windowActivationState != WindowActivationState.Deactivated) {
-                    updateWindow()
-                    bringToFront()
-                }
-            }
-            parentWindowActivatedHandler = handler
-            parentWindowActivatedToken = window.activated.add(handler)
-        }
-        val appWindow = window.appWindow ?: return
-        if (parentAppWindowChangedToken == null) {
-            val handler = TypedEventHandler<AppWindow, AppWindowChangedEventArgs> { _, args ->
-                if (args.didPositionChange || args.didSizeChange || args.didVisibilityChange) {
-                    updateWindow()
-                    bringToFront()
-                }
-            }
-            parentAppWindowChangedHandler = handler
-            parentAppWindowChangedToken = appWindow.changed.add(handler)
-        }
-    }
-
-    private fun removeParentWindowHandlers() {
-        parentWindowActivatedToken?.let { token ->
-            runCatching { parentWindow?.activated?.remove(token) }
-        }
-        parentWindowActivatedToken = null
-        parentWindowActivatedHandler = null
-        parentAppWindowChangedToken?.let { token ->
-            runCatching { parentWindow?.appWindow?.changed?.remove(token) }
-        }
-        parentAppWindowChangedToken = null
-        parentAppWindowChangedHandler = null
+        updateFlyout()
     }
 
     fun updateContentSize(size: IntSize) {
         if (contentSize == size) return
         contentSize = size
-        updateWindow()
+        updateFlyout()
     }
 
-    private fun bringToFront() {
-        if (!isOpen) return
-        runCatching { popupWindow.appWindow?.moveInZOrderAtTop() }
+    private fun registerParentRootLoadedHandler() {
+        if (parentRootLoadedToken != null) return
+        val root = parentRoot ?: return
+        val handler = RoutedEventHandler { _, _ ->
+            updateFlyout()
+        }
+        parentRootLoadedHandler = handler
+        parentRootLoadedToken = root.loaded.add(handler)
     }
 
-    private fun updateWindow() {
-        val parentAppWindow = parentWindow?.appWindow ?: return
-        val popupAppWindow = popupWindow.appWindow ?: return
+    private fun updateFlyout() {
+        val root = parentRoot ?: return
+        registerParentRootLoadedHandler()
+        val rootXamlRoot = runCatching { root.xamlRoot }.getOrNull()
+        val rootLoaded = runCatching { root.isLoaded }.getOrDefault(false)
+        if (!rootLoaded || rootXamlRoot == null) return
         val provider = popupPositionProvider ?: return
-        applyPopupOwner()
         val effectiveWindowSize = windowSize.takeIf { it != IntSize.Zero }
             ?: contentSize
         if (effectiveWindowSize == IntSize.Zero) return
-        val effectiveContentSize = contentSize.takeIf { it != IntSize.Zero } ?: return
+        val hasMeasuredContent = contentSize != IntSize.Zero
+        val effectiveContentSize = contentSize.takeIf { it != IntSize.Zero }
+            ?: IntSize(1, 1)
         val popupPosition = provider.calculatePosition(
             anchorBounds = parentBoundsInWindow,
             windowSize = effectiveWindowSize,
@@ -477,21 +454,41 @@ private class WinUIWindowPopupHost(
                 position
             }
         }
-        val parentPosition = parentAppWindow.position
-        popupAppWindow.moveAndResize(
-            RectInt32(
-                x = parentPosition.x + popupPosition.x,
-                y = parentPosition.y + popupPosition.y,
-                width = effectiveContentSize.width.coerceAtLeast(1),
-                height = effectiveContentSize.height.coerceAtLeast(1),
-            )
-        )
+        val hostSize = if (hasMeasuredContent) {
+            effectiveContentSize
+        } else {
+            effectiveWindowSize
+        }
+        composeView.rootFrameworkElement.width = hostSize.width.coerceAtLeast(1).toDouble()
+        composeView.rootFrameworkElement.height = hostSize.height.coerceAtLeast(1).toDouble()
         if (shouldBeOpen && !isOpen) {
             isOpen = true
-            runCatching { popupAppWindow.show(properties.focusable) }
-                .getOrElse { popupWindow.activate() }
+            flyout.xamlRoot = rootXamlRoot
+            val showOptions = FlyoutShowOptions().also { options ->
+                options.position = Point(popupPosition.x.toFloat(), popupPosition.y.toFloat())
+                options.placement = FlyoutPlacementMode.BottomEdgeAlignedLeft
+                options.showMode = FlyoutShowMode.Transient
+            }
+            runCatching {
+                flyout.showAt(root, showOptions)
+            }.onFailure {
+                isOpen = false
+            }
         }
-        bringToFront()
+    }
+}
+
+internal class TransparentComposeFlyout(
+    popupContent: microsoft.ui.xaml.UIElement,
+) : Flyout() {
+    var popupContent: microsoft.ui.xaml.UIElement? = popupContent
+
+    override fun createPresenter(): Control {
+        return FlyoutPresenter().also { presenter ->
+            presenter.isDefaultShadowEnabled = false
+            presenter.background = TransparentBrush()
+            presenter.content = popupContent
+        }
     }
 }
 
@@ -521,4 +518,7 @@ private fun IntOffset.clipToWindow(contentSize: IntSize, windowSize: IntSize): I
         },
     )
 
-internal expect fun setWindowPopupOwner(popupWindow: XamlWindow, parentWindow: XamlWindow): Boolean
+private fun TransparentBrush(): SolidColorBrush =
+    SolidColorBrush().also { brush ->
+        brush.color = Color(a = 0u, r = 0u, g = 0u, b = 0u)
+    }

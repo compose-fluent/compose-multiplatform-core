@@ -18,9 +18,17 @@ package androidx.compose.ui.viewinterop
 
 import microsoft.ui.input.InputCursor
 import microsoft.ui.xaml.controls.ContentControl
+import microsoft.ui.xaml.media.SolidColorBrush
+import windows.ui.Color
 
 internal class WinUIRootContentControl : ContentControl() {
     fun setComposePointerCursor(cursor: InputCursor) {
         protectedCursor = cursor
+    }
+
+    fun setTransparentBackground() {
+        background = SolidColorBrush().also { brush ->
+            brush.color = Color(a = 0u, r = 0u, g = 0u, b = 0u)
+        }
     }
 }

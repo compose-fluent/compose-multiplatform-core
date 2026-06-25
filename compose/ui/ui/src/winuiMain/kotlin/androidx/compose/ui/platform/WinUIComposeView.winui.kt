@@ -374,6 +374,9 @@ class WinUIComposeView internal constructor(
         requestRender()
     }
 
+    internal fun setTransparentRootBackground() {
+        rootContentControl.setTransparentBackground()
+    }
 
     internal fun setWindowTitleBarInsets(
         height: Int,
