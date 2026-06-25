@@ -607,8 +607,8 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
             "\"Microsoft.UI.Xaml.Controls.Canvas\"",
             "\"Microsoft.UI.Xaml.Controls.MenuFlyout\"",
             "\"Windows.Foundation.Uri\"",
-            "\"authoredHostManifests\"",
-            "\"compilerSupportManifests\"",
+            "\"authoredHostManifestRecords\"",
+            "\"compilerSupportFileRecords\"",
         )
         val missingIdentityTokens = requiredIdentityTokens.filterNot(uiIdentityText::contains)
         check(missingIdentityTokens.isEmpty()) {
