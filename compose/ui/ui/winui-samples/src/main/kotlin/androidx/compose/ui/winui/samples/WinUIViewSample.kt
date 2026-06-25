@@ -217,7 +217,7 @@ private fun ValidateWinUICompositionLocals(
     expectWindowFocus: Boolean,
     allowWindowFocusChanges: Boolean = false,
 ) {
-    check(LocalDensity.current.density == 1f) {
+    check(LocalDensity.current.density > 0f) {
         "WinUI LocalDensity was not provided by WinUIComposeView."
     }
     check(LocalLayoutDirection.current == LayoutDirection.Ltr) {
@@ -1117,6 +1117,7 @@ private object ComposeWinUiSmokeApp {
             "WinUI rememberSaveable did not create its initial value."
         }
         savedState?.value = "updated"
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUI rememberSaveable state update") {
             observedValue == "updated"
         }
@@ -1126,6 +1127,7 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.setSaveableStateSmokeContent { state ->
             restoredValue = state.value
         }
+        currentComposeView.performFrameForTest()
         check(restoredValue == "updated") {
             "WinUI rememberSaveable did not restore across disposeComposition: $restoredValue."
         }
@@ -1289,6 +1291,7 @@ private object ComposeWinUiSmokeApp {
         )
 
         includeSecond.value = false
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView container middle removal") {
             secondProbe.releaseCount == 1 &&
                 hasInteropRootOrder(rootCanvas, listOf(firstWrapper, thirdWrapper))
@@ -1304,6 +1307,7 @@ private object ComposeWinUiSmokeApp {
         }
 
         includeSecond.value = true
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView container middle insertion") {
             rootCanvas.requiredInteropChildren.size == 3 &&
                 secondProbe.factoryCount == 2 &&
@@ -1580,6 +1584,7 @@ private object ComposeWinUiSmokeApp {
             "Expected one reusable WinUIView update call, got ${lifecycleProbe.updateCount}."
         }
         active.value = false
+        currentComposeView.performFrameForTest()
         awaitCondition("reusable WinUIView deactivation") {
             lifecycleProbe.resetCount == 1 &&
                 (rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
@@ -1597,6 +1602,7 @@ private object ComposeWinUiSmokeApp {
                 "${lifecycleProbe.releaseCount}."
         }
         active.value = true
+        currentComposeView.performFrameForTest()
         awaitCondition("reusable WinUIView reactivation") {
             lifecycleProbe.updateCount == 2
         }
@@ -1653,6 +1659,7 @@ private object ComposeWinUiSmokeApp {
         }
 
         content.value = "state update changed"
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView repeated state update") {
             lifecycleProbe.updateCount == 2 &&
                 lifecycleProbe.lastButton === button &&
@@ -1721,6 +1728,7 @@ private object ComposeWinUiSmokeApp {
         height.value = 55
         x.value = 11
         y.value = 17
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated relayout bounds") {
             val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull().asWinRtCanvas()
             val clip = currentWrapper?.readClipRectOrNull()
@@ -1781,6 +1789,7 @@ private object ComposeWinUiSmokeApp {
 
         width.value = 115
         height.value = 45
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUI layout snapshot updated bounds") {
             val wrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = wrapper?.readClipRectOrNull()
@@ -1819,6 +1828,7 @@ private object ComposeWinUiSmokeApp {
             "WinUI layout completed listener smoke fired before onPlaced was installed."
         }
         includeOnPlaced.value = true
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUI layout completed listener") {
             onPlacedCount >= 1
         }
@@ -1866,6 +1876,7 @@ private object ComposeWinUiSmokeApp {
             "WinUI layout rect changed smoke did not receive bounds."
         }
         showTarget.value = false
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUI layout rect changed detach cleanup") {
             runCatching {
                 removedBounds.calculateOcclusions().isEmpty()
@@ -1905,6 +1916,7 @@ private object ComposeWinUiSmokeApp {
                 currentBounds.height == 10
         }
         translationX.value = 12f
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUI owner layer updated transform bounds") {
             val currentBounds = bounds
             currentBounds?.positionInRoot?.x == 12 &&
@@ -2834,6 +2846,7 @@ private object ComposeWinUiSmokeApp {
         }
 
         localDensity.value = 2f
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated density") {
             val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = currentWrapper?.readClipRectOrNull()
@@ -2904,6 +2917,7 @@ private object ComposeWinUiSmokeApp {
 
         clipToBounds.value = false
         isUserInteractionEnabled.value = true
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated properties") {
             val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&

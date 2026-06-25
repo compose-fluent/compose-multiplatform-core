@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import io.github.composefluent.winrt.gradle.BuildWinRtApplicationHostTask
 import io.github.composefluent.winrt.gradle.GenerateWinRtProjectionsTask
 import java.util.zip.ZipFile
 import org.gradle.api.tasks.Exec
@@ -174,10 +175,14 @@ val winUiMppSampleGuardedApiSurface = linkedMapOf(
         "testTag",
     ),
 )
-val winRtApplicationLayoutJvm = layout.buildDirectory.dir("kotlin-winrt/application-layout/jvm")
-
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
+}
+
+val stageWinUIMppSampleResources = tasks.register<Copy>("stageWinUIMppSampleResources") {
+    from(project.file("../demo/src/commonMain/resources"))
+    from(project.file("../demo/src/desktopMain/resources"))
+    into(winUiMppSampleResourcesDir)
 }
 
 kotlin {
@@ -231,7 +236,7 @@ kotlin {
                 }
                 implementation("androidx.savedstate:savedstate-compose:1.4.0")
                 implementation("androidx.navigationevent:navigationevent-compose:${navigationEventVersion.get()}")
-                implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
+                implementation("io.github.compose-fluent:winrt-runtime-jvm:${kotlinWinRtVersion.get()}")
                 implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
             }
         }
@@ -239,6 +244,7 @@ kotlin {
         named("winuiJvmMain") {
             kotlin.srcDir("../demo/src/winuiJvmMain/kotlin")
             resources.srcDir("../demo/src/desktopMain/resources")
+            resources.srcDir(stageWinUIMppSampleResources.map { it.destinationDir })
             dependencies {
                 runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
             }
@@ -275,6 +281,17 @@ tasks.named("compileKotlinWinuiJvm") {
     dependsOn(":navigation3:navigation3-ui:compileKotlinWinuiJvm")
 }
 
+tasks.named("processWinuiJvmMainResources") {
+    dependsOn(stageWinUIMppSampleResources)
+}
+
+tasks.named<BuildWinRtApplicationHostTask>("buildWinRtApplicationHost") {
+    val winuiJvmJar = tasks.named("winuiJvmJar", Jar::class)
+    runtimeClasspath.from(configurations.named("winuiJvmRuntimeClasspath"))
+    runtimeClasspath.from(winuiJvmJar.flatMap { it.archiveFile })
+    dependsOn(winuiJvmJar)
+}
+
 tasks.withType<KotlinCompile>().configureEach {
     if (name.contains("Winui")) {
         dependsOn("generateWinRtProjections")
@@ -284,33 +301,6 @@ tasks.withType<KotlinCompile>().configureEach {
             freeCompilerArgs.add("-Xjdk-release=25")
         }
     }
-}
-
-val prioritizeComposeWinUiProjectionJarForHost = tasks.register("prioritizeComposeWinUiProjectionJarForHost") {
-    group = "verification"
-    description = "Stages compose-ui's WinUI projection jar ahead of dependency projection jars."
-    dependsOn("buildWinRtApplicationHost")
-    inputs.dir(winRtApplicationLayoutJvm)
-    outputs.file(winRtApplicationLayoutJvm.map {
-        it.file("ui-winuijvm-9999.0.0-SNAPSHOT.jar")
-    })
-    doLast {
-        val layoutDir = winRtApplicationLayoutJvm.get().asFile
-        val libDir = layoutDir.resolve("lib")
-        val uiWinUiJar = libDir.listFiles()?.firstOrNull { file ->
-            file.name.matches(Regex("ui-winuijvm-.*\\.jar"))
-        } ?: error("WinUI MPP sample application layout did not include ui-winuijvm.")
-        // KWINRT-041: keep this module's projection classes ahead of skiko-winui
-        // until dependency-owned WinRT type shapes are merged coherently.
-        copy {
-            from(uiWinUiJar)
-            into(layoutDir)
-        }
-    }
-}
-
-tasks.named("runWinRtApplicationHost") {
-    dependsOn(prioritizeComposeWinUiProjectionJarForHost)
 }
 
 fun Exec.configureWinUIMppSampleApplicationHost(
@@ -348,8 +338,12 @@ fun Exec.configureWinUIMppSampleApplicationHost(
 
         val runtimeArtifacts = configurations.named("winuiJvmRuntimeClasspath").get().files
         val runtimeArtifactNames = runtimeArtifacts.map { it.name }
+        val localResourceRoots = listOf(winUiMppSampleResourcesDir.get().asFile)
         winUiMppSampleResourceFiles.forEach { resource ->
             check(
+                localResourceRoots.any { root ->
+                    root.resolve(resource.name).isFile
+                } ||
                 runtimeArtifacts.any { file ->
                     file.isFile && file.name == resource.name
                 } || runtimeArtifacts.any { file ->
@@ -381,12 +375,6 @@ fun Exec.configureWinUIMppSampleApplicationHost(
                 "Observed events: ${events.sorted()}"
         }
     }
-}
-
-val stageWinUIMppSampleResources = tasks.register<Copy>("stageWinUIMppSampleResources") {
-    from(project.file("../demo/src/commonMain/resources"))
-    from(project.file("../demo/src/desktopMain/resources"))
-    into(winUiMppSampleResourcesDir)
 }
 
 tasks.register("validateWinUIMppSamplePackaging") {

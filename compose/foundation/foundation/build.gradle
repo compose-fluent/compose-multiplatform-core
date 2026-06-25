@@ -43,6 +43,9 @@ def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(J
 def kotlinWinRtVersion = providers
         .gradleProperty("kotlinWinRt.version")
         .orElse("0.1.0-SNAPSHOT")
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
 androidXMultiplatform {
     androidLibrary {
         compileSdk = 37
@@ -236,6 +239,7 @@ kotlin {
                 dependsOn(skikoMain)
                 dependencies {
                     implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
+                    implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
                 }
             }
 

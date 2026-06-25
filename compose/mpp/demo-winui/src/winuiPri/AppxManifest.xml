@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Package
     xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
     IgnorableNamespaces="uap">
     <Identity Name="ComposeWinUi.MppDemo" Publisher="CN=ComposeWinUi" Version="1.0.0.0" />
     <Properties>
         <DisplayName>Compose WinUI MPP Demo</DisplayName>
         <PublisherDisplayName>Compose WinUI</PublisherDisplayName>
-        <Logo>Assets\Sample.txt</Logo>
+        <Logo>Appx\Assets\Sample.txt</Logo>
     </Properties>
     <Resources>
         <Resource Language="en-US" />
     </Resources>
+    <Applications>
+        <Application Id="App" Executable="DeploymentAgent.exe" EntryPoint="ComposeWinUi.MppDemo">
+            <uap:VisualElements
+                DisplayName="Compose WinUI MPP Demo"
+                Description="Compose WinUI MPP Demo"
+                BackgroundColor="transparent"
+                Square150x150Logo="Appx\Assets\Sample.txt"
+                Square44x44Logo="Appx\Assets\Sample.txt" />
+        </Application>
+    </Applications>
 </Package>
