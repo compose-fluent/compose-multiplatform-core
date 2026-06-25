@@ -374,6 +374,7 @@ class WinUIComposeView internal constructor(
         requestRender()
     }
 
+
     internal fun setWindowTitleBarInsets(
         height: Int,
         leftPadding: Int,
@@ -389,6 +390,17 @@ class WinUIComposeView internal constructor(
     @InternalComposeUiApi
     fun setWindowContainerSizeForTest(size: IntSize) {
         setWindowContainerSize(size)
+    }
+
+    @InternalComposeUiApi
+    fun performFrameForTest(nanoTime: Long = System.nanoTime()) {
+        applyOwnerChanges {
+            frameRecomposer?.performFrame(nanoTime)
+            owner.sendAndPerformSnapshotChanges()
+            owner.measureAndLayout(sendPointerUpdate = false)
+            owner.sendAndPerformSnapshotChanges()
+            updateRootContent(rootNode.collectWinUIInteropRoots())
+        }
     }
 
     private fun createComposition(): Composition {

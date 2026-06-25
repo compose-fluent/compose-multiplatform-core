@@ -32,13 +32,17 @@ import androidx.compose.ui.focus.FocusTargetNode
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.materialize
 import androidx.compose.ui.node.DelegatingNode
+import androidx.compose.ui.node.GlobalPositionAwareModifierNode
+import androidx.compose.ui.node.LayoutAwareModifierNode
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.UiApplier
+import androidx.compose.ui.node.UnplacedAwareModifierNode
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.node.requireOwner
 import androidx.compose.ui.platform.LocalDensity
@@ -237,6 +241,7 @@ private class WinUIViewHolder<T : UIElement>(
         val bounds = coordinates.boundsInRoot()
         applyPosition(bounds.left, bounds.top)
     }
+    private val placementModifier = TrackWinUIInteropPlacementModifierElement(this)
 
     var properties: WinUIInteropProperties = WinUIInteropProperties()
         set(value) {
@@ -289,6 +294,7 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun composeModifier(modifier: Modifier): Modifier =
         modifier
+            .then(placementModifier)
             .winUIFocusInteropModifier(
                 canFocus = ::canRequestFocus,
                 requestFocus = ::requestNativeFocus,
@@ -324,23 +330,13 @@ private class WinUIViewHolder<T : UIElement>(
     override fun getInteropView(): InteropView = interopView
 
     override fun onReuse() {
-        if (!isViewAttachedToGroup || !isNativeChildAttachedToGroup) {
-            attachViewToGroup()
-        } else {
-            resetBlock(view)
-        }
+        activateView()
+        resetBlock(view)
     }
 
     override fun onDeactivate() {
-        cancelDeferredNativeFocus()
-        updateOwnerInteropFocusRect(null)
-        updateOwnerInteropBounds(null)
+        deactivateView()
         resetBlock(view)
-        scheduleNativeUpdate {
-            group.uiElement.requiredChildren.clear()
-        }
-        isViewAttachedToGroup = false
-        isNativeChildAttachedToGroup = false
     }
 
     override fun onRelease() {
@@ -529,6 +525,25 @@ private class WinUIViewHolder<T : UIElement>(
         updateOwnerInteropBoundsIfActive()
     }
 
+    fun activateView() {
+        if (!isViewAttachedToGroup || !isNativeChildAttachedToGroup) {
+            attachViewToGroup()
+            notifyInteropTreeChanged()
+        }
+    }
+
+    fun deactivateView() {
+        cancelDeferredNativeFocus()
+        updateOwnerInteropFocusRect(null)
+        updateOwnerInteropBounds(null)
+        scheduleNativeUpdate {
+            group.uiElement.requiredChildren.clear()
+        }
+        isViewAttachedToGroup = false
+        isNativeChildAttachedToGroup = false
+        notifyInteropTreeChanged()
+    }
+
     private fun clearNativeState() {
         cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
@@ -614,6 +629,58 @@ private class WinUIViewHolder<T : UIElement>(
     private fun updateOwnerInteropFocusRect(rect: ComposeRect?) {
         if (!layoutNode.isAttached) return
         (layoutNode.requireOwner() as? WinUIOwner)?.setInteropViewFocusRect(rect)
+    }
+
+    private fun notifyInteropTreeChanged() {
+        if (!layoutNode.isAttached) return
+        (layoutNode.requireOwner() as? WinUIOwner)?.notifyInteropTreeChanged()
+    }
+}
+
+private data class TrackWinUIInteropPlacementModifierElement(
+    val holder: WinUIViewHolder<*>,
+) : ModifierNodeElement<TrackWinUIInteropPlacementModifierNode>() {
+    override fun create(): TrackWinUIInteropPlacementModifierNode =
+        TrackWinUIInteropPlacementModifierNode(holder)
+
+    override fun update(node: TrackWinUIInteropPlacementModifierNode) {
+        node.holder = holder
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "trackWinUIInteropPlacement"
+    }
+}
+
+private class TrackWinUIInteropPlacementModifierNode(
+    var holder: WinUIViewHolder<*>,
+) : Modifier.Node(),
+    LayoutAwareModifierNode,
+    UnplacedAwareModifierNode,
+    GlobalPositionAwareModifierNode {
+    private var isPlaced = false
+
+    override fun onPlaced(coordinates: LayoutCoordinates) {
+        holder.activateView()
+        isPlaced = true
+    }
+
+    override fun onUnplaced() {
+        holder.deactivateView()
+        isPlaced = false
+    }
+
+    override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
+        if (!isPlaced) {
+            onPlaced(coordinates)
+        }
+    }
+
+    override fun onDetach() {
+        if (isPlaced) {
+            onUnplaced()
+        }
+        super.onDetach()
     }
 }
 

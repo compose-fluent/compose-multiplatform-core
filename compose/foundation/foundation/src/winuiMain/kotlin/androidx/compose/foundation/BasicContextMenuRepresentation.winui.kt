@@ -40,6 +40,7 @@ import microsoft.ui.xaml.controls.MenuFlyoutSeparator
 import microsoft.ui.xaml.input.KeyboardAccelerator
 import windows.foundation.Point
 import windows.system.VirtualKey
+import windows.system.VirtualKeyModifiers
 
 @OptIn(InternalComposeUiApi::class)
 @Composable
@@ -130,21 +131,10 @@ private fun configureTextContextMenuItemVisuals(item: MenuFlyoutItem, key: Any) 
     item.keyboardAcceleratorTextOverride = visuals.shortcutText
     item.keyboardAccelerators.add(
         KeyboardAccelerator().apply {
-            configureCtrlShortcut(visuals.key)
+            this.key = visuals.key
+            this.modifiers = VirtualKeyModifiers.Control
         }
     )
-}
-
-// KWINRT-038: these generated public setters exist in bytecode, but are not callable from Kotlin.
-private fun KeyboardAccelerator.configureCtrlShortcut(key: VirtualKey) {
-    javaClass.getMethod("setKey", VirtualKey::class.java).invoke(this, key)
-    javaClass.methods
-        .first { method ->
-            method.name.startsWith("setModifiers-") &&
-                method.parameterCount == 1 &&
-                method.parameterTypes[0] == Integer.TYPE
-        }
-        .invoke(this, ControlModifierAbiValue)
 }
 
 private data class TextContextMenuItemVisuals(
@@ -152,8 +142,6 @@ private data class TextContextMenuItemVisuals(
     val shortcutText: String,
     val key: VirtualKey,
 )
-
-private const val ControlModifierAbiValue = 1
 
 private class WinUIContextMenu(
     val flyout: MenuFlyout,

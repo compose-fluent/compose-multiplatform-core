@@ -174,8 +174,7 @@ val winUiMppSampleGuardedApiSurface = linkedMapOf(
         "testTag",
     ),
 )
-val winRtApplicationHostExecutable = layout.buildDirectory.file("kotlin-winrt/application-host/bin/${project.name}.exe")
-val winRtApplicationHostBin = layout.buildDirectory.dir("kotlin-winrt/application-host/bin")
+val winRtApplicationLayoutJvm = layout.buildDirectory.dir("kotlin-winrt/application-layout/jvm")
 
 fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
@@ -287,6 +286,33 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
+val prioritizeComposeWinUiProjectionJarForHost = tasks.register("prioritizeComposeWinUiProjectionJarForHost") {
+    group = "verification"
+    description = "Stages compose-ui's WinUI projection jar ahead of dependency projection jars."
+    dependsOn("buildWinRtApplicationHost")
+    inputs.dir(winRtApplicationLayoutJvm)
+    outputs.file(winRtApplicationLayoutJvm.map {
+        it.file("ui-winuijvm-9999.0.0-SNAPSHOT.jar")
+    })
+    doLast {
+        val layoutDir = winRtApplicationLayoutJvm.get().asFile
+        val libDir = layoutDir.resolve("lib")
+        val uiWinUiJar = libDir.listFiles()?.firstOrNull { file ->
+            file.name.matches(Regex("ui-winuijvm-.*\\.jar"))
+        } ?: error("WinUI MPP sample application layout did not include ui-winuijvm.")
+        // KWINRT-041: keep this module's projection classes ahead of skiko-winui
+        // until dependency-owned WinRT type shapes are merged coherently.
+        copy {
+            from(uiWinUiJar)
+            into(layoutDir)
+        }
+    }
+}
+
+tasks.named("runWinRtApplicationHost") {
+    dependsOn(prioritizeComposeWinUiProjectionJarForHost)
+}
+
 fun Exec.configureWinUIMppSampleApplicationHost(
     taskDescription: String,
     reportName: String,
@@ -296,11 +322,19 @@ fun Exec.configureWinUIMppSampleApplicationHost(
 ) {
     group = "verification"
     description = taskDescription
-    dependsOn("buildWinRtApplicationHost")
     dependsOn("validateWinUIMppSamplePackaging")
-    executable = winRtApplicationHostExecutable.get().asFile.absolutePath
     val reportFile = layout.buildDirectory.file("validation/$reportName-events.txt")
     outputs.file(reportFile)
+    commandLine(
+        gradleWrapper.asFile.absolutePath,
+        "${project.path}:runWinRtApplicationHost",
+        "-PcomposeWinUi.enableJvmTarget=true",
+        "--no-configuration-cache",
+        "--no-configure-on-demand",
+        "--no-build-cache",
+        "--no-daemon",
+        "--console=plain",
+    )
     doFirst {
         val report = reportFile.get().asFile
         report.delete()
@@ -312,13 +346,13 @@ fun Exec.configureWinUIMppSampleApplicationHost(
         )
         environment("KOTLIN_WINRT_JVM_OPTIONS", jvmOptions.joinToString(separator = ";"))
 
-        val hostFiles = winRtApplicationHostBin.get().asFileTree.files
-        val classpathNames = hostFiles.filter { it.isFile && it.extension == "jar" }.map { it.name }
+        val runtimeArtifacts = configurations.named("winuiJvmRuntimeClasspath").get().files
+        val runtimeArtifactNames = runtimeArtifacts.map { it.name }
         winUiMppSampleResourceFiles.forEach { resource ->
             check(
-                hostFiles.any { file ->
+                runtimeArtifacts.any { file ->
                     file.isFile && file.name == resource.name
-                } || hostFiles.any { file ->
+                } || runtimeArtifacts.any { file ->
                     file.isFile && file.extension == "jar" && ZipFile(file).use { zip ->
                         zip.getEntry(resource.name) != null
                     }
@@ -327,14 +361,12 @@ fun Exec.configureWinUIMppSampleApplicationHost(
                 "WinUI MPP sample application host did not include staged resource ${resource.name}."
             }
         }
-        check(classpathNames.any { it.contains("demo-winui") }) {
-            "WinUI MPP sample application host did not include the demo-winui application jar."
+        check(runtimeArtifactNames.any { it.contains("skiko-winui") }) {
+            "WinUI MPP sample runtime classpath does not include skiko-winui."
         }
-        check(classpathNames.any { it.contains("skiko-winui") }) {
-            "WinUI MPP sample application host did not include skiko-winui."
-        }
-        check(classpathNames.none { it.contains("skiko-awt-runtime") }) {
-            "WinUI MPP sample application host must not include Skiko AWT runtime artifacts: $classpathNames"
+        check(runtimeArtifactNames.none { it.contains("skiko-awt-runtime") }) {
+            "WinUI MPP sample runtime classpath must not include Skiko AWT runtime artifacts: " +
+                runtimeArtifactNames
         }
     }
     doLast {

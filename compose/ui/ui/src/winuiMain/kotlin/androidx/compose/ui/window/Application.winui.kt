@@ -42,16 +42,17 @@ import kotlinx.coroutines.launch
 fun Application(
     content: @Composable ApplicationScope.() -> Unit,
 ) {
-    XamlApplication.start {
-        WinUIXamlApplication(content)
+    PendingWinUIApplicationContent.content = content
+    try {
+        XamlApplication.start {
+            WinUIXamlApplication()
+        }
+    } finally {
+        PendingWinUIApplicationContent.content = null
     }
 }
 
-class WinUIXamlApplication internal constructor(
-    private val content: @Composable ApplicationScope.() -> Unit,
-) : XamlApplication() {
-    constructor() : this({})
-
+class WinUIXamlApplication : XamlApplication() {
     private var runtime: WinUIApplicationRuntime? = null
 
     internal fun dispatchLaunch(args: LaunchActivatedEventArgs) {
@@ -65,23 +66,18 @@ class WinUIXamlApplication internal constructor(
             application = this,
             dispatcherQueue = DispatcherQueue.getForCurrentThread(),
         ).also { runtime ->
-            runtime.setContent(content)
+            runtime.setContent(PendingWinUIApplicationContent.content ?: {})
         }
     }
 
     private fun installDefaultXamlResources() {
         val appResources = resources ?: ResourceDictionary().also { resources = it }
-        try {
-            appResources.mergedDictionaries.add(XamlControlsResources())
-        } catch (error: LinkageError) {
-            // KWINRT-041: duplicate dependency-owned ResourceDictionary projections
-            // can make XamlControlsResources fail to link on mixed classpaths.
-            System.err.println(
-                "compose-winui: skipped XamlControlsResources because of KWINRT-041: " +
-                    "${error::class.qualifiedName}: ${error.message}"
-            )
-        }
+        appResources.mergedDictionaries.add(XamlControlsResources())
     }
+}
+
+private object PendingWinUIApplicationContent {
+    var content: (@Composable ApplicationScope.() -> Unit)? = null
 }
 
 @Stable

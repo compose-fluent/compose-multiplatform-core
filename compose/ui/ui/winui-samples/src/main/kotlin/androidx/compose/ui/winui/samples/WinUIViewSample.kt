@@ -2706,6 +2706,7 @@ private object ComposeWinUiSmokeApp {
         println("compose-winui-sample: pointer input cancel on dispose")
     }
 
+    @OptIn(InternalComposeUiApi::class)
     private suspend fun runWinUIViewPlacementSmoke() {
         val lifecycleProbe = WinUIViewLifecycleProbe()
         val currentComposeView = WinUIComposeView()
@@ -2733,6 +2734,7 @@ private object ComposeWinUiSmokeApp {
         }
 
         isPlaced.value = false
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView unplacement") {
             (rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
         }
@@ -2746,6 +2748,7 @@ private object ComposeWinUiSmokeApp {
         }
 
         isPlaced.value = true
+        currentComposeView.performFrameForTest()
         awaitCondition("WinUIView replacement") {
             (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()?.nativeObject
                 ?.sameIdentity(wrapper.nativeObject) == true &&

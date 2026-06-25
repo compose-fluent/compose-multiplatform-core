@@ -476,7 +476,7 @@ internal class WinUIOwner(
         }
     }
 
-    private fun notifyInteropTreeChanged() {
+    internal fun notifyInteropTreeChanged() {
         onInteropTreeChanged()
         registerOnEndApplyChangesListener(onInteropTreeChanged)
     }
