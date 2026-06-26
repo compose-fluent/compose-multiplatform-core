@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import io.github.composefluent.winrt.gradle.BuildWinRtApplicationHostTask
-import io.github.composefluent.winrt.gradle.GenerateWinRtProjectionsTask
+import io.github.composefluent.winrt.gradle.BuildWinRTApplicationHostTask
+import io.github.composefluent.winrt.gradle.GenerateWinRTProjectionsTask
 import java.util.zip.ZipFile
 import org.gradle.api.tasks.Exec
 import org.gradle.jvm.tasks.Jar
@@ -252,7 +252,7 @@ kotlin {
     }
 }
 
-winRt {
+winRT {
     application {
         mainClass.set("androidx.compose.mpp.demo.Main_winuiKt")
         projectPriIndexName.set("ComposeWinUi.MppDemo")
@@ -270,7 +270,7 @@ winRt {
     type("Windows.Foundation.Uri")
 }
 
-tasks.named<GenerateWinRtProjectionsTask>("generateWinRtProjections") {
+tasks.named<GenerateWinRTProjectionsTask>("generateWinRTProjections") {
     sourceRoots.setFrom(project.file("../demo/src/winuiJvmMain/kotlin"))
 }
 
@@ -285,7 +285,7 @@ tasks.named("processWinuiJvmMainResources") {
     dependsOn(stageWinUIMppSampleResources)
 }
 
-tasks.named<BuildWinRtApplicationHostTask>("buildWinRtApplicationHost") {
+tasks.named<BuildWinRTApplicationHostTask>("buildWinRTApplicationHost") {
     val winuiJvmJar = tasks.named("winuiJvmJar", Jar::class)
     runtimeClasspath.from(configurations.named("winuiJvmRuntimeClasspath"))
     runtimeClasspath.from(winuiJvmJar.flatMap { it.archiveFile })
@@ -294,8 +294,8 @@ tasks.named<BuildWinRtApplicationHostTask>("buildWinRtApplicationHost") {
 
 tasks.withType<KotlinCompile>().configureEach {
     if (name.contains("Winui")) {
-        dependsOn("generateWinRtProjections")
-        dependsOn("mergeWinRtCompilerSupport")
+        dependsOn("generateWinRTProjections")
+        dependsOn("mergeWinRTCompilerSupport")
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_25)
             freeCompilerArgs.add("-Xjdk-release=25")
@@ -317,7 +317,7 @@ fun Exec.configureWinUIMppSampleApplicationHost(
     outputs.file(reportFile)
     commandLine(
         gradleWrapper.asFile.absolutePath,
-        "${project.path}:runWinRtApplicationHost",
+        "${project.path}:runWinRTApplicationHost",
         "-PcomposeWinUi.enableJvmTarget=true",
         "--no-configuration-cache",
         "--no-configure-on-demand",
@@ -381,7 +381,7 @@ tasks.register("validateWinUIMppSamplePackaging") {
     group = "verification"
     description = "Validates WinUI MPP sample resources and Windows App SDK runtime packaging."
     dependsOn(stageWinUIMppSampleResources)
-    dependsOn("stageWinRtRuntimeAssets")
+    dependsOn("stageWinRTRuntimeAssets")
     inputs.files(
         winUiMppSampleResourceFiles + listOf(
             winUiMppAppxManifest,

@@ -54,9 +54,7 @@ import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.IInspectableReference
-import io.github.composefluent.winrt.runtime.IWinRTObject
+import io.github.composefluent.winrt.runtime.asWinRT
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
@@ -190,8 +188,8 @@ private class WinUIViewHolder<T : UIElement>(
     initialDensity: Density,
 ) : InteropViewFactoryHolder(), WinUIInteropViewHost {
     private val interopView = view.asInteropView()
-    private val viewControl = view.asWinRtControl()
-    private val viewFrameworkElement = view.asWinRtFrameworkElement()
+    private val viewControl = view.asWinRTControl()
+    private val viewFrameworkElement = view.asWinRTFrameworkElement()
     private val group = InteropViewGroup(
         Canvas().also {
             it.horizontalAlignment = HorizontalAlignment.Left
@@ -800,7 +798,7 @@ private fun UIElement.measureUnclippedDesiredSize(): IntSize {
     }.getOrElse {
         IntSize.Zero
     }
-    val explicitSize = asWinRtFrameworkElement()?.let {
+    val explicitSize = asWinRTFrameworkElement()?.let {
         IntSize(
             width = it.width.toComposeLayoutSize(),
             height = it.height.toComposeLayoutSize(),
@@ -834,24 +832,15 @@ private fun Double.toComposeLayoutSize(): Int =
         else -> ceil(this).toInt()
     }
 
-private fun Any?.asWinRtControl(): Control? =
-    asWinRtRuntimeClass(Control.Metadata.DEFAULT_INTERFACE_IID, Control.Metadata::wrap)
+private fun Any?.asWinRTControl(): Control? =
+    asExistingInstance(Control::class.java) ?: runCatching { this?.asWinRT<Control>() }.getOrNull()
 
-private fun Any?.asWinRtFrameworkElement(): FrameworkElement? =
-    asWinRtRuntimeClass(
-        FrameworkElement.Metadata.DEFAULT_INTERFACE_IID,
-        FrameworkElement.Metadata::wrap,
-    )
+private fun Any?.asWinRTFrameworkElement(): FrameworkElement? =
+    asExistingInstance(FrameworkElement::class.java)
+        ?: runCatching { this?.asWinRT<FrameworkElement>() }.getOrNull()
 
-private inline fun <T> Any?.asWinRtRuntimeClass(
-    defaultInterfaceIid: Guid,
-    wrap: (IInspectableReference) -> T,
-): T? {
-    val winRtObject = this as? IWinRTObject ?: return null
-    val queriedInterface = winRtObject.nativeObject.tryQueryInterface(defaultInterfaceIid) ?: return null
-    queriedInterface.close()
-    return wrap(winRtObject.nativeObject.asInspectable())
-}
+private fun <T> Any?.asExistingInstance(type: Class<T>): T? =
+    if (this != null && type.isInstance(this)) type.cast(this) else null
 
 private fun setClip(element: UIElement, clip: RectangleGeometry?) {
     element.clip = clip

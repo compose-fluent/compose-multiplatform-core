@@ -135,9 +135,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import androidx.compose.foundation.text.BasicText
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.Guid
-import io.github.composefluent.winrt.runtime.IInspectableReference
-import io.github.composefluent.winrt.runtime.IWinRTObject
+import io.github.composefluent.winrt.runtime.asWinRT
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -912,7 +910,7 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView lifecycle smoke did not install an interop Canvas into the root host."
         }
         val wrapper = checkNotNull(rootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -972,7 +970,7 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        check((rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()) {
+        check((rootHost.content.asWinRTCanvas())?.requiredInteropChildren.orEmpty().isEmpty()) {
             "WinUIComposeView did not clear WinUIView content after it left composition."
         }
         check(lifecycleProbe.releaseCount == 1) {
@@ -996,7 +994,7 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val recreatedRootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val recreatedRootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView lifecycle smoke did not reinstall an interop Canvas after re-entering composition."
         }
         val recreatedWrapper = checkNotNull(recreatedRootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -1184,7 +1182,7 @@ private object ComposeWinUiSmokeApp {
                 lifecycleProbe = secondProbe,
             )
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView z-order smoke did not install an interop Canvas into the root host."
         }
         check(rootCanvas.requiredInteropChildren.size == 2) {
@@ -1231,7 +1229,7 @@ private object ComposeWinUiSmokeApp {
                 },
             )
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView unclipped bounds smoke did not install an interop Canvas."
         }
         val wrapper = checkNotNull(rootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -1280,9 +1278,9 @@ private object ComposeWinUiSmokeApp {
             )
         }
         awaitCondition("WinUIView container initial order") {
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.size == 3
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.size == 3
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView container sync smoke did not install an interop Canvas."
         }
         val firstWrapper = rootCanvas.requiredInteropChildren[0]
@@ -1425,7 +1423,7 @@ private object ComposeWinUiSmokeApp {
         awaitCondition("WinUI shutdown composition entered") {
             disposeEvents == listOf("entered") &&
                 eventRegistered &&
-                (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull() != null
+                (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull() != null
         }
         check(currentComposeView.isLoadedRenderSchedulerRegistrationPendingForTest) {
             "WinUIComposeView did not keep a loaded render-scheduler registration before disposal."
@@ -1439,7 +1437,7 @@ private object ComposeWinUiSmokeApp {
         check(eventRemoved) {
             "WinUI shutdown smoke did not remove the native event token on disposal."
         }
-        check((rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()) {
+        check((rootHost.content.asWinRTCanvas())?.requiredInteropChildren.orEmpty().isEmpty()) {
             "WinUI shutdown smoke did not clear interop children on disposal."
         }
         check(!currentComposeView.root.allowDrop) {
@@ -1533,7 +1531,7 @@ private object ComposeWinUiSmokeApp {
                 },
             )
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView control variety smoke did not install an interop Canvas into the root host."
         }
         check(rootCanvas.requiredInteropChildren.size == 3) {
@@ -1573,7 +1571,7 @@ private object ComposeWinUiSmokeApp {
                 )
             }
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView reuse smoke did not install an interop Canvas into the root host."
         }
         val wrapper = checkNotNull(rootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -1592,7 +1590,7 @@ private object ComposeWinUiSmokeApp {
         currentComposeView.performFrameForTest()
         awaitCondition("reusable WinUIView deactivation") {
             lifecycleProbe.resetCount == 1 &&
-                (rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
+                (rootHost.content.asWinRTCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
         }
         check(lifecycleProbe.factoryCount == 1) {
             "Reusable WinUIView should not recreate while deactivating, got " +
@@ -1612,7 +1610,7 @@ private object ComposeWinUiSmokeApp {
             lifecycleProbe.updateCount == 2
         }
         check(
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()?.nativeObject
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()?.nativeObject
                 ?.sameIdentity(wrapper.nativeObject) == true
         ) {
             "Reusable WinUIView did not keep its wrapper across deactivation."
@@ -1658,7 +1656,7 @@ private object ComposeWinUiSmokeApp {
         awaitCondition("WinUIView initial state update") {
             lifecycleProbe.updateCount == 1 &&
                 lifecycleProbe.lastContent == "state update initial" &&
-                (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.size == 1
+                (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.size == 1
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
             "WinUIView state update smoke did not install a Button."
@@ -1709,8 +1707,8 @@ private object ComposeWinUiSmokeApp {
             )
         }
         awaitCondition("WinUIView initial relayout bounds") {
-            val rootCanvas = rootHost.content.asWinRtCanvas()
-            val wrapper = rootCanvas?.requiredInteropChildren?.singleOrNull().asWinRtCanvas()
+            val rootCanvas = rootHost.content.asWinRTCanvas()
+            val wrapper = rootCanvas?.requiredInteropChildren?.singleOrNull().asWinRTCanvas()
             val clip = wrapper?.readClipRectOrNull()
             clip?.width == 80f &&
                 clip.height == 30f &&
@@ -1721,7 +1719,7 @@ private object ComposeWinUiSmokeApp {
                 lifecycleProbe.lastButton?.width == 80.0 &&
                 lifecycleProbe.lastButton?.height == 30.0
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView relayout smoke did not install an interop Canvas."
         }
         val wrapper = checkNotNull(rootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -1737,7 +1735,7 @@ private object ComposeWinUiSmokeApp {
         y.value = 17
         currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated relayout bounds") {
-            val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull().asWinRtCanvas()
+            val currentWrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull().asWinRTCanvas()
             val clip = currentWrapper?.readClipRectOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
                 lifecycleProbe.lastButton === button &&
@@ -1781,7 +1779,7 @@ private object ComposeWinUiSmokeApp {
             )
         }
         awaitCondition("WinUI layout snapshot initial bounds") {
-            val wrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val wrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = wrapper?.readClipRectOrNull()
             clip?.width == 70f &&
                 clip.height == 25f &&
@@ -1799,7 +1797,7 @@ private object ComposeWinUiSmokeApp {
         height.value = 45
         currentComposeView.performFrameForTest()
         awaitCondition("WinUI layout snapshot updated bounds") {
-            val wrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val wrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = wrapper?.readClipRectOrNull()
             clip?.width == 115f &&
                 clip.height == 45f &&
@@ -2129,7 +2127,7 @@ private object ComposeWinUiSmokeApp {
             }
         }
         awaitCondition("WinUIView focus input integration bounds installed") {
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull() != null && button != null
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull() != null && button != null
         }
         check(firstRequester.requestFocus()) {
             "WinUIView focus input integration smoke could not focus first Compose target."
@@ -2662,7 +2660,7 @@ private object ComposeWinUiSmokeApp {
             }
         }
         awaitCondition("WinUIView pointer interop bounds installed") {
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull() != null
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull() != null
         }
         check(
             currentComposeView.sendPointerEventForTest(
@@ -2744,9 +2742,9 @@ private object ComposeWinUiSmokeApp {
         }
         awaitCondition("WinUIView initial placement") {
             lifecycleProbe.lastButton != null &&
-                (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.size == 1
+                (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.size == 1
         }
-        val rootCanvas = checkNotNull(rootHost.content.asWinRtCanvas()) {
+        val rootCanvas = checkNotNull(rootHost.content.asWinRTCanvas()) {
             "WinUIView placement smoke did not install an interop Canvas."
         }
         val wrapper = checkNotNull(rootCanvas.requiredInteropChildren.singleOrNull()) {
@@ -2759,7 +2757,7 @@ private object ComposeWinUiSmokeApp {
         isPlaced.value = false
         currentComposeView.performFrameForTest()
         awaitCondition("WinUIView unplacement") {
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren.orEmpty().isEmpty()
         }
         check(lifecycleProbe.factoryCount == 1) {
             "WinUIView placement smoke recreated the Button during unplacement, factory=" +
@@ -2773,7 +2771,7 @@ private object ComposeWinUiSmokeApp {
         isPlaced.value = true
         currentComposeView.performFrameForTest()
         awaitCondition("WinUIView replacement") {
-            (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()?.nativeObject
+            (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()?.nativeObject
                 ?.sameIdentity(wrapper.nativeObject) == true &&
                 lifecycleProbe.lastButton === button
         }
@@ -2841,7 +2839,7 @@ private object ComposeWinUiSmokeApp {
             }
         }
         awaitCondition("WinUIView initial density") {
-            val wrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val wrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = wrapper?.readClipRectOrNull()
             observedDensity == 1f &&
                 lifecycleProbe.lastButton != null &&
@@ -2850,7 +2848,7 @@ private object ComposeWinUiSmokeApp {
                 lifecycleProbe.lastButton?.width == 40.0 &&
                 lifecycleProbe.lastButton?.height == 20.0
         }
-        val wrapper = checkNotNull((rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()) {
+        val wrapper = checkNotNull((rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()) {
             "WinUIView density smoke did not install a wrapper."
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
@@ -2860,7 +2858,7 @@ private object ComposeWinUiSmokeApp {
         localDensity.value = 2f
         currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated density") {
-            val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val currentWrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = currentWrapper?.readClipRectOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
                 observedDensity == 2f &&
@@ -2912,7 +2910,7 @@ private object ComposeWinUiSmokeApp {
             )
         }
         awaitCondition("WinUIView initial properties") {
-            val wrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val wrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             val clip = wrapper?.readClipRectOrNull()
             wrapper?.isHitTestVisible == false &&
                 lifecycleProbe.lastButton?.isHitTestVisible == false &&
@@ -2921,7 +2919,7 @@ private object ComposeWinUiSmokeApp {
                 clip?.width == 90f &&
                 clip.height == 35f
         }
-        val wrapper = checkNotNull((rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()) {
+        val wrapper = checkNotNull((rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()) {
             "WinUIView properties smoke did not install a wrapper."
         }
         val button = checkNotNull(lifecycleProbe.lastButton) {
@@ -2932,7 +2930,7 @@ private object ComposeWinUiSmokeApp {
         isUserInteractionEnabled.value = true
         currentComposeView.performFrameForTest()
         awaitCondition("WinUIView updated properties") {
-            val currentWrapper = (rootHost.content.asWinRtCanvas())?.requiredInteropChildren?.singleOrNull()
+            val currentWrapper = (rootHost.content.asWinRTCanvas())?.requiredInteropChildren?.singleOrNull()
             currentWrapper?.nativeObject?.sameIdentity(wrapper.nativeObject) == true &&
                 lifecycleProbe.lastButton === button &&
                 currentWrapper.isHitTestVisible &&
@@ -3533,31 +3531,23 @@ private fun hasInteropRootOrder(rootCanvas: Canvas, expected: List<UIElement>): 
 }
 
 private fun WinUIComposeView.requiredRootHost(): ContentControl =
-    checkNotNull(root.asWinRtContentControl()) {
+    checkNotNull(root.asWinRTContentControl()) {
         "WinUIComposeView root is not a ContentControl."
     }
 
-private fun Any?.asWinRtContentControl(): ContentControl? =
-    asWinRtRuntimeClass(ContentControl.Metadata.DEFAULT_INTERFACE_IID, ContentControl.Metadata::wrap)
+private fun Any?.asWinRTContentControl(): ContentControl? =
+    asExistingInstance(ContentControl::class.java)
+        ?: runCatching { this?.asWinRT<ContentControl>() }.getOrNull()
 
-private fun Any?.asWinRtCanvas(): Canvas? =
-    asWinRtRuntimeClass(Canvas.Metadata.DEFAULT_INTERFACE_IID, Canvas.Metadata::wrap)
+private fun Any?.asWinRTCanvas(): Canvas? =
+    asExistingInstance(Canvas::class.java) ?: runCatching { this?.asWinRT<Canvas>() }.getOrNull()
 
-private fun Any?.asWinRtRectangleGeometry(): RectangleGeometry? =
-    asWinRtRuntimeClass(
-        RectangleGeometry.Metadata.DEFAULT_INTERFACE_IID,
-        RectangleGeometry.Metadata::wrap,
-    )
+private fun Any?.asWinRTRectangleGeometry(): RectangleGeometry? =
+    asExistingInstance(RectangleGeometry::class.java)
+        ?: runCatching { this?.asWinRT<RectangleGeometry>() }.getOrNull()
 
-private inline fun <T> Any?.asWinRtRuntimeClass(
-    defaultInterfaceIid: Guid,
-    wrap: (IInspectableReference) -> T,
-): T? {
-    val winRtObject = this as? IWinRTObject ?: return null
-    val queriedInterface = winRtObject.nativeObject.tryQueryInterface(defaultInterfaceIid) ?: return null
-    queriedInterface.close()
-    return wrap(winRtObject.nativeObject.asInspectable())
-}
+private fun <T> Any?.asExistingInstance(type: Class<T>): T? =
+    if (this != null && type.isInstance(this)) type.cast(this) else null
 
 private val Canvas.requiredInteropChildren: List<UIElement>
     get() {
@@ -3572,9 +3562,9 @@ private val Canvas.requiredInteropChildren: List<UIElement>
 
 private fun UIElement.readClipRectOrNull(): Rect? =
     runCatching {
-        val clipProperty = UIElement.clipProperty ?: return null
-        val clip = getValue(clipProperty).asWinRtRectangleGeometry() ?: return null
-        val rectProperty = RectangleGeometry.rectProperty ?: return null
+        val clipProperty = UIElement.clipProperty
+        val clip = getValue(clipProperty).asWinRTRectangleGeometry() ?: return null
+        val rectProperty = RectangleGeometry.rectProperty
         clip.getValue(rectProperty) as? Rect
     }.getOrNull()
 

@@ -16,7 +16,7 @@
 
 package androidx.compose.ui.platform
 
-import io.github.composefluent.winrt.runtime.WinRtUri
+import io.github.composefluent.winrt.runtime.WinRTUri
 import windows.system.Launcher
 
 internal fun createWinUIUriHandler(): UriHandler = WinUIUriHandler(::launchWinUIUri)
@@ -37,7 +37,7 @@ internal class WinUIUriHandler(
 }
 
 private fun launchWinUIUri(uri: String) {
-    Launcher.launchUriAsync(WinRtUri(uri)).use {
+    Launcher.launchUriAsync(WinRTUri(uri)).use {
         // Fire-and-forget, matching UriHandler's synchronous contract.
     }
 }

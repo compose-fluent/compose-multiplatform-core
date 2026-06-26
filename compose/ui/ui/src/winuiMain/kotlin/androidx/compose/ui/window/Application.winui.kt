@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.WinUIScheduler
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.xaml.DispatcherShutdownMode
 import microsoft.ui.xaml.LaunchActivatedEventArgs
-import microsoft.ui.xaml.ResourceDictionary
 import microsoft.ui.xaml.controls.XamlControlsResources
 import microsoft.ui.xaml.Application as XamlApplication
 import kotlinx.coroutines.CoroutineScope
@@ -71,8 +70,7 @@ class WinUIXamlApplication : XamlApplication() {
     }
 
     private fun installDefaultXamlResources() {
-        val appResources = resources ?: ResourceDictionary().also { resources = it }
-        appResources.mergedDictionaries.add(XamlControlsResources())
+        resources.mergedDictionaries.add(XamlControlsResources())
     }
 }
 

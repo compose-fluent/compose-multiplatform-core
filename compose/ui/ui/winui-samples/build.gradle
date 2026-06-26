@@ -59,7 +59,7 @@ def gradleWrapper = rootProject.layout.projectDirectory.file(
         System.getProperty("os.name").startsWith("Windows") ? "gradlew.bat" : "gradlew"
 )
 
-winRt {
+winRT {
     application {
         mainClass = "androidx.compose.ui.winui.samples.WinUIViewSampleKt"
     }
@@ -80,7 +80,7 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(25)
 }
 
-tasks.named("generateWinRtProjections").configure {
+tasks.named("generateWinRTProjections").configure {
     sourceRoots.setFrom(project.file("src/main/kotlin"))
     authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
 }
@@ -112,7 +112,7 @@ def registerWinUISampleTask = { String taskName, String descriptionText, String 
         }
         commandLine(
                 gradleWrapper.asFile.absolutePath,
-                "${project.path}:runWinRtApplicationHost",
+                "${project.path}:runWinRTApplicationHost",
                 "-PcomposeWinUi.enableJvmTarget=true",
                 "--no-configuration-cache",
                 "--no-configure-on-demand",

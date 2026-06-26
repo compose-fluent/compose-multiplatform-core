@@ -18,7 +18,7 @@ package androidx.compose.ui.node
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Matrix
-import io.github.composefluent.winrt.runtime.IWinRTObject
+import io.github.composefluent.winrt.runtime.asWinRT
 import microsoft.ui.xaml.UIElement
 import windows.foundation.Point
 import windows.graphics.PointInt32
@@ -57,12 +57,12 @@ internal class WinUICoordinateMapper(
 
         private fun UIElement.calculatePositionInWindow(localPosition: Offset): Offset {
             val transform = rootTransformToWindow() ?: return localPosition
-            return transform.transformPoint(localPosition.toWinRtPoint()).toOffset()
+            return transform.transformPoint(localPosition.toWinRTPoint()).toOffset()
         }
 
         private fun UIElement.calculateLocalPosition(positionInWindow: Offset): Offset {
             val transform = rootTransformToWindow()?.inverse ?: return positionInWindow
-            return transform.transformPoint(positionInWindow.toWinRtPoint()).toOffset()
+            return transform.transformPoint(positionInWindow.toWinRTPoint()).toOffset()
         }
 
         private fun UIElement.localToScreen(localPosition: Offset): Offset {
@@ -70,7 +70,7 @@ internal class WinUICoordinateMapper(
             val positionInWindow = calculatePositionInWindow(localPosition)
             val coordinateConverter = xamlRoot.coordinateConverter ?: return positionInWindow
             return coordinateConverter
-                .convertLocalToScreen(positionInWindow.toWinRtPoint())
+                .convertLocalToScreen(positionInWindow.toWinRTPoint())
                 .toOffset()
         }
 
@@ -78,28 +78,27 @@ internal class WinUICoordinateMapper(
             val xamlRoot = runCatching { xamlRoot }.getOrNull() ?: return positionOnScreen
             val coordinateConverter = xamlRoot.coordinateConverter ?: return positionOnScreen
             val positionInWindow = coordinateConverter
-                .convertScreenToLocal(positionOnScreen.toWinRtPointInt32())
+                .convertScreenToLocal(positionOnScreen.toWinRTPointInt32())
                 .toOffset()
             return calculateLocalPosition(positionInWindow)
         }
 
         private fun UIElement.rootTransformToWindow() = runCatching {
             val root = xamlRoot ?: return@runCatching null
-            transformToVisual(root.content.asWinRtUIElement() ?: return@runCatching null)
+            transformToVisual(root.content.asWinRTUIElement() ?: return@runCatching null)
         }.getOrNull()
 
-        private fun Any?.asWinRtUIElement(): UIElement? {
-            val winRtObject = this as? IWinRTObject ?: return null
-            val queriedInterface = winRtObject.nativeObject
-                .tryQueryInterface(UIElement.Metadata.DEFAULT_INTERFACE_IID)
-                ?: return null
-            queriedInterface.close()
-            return UIElement.Metadata.wrap(winRtObject.nativeObject.asInspectable())
+        private fun Any?.asWinRTUIElement(): UIElement? {
+            return asExistingInstance(UIElement::class.java)
+                ?: runCatching { this?.asWinRT<UIElement>() }.getOrNull()
         }
 
-        private fun Offset.toWinRtPoint(): Point = Point(x, y)
+        private fun <T> Any?.asExistingInstance(type: Class<T>): T? =
+            if (this != null && type.isInstance(this)) type.cast(this) else null
 
-        private fun Offset.toWinRtPointInt32(): PointInt32 =
+        private fun Offset.toWinRTPoint(): Point = Point(x, y)
+
+        private fun Offset.toWinRTPointInt32(): PointInt32 =
             PointInt32(x.toInt(), y.toInt())
 
         private fun Point.toOffset(): Offset = Offset(x, y)

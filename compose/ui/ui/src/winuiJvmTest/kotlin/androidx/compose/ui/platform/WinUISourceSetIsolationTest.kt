@@ -95,11 +95,11 @@ class WinUISourceSetIsolationTest {
             "java.",
             "javax.",
             "java.lang.foreign.",
-            "WinRtWindowsAppSdkBootstrap",
+            "WinRTWindowsAppSdkBootstrap",
             "RuntimeScope",
             "JavaExec",
-            "stageWinRt",
-            "buildWinRt",
+            "stageWinRT",
+            "buildWinRT",
             "System.getProperty",
             "System.load",
             "Class.forName",
@@ -160,7 +160,7 @@ class WinUISourceSetIsolationTest {
         assertTrue(
             buildScript.contains("generated/kotlin-winrt/src/main/kotlin") &&
                 buildScript.contains("generated/kotlin-winrt-authoring/src/main/kotlin") &&
-                buildScript.contains("task.dependsOn(\"generateWinRtProjections\")"),
+                buildScript.contains("task.dependsOn(\"generateWinRTProjections\")"),
             "Generated WinRT sources should remain wired by the kotlin-winrt plugin and task dependency.",
         )
         assertFalse(

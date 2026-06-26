@@ -75,7 +75,7 @@ if (composeWinUiJvmTargetEnabled && !composeWinUiGradlePluginRuntimeAvailable) {
 if (composeWinUiGradlePluginAvailable) {
     apply plugin: "io.github.composefluent.winrt"
 
-    winRt {
+    winRT {
         restoreNuGetPackages = providers
                 .gradleProperty("composeWinUi.restoreNuGetPackages")
                 .map { it.toBoolean() }
@@ -597,7 +597,7 @@ if (composeWinUiGradlePluginAvailable) {
             }
             return
         }
-        task.dependsOn("generateWinRtProjections")
+        task.dependsOn("generateWinRTProjections")
         task.compilerOptions {
             it.jvmTarget.set(JvmTarget.JVM_25)
             it.freeCompilerArgs.add("-Xjdk-release=25")
@@ -605,7 +605,7 @@ if (composeWinUiGradlePluginAvailable) {
         }
     }
 
-    tasks.named("generateWinRtProjections").configure {
+    tasks.named("generateWinRTProjections").configure {
         sourceRoots.setFrom(project.file("src/winuiMain/kotlin"))
         authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
     }

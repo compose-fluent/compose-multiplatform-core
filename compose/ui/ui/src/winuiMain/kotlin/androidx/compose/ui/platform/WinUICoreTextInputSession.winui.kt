@@ -25,7 +25,7 @@ import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import windows.foundation.TypedEventHandler
-import windows.foundation.Rect as WinRtRect
+import windows.foundation.Rect as WinRTRect
 import windows.ui.text.core.CoreTextEditContext
 import windows.ui.text.core.CoreTextFormatUpdatingEventArgs
 import windows.ui.text.core.CoreTextFormatUpdatingResult
@@ -444,12 +444,12 @@ private val CoreTextRange.isCollapsed: Boolean
     get() = startCaretPosition == endCaretPosition
 
 private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
-    textBounds = bounds.innerTextFieldBounds.toWinRtRect()
-    controlBounds = bounds.decorationBoxBounds.toWinRtRect()
+    textBounds = bounds.innerTextFieldBounds.toWinRTRect()
+    controlBounds = bounds.decorationBoxBounds.toWinRTRect()
 }
 
-private fun androidx.compose.ui.geometry.Rect.toWinRtRect(): WinRtRect =
-    WinRtRect(left, top, width, height)
+private fun androidx.compose.ui.geometry.Rect.toWinRTRect(): WinRTRect =
+    WinRTRect(left, top, width, height)
 
 private fun String.sliceCoreTextRange(range: CoreTextRange): String {
     val start = range.startCaretPosition.coerceIn(0, length)

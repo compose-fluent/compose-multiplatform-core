@@ -21,7 +21,7 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.WinUIDragAndDropManager
 import androidx.compose.ui.node.WinUIOwner
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.WinRtEvent
+import io.github.composefluent.winrt.runtime.WinRTEvent
 import microsoft.ui.xaml.DragEventArgs
 import microsoft.ui.xaml.DragEventHandler
 import microsoft.ui.xaml.UIElement
@@ -101,7 +101,7 @@ internal class WinUIDragAndDropAdapter(
     }
 
     private fun register(
-        event: WinRtEvent<DragEventHandler>,
+        event: WinRTEvent<DragEventHandler>,
         dispatch: (DragEventArgs) -> Boolean,
     ): WinUIDragAndDropEventRegistration {
         val handler = DragEventHandler { _, args ->
@@ -123,7 +123,7 @@ internal class WinUIDragAndDropAdapter(
 }
 
 private data class WinUIDragAndDropEventRegistration(
-    val event: WinRtEvent<DragEventHandler>,
+    val event: WinRTEvent<DragEventHandler>,
     val token: EventRegistrationToken,
     val handler: DragEventHandler,
 )

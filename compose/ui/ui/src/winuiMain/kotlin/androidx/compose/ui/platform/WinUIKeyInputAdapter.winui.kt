@@ -22,7 +22,7 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.node.WinUIOwner
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.WinRtEvent
+import io.github.composefluent.winrt.runtime.WinRTEvent
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.input.KeyEventHandler
 import windows.system.VirtualKey
@@ -49,7 +49,7 @@ internal class WinUIKeyInputAdapter(
     @OptIn(InternalComposeUiApi::class)
     private fun register(
         eventType: KeyEventType,
-        event: WinRtEvent<KeyEventHandler>,
+        event: WinRTEvent<KeyEventHandler>,
     ): WinUIKeyEventRegistration {
         val handler = KeyEventHandler { _, args ->
             if (!isDisposed) {
@@ -98,7 +98,7 @@ private fun Any?.isComposeRootSource(root: UIElement): Boolean =
     this == null || this == root
 
 private data class WinUIKeyEventRegistration(
-    val event: WinRtEvent<KeyEventHandler>,
+    val event: WinRTEvent<KeyEventHandler>,
     val token: EventRegistrationToken,
     val handler: KeyEventHandler,
 )

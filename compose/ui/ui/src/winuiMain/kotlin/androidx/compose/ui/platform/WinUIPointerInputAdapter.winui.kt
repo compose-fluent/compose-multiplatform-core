@@ -26,7 +26,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.areAnyPressed
 import androidx.compose.ui.node.WinUIOwner
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
-import io.github.composefluent.winrt.runtime.WinRtEvent
+import io.github.composefluent.winrt.runtime.WinRTEvent
 import microsoft.ui.input.PointerDeviceType
 import microsoft.ui.input.PointerPoint
 import microsoft.ui.input.PointerUpdateKind
@@ -65,7 +65,7 @@ internal class WinUIPointerInputAdapter(
 
     private fun register(
         eventType: PointerEventType,
-        event: WinRtEvent<PointerEventHandler>,
+        event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
         val handler = PointerEventHandler { sender, args ->
             if (!isDisposed) {
@@ -114,7 +114,7 @@ internal class WinUIPointerInputAdapter(
     }
 
     private fun registerCancel(
-        event: WinRtEvent<PointerEventHandler>,
+        event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
         val handler = PointerEventHandler { sender, args ->
             if (!isDisposed) {
@@ -129,7 +129,7 @@ internal class WinUIPointerInputAdapter(
     }
 
     private fun registerCaptureLost(
-        event: WinRtEvent<PointerEventHandler>,
+        event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
         val handler = PointerEventHandler { sender, args ->
             debugPointerInput {
@@ -291,7 +291,7 @@ internal fun winUIPositionToComposeOffset(
 }
 
 private data class WinUIPointerEventRegistration(
-    val event: WinRtEvent<PointerEventHandler>,
+    val event: WinRTEvent<PointerEventHandler>,
     val token: EventRegistrationToken,
     val handler: PointerEventHandler,
 )
