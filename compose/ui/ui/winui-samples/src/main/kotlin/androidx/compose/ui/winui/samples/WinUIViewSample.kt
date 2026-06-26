@@ -133,6 +133,7 @@ import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
+import androidx.compose.foundation.text.BasicText
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.Guid
 import io.github.composefluent.winrt.runtime.IInspectableReference
@@ -3189,8 +3190,8 @@ private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
                 modifier = Modifier.drawBehind {
                     drawRect(
                         color = Color(0xFF2563EB),
-                        topLeft = Offset(32f, 32f),
-                        size = androidx.compose.ui.geometry.Size(96f, 56f),
+                        topLeft = Offset.Zero,
+                        size = androidx.compose.ui.geometry.Size(128f, 48f),
                     )
                 },
             ) { _, _ ->
@@ -3198,22 +3199,12 @@ private fun RunWindowPopupSmoke(applicationScope: ApplicationScope) {
             }
             if (!popupClosed) {
                 Popup {
-                    Layout(
-                        content = {},
-                        modifier = Modifier
-                            .onPlaced {
-                                popupMeasured = true
-                            }
-                            .drawBehind {
-                                drawRect(Color(0x80005BFF))
-                                drawRect(
-                                    color = Color(0xFF003EA8),
-                                    style = Stroke(width = 2f),
-                                )
-                            },
-                    ) { _, _ ->
-                        layout(168, 72) {}
-                    }
+                    BasicText(
+                        text = "Popup",
+                        modifier = Modifier.onPlaced {
+                            popupMeasured = true
+                        },
+                    )
                 }
             }
         }

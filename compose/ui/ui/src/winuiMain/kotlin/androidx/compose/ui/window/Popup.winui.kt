@@ -44,9 +44,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
+import io.github.composefluent.winrt.runtime.DynamicWindowsRuntimeCast
 import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import io.github.composefluent.winrt.runtime.WinRtTypeHandle
+import io.github.composefluent.winrt.runtime.winrtAs
 import microsoft.ui.xaml.FrameworkElement
+import microsoft.ui.xaml.CornerRadius
 import microsoft.ui.xaml.RoutedEventHandler
+import microsoft.ui.xaml.Setter
+import microsoft.ui.xaml.Style
+import microsoft.ui.xaml.Thickness
+import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.controls.Control
 import microsoft.ui.xaml.controls.Flyout
 import microsoft.ui.xaml.controls.FlyoutPresenter
@@ -55,6 +63,7 @@ import microsoft.ui.xaml.controls.primitives.FlyoutPlacementMode
 import microsoft.ui.xaml.controls.primitives.FlyoutShowMode
 import microsoft.ui.xaml.controls.primitives.FlyoutShowOptions
 import microsoft.ui.xaml.media.SolidColorBrush
+import microsoft.ui.xaml.Application as XamlApplication
 import windows.foundation.Point
 import windows.ui.Color
 import microsoft.ui.xaml.Window as XamlWindow
@@ -324,6 +333,7 @@ private class WinUIFlyoutPopupHost(
         flyout.placement = FlyoutPlacementMode.BottomEdgeAlignedLeft
         flyout.showMode = FlyoutShowMode.Transient
         flyout.systemBackdrop = transparentBackdrop
+        flyout.flyoutPresenterStyle = createTransparentFlyoutPresenterStyle()
         closedToken = flyout.closed.add { _, _ ->
             isOpen = false
         }
@@ -486,11 +496,61 @@ internal class TransparentComposeFlyout(
     override fun createPresenter(): Control {
         return FlyoutPresenter().also { presenter ->
             presenter.isDefaultShadowEnabled = false
+            presenter.useSystemFocusVisuals = false
+            presenter.minWidth = 0.0
+            presenter.minHeight = 0.0
+            presenter.padding = Thickness(0.0, 0.0, 0.0, 0.0)
+            presenter.cornerRadius = CornerRadius(0.0, 0.0, 0.0, 0.0)
             presenter.background = TransparentBrush()
+            presenter.borderBrush = TransparentBrush()
+            presenter.borderThickness = Thickness(0.0, 0.0, 0.0, 0.0)
             presenter.content = popupContent
         }
     }
 }
+
+private fun createTransparentFlyoutPresenterStyle(): Style =
+    Style().also { style ->
+        style.basedOn = XamlApplication.current
+            ?.resources
+            ?.get("DefaultFlyoutPresenterStyle")
+            .asWinRtStyle()
+        Control.backgroundProperty?.let { backgroundProperty ->
+            style.setters?.add(Setter(backgroundProperty, TransparentBrush()))
+        }
+        Control.borderBrushProperty?.let { borderBrushProperty ->
+            style.setters?.add(Setter(borderBrushProperty, TransparentBrush()))
+        }
+        Control.borderThicknessProperty?.let { borderThicknessProperty ->
+            style.setters?.add(Setter(borderThicknessProperty, Thickness(0.0, 0.0, 0.0, 0.0)))
+        }
+        Control.paddingProperty?.let { paddingProperty ->
+            style.setters?.add(Setter(paddingProperty, Thickness(0.0, 0.0, 0.0, 0.0)))
+        }
+        Control.cornerRadiusProperty?.let { cornerRadiusProperty ->
+            style.setters?.add(Setter(cornerRadiusProperty, CornerRadius(0.0, 0.0, 0.0, 0.0)))
+        }
+        FrameworkElement.minWidthProperty?.let { minWidthProperty ->
+            style.setters?.add(Setter(minWidthProperty, 0.0))
+        }
+        FrameworkElement.minHeightProperty?.let { minHeightProperty ->
+            style.setters?.add(Setter(minHeightProperty, 0.0))
+        }
+        UIElement.useSystemFocusVisualsProperty?.let { focusVisualProperty ->
+            style.setters?.add(Setter(focusVisualProperty, false))
+        }
+    }
+
+@DynamicWindowsRuntimeCast(type = Style::class)
+private fun Any?.asWinRtStyle(): Style? =
+    this?.let { style ->
+        runCatching {
+            Style::class.java.cast(style.winrtAs(styleTypeHandle))
+        }.getOrNull()
+    }
+
+private val styleTypeHandle =
+    WinRtTypeHandle(Style.TYPE_NAME, Style.DEFAULT_INTERFACE_IID)
 
 private fun Constraints.finiteMaxSizeOr(fallback: IntSize): IntSize =
     IntSize(

@@ -34,6 +34,7 @@ internal class WinUITransparentBackdrop(
         connectedTarget: ICompositionSupportsSystemBackdrop,
         xamlRoot: XamlRoot,
     ) {
+        super.onTargetConnected(connectedTarget, xamlRoot)
         isConnected = true
         val compositor = compositor ?: Compositor().also { compositor = it }
         connectedTarget.systemBackdrop = compositor.createColorBrush(
@@ -42,7 +43,6 @@ internal class WinUITransparentBackdrop(
         if (enableWindowTransparentBackdrop) {
             setWindowTransparentBackdrop(window, xamlRoot, enabled = true)
         }
-        super.onTargetConnected(connectedTarget, xamlRoot)
     }
 
     override fun onTargetDisconnected(disconnectedTarget: ICompositionSupportsSystemBackdrop) {

@@ -138,6 +138,7 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Windowing.OverlappedPresenter")
         type("Microsoft.UI.Xaml.Application")
         type("Microsoft.UI.Xaml.Automation.AccessibilityView")
+        type("Microsoft.UI.Xaml.CornerRadius")
         type("Microsoft.UI.Xaml.FrameworkElement")
         type("Microsoft.UI.Xaml.LaunchActivatedEventArgs")
         type("Microsoft.UI.Xaml.ResourceDictionary")
