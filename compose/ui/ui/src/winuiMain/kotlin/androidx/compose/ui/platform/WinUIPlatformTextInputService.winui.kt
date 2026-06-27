@@ -406,3 +406,9 @@ internal data class WinUITextLayoutBounds(
     val innerTextFieldBounds: Rect,
     val decorationBoxBounds: Rect,
 )
+
+internal val WinUITextLayoutBounds.hasUsableBounds: Boolean
+    get() = innerTextFieldBounds.width > 0f &&
+        innerTextFieldBounds.height > 0f &&
+        decorationBoxBounds.width > 0f &&
+        decorationBoxBounds.height > 0f

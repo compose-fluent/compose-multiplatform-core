@@ -298,6 +298,12 @@ class WinUIPlatformTextInputServiceTest {
         assertEquals(CoreTextInputScope.Default, editContext.inputScope)
         assertEquals(CoreTextInputPaneDisplayPolicy.Automatic, editContext.inputPaneDisplayPolicy)
         assertFalse(editContext.didNotifyFocusEnter)
+        assertEquals(1, editContext.textChanges.size)
+        editContext.textChanges.single().let { initialChange ->
+            assertCoreTextRangeEquals(CoreTextRange(0, 0), initialChange.modifiedRange)
+            assertEquals(5, initialChange.newLength)
+            assertCoreTextRangeEquals(CoreTextRange(1, 4), initialChange.newSelection)
+        }
 
         val textRequest = FakeCoreTextTextRequest(CoreTextRange(1, 4))
         editContext.dispatchTextRequested(textRequest)
@@ -417,6 +423,7 @@ class WinUIPlatformTextInputServiceTest {
         )
         assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
 
+        editContext.textChanges.clear()
         WinUIPlatformTextInputService.updateState(
             oldValue = TextFieldValue("hello", selection = TextRange(1)),
             newValue = TextFieldValue("heLlo", selection = TextRange(3)),
@@ -478,6 +485,37 @@ class WinUIPlatformTextInputServiceTest {
         assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.controlBounds)
         assertEquals(Rect(21f, 32f, 31f, 42f), layoutRequest.visualPixelsTextBounds)
         assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.visualPixelsControlBounds)
+    }
+
+    @Test
+    fun coreTextLayoutRequestSkipsZeroSizedBounds() {
+        val bridge = WinUIPlatformTextInputService.nativeBridge
+        val editContext = FakeCoreTextEditContext()
+
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("hello"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
+
+        WinUIPlatformTextInputService.updateTextLayoutResult(
+            textFieldValue = TextFieldValue("hello"),
+            offsetMapping = OffsetMapping.Identity,
+            textLayoutResult = testTextLayoutResult("hello"),
+            textFieldToRootTransform = {},
+            innerTextFieldBounds = Rect.Zero,
+            decorationBoxBounds = Rect.Zero,
+        )
+
+        val layoutRequest = FakeCoreTextLayoutRequest()
+        editContext.dispatchLayoutRequested(layoutRequest)
+
+        assertEquals(null, layoutRequest.textBounds)
+        assertEquals(null, layoutRequest.controlBounds)
+        assertEquals(null, layoutRequest.visualPixelsTextBounds)
+        assertEquals(null, layoutRequest.visualPixelsControlBounds)
     }
 
     @Test

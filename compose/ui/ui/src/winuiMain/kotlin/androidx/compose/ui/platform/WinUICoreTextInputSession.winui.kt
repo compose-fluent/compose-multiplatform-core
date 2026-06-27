@@ -59,6 +59,7 @@ internal class WinUICoreTextInputSession private constructor(
         editContext.inputScope = imeOptions.toCoreTextInputScope()
         editContext.inputPaneDisplayPolicy = CoreTextInputPaneDisplayPolicy.Automatic
         registerEventHandlers()
+        notifyInitialTextState()
     }
 
     fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
@@ -95,14 +96,21 @@ internal class WinUICoreTextInputSession private constructor(
 
     private fun registerEventHandlers() {
         eventTokens += editContext.addTextRequested { request ->
-            request.text = value.text.sliceCoreTextRange(request.range)
+            val range = request.range
+            request.text = value.text.sliceCoreTextRange(
+                range.startCaretPosition,
+                range.endCaretPosition,
+            )
         }
         eventTokens += editContext.addSelectionRequested { request ->
             request.selection = value.selection.toCoreTextRange()
         }
         eventTokens += editContext.addLayoutRequested { request ->
             if (!request.isCanceled) {
-                currentLayoutBounds()?.let(request::setLayoutBounds)
+                val bounds = currentLayoutBounds()
+                if (bounds != null && bounds.hasUsableBounds) {
+                    request.setLayoutBounds(bounds)
+                }
             }
         }
         eventTokens += editContext.addTextUpdating { event ->
@@ -154,6 +162,17 @@ internal class WinUICoreTextInputSession private constructor(
             compositionActive = false
             dispatchEditCommands(listOf(FinishComposingTextCommand()))
         }
+    }
+
+    private fun notifyInitialTextState() {
+        if (value.text.isEmpty() && value.selection.start == value.selection.end) {
+            return
+        }
+        editContext.notifyTextChanged(
+            modifiedRange = CoreTextRange(0, 0),
+            newLength = value.text.length,
+            newSelection = value.selection.toCoreTextRange(),
+        )
     }
 
     internal companion object {
@@ -451,9 +470,9 @@ private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextL
 private fun androidx.compose.ui.geometry.Rect.toWinRTRect(): WinRTRect =
     WinRTRect(left, top, width, height)
 
-private fun String.sliceCoreTextRange(range: CoreTextRange): String {
-    val start = range.startCaretPosition.coerceIn(0, length)
-    val end = range.endCaretPosition.coerceIn(start, length)
+private fun String.sliceCoreTextRange(startCaretPosition: Int, endCaretPosition: Int): String {
+    val start = startCaretPosition.coerceIn(0, length)
+    val end = endCaretPosition.coerceIn(start, length)
     return substring(start, end)
 }
 
