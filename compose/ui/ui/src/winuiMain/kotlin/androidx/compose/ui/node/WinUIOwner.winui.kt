@@ -225,7 +225,7 @@ internal class WinUIOwner(
         get() = measureAndLayoutDelegate.duringMeasureLayout
     override val viewConfiguration: ViewConfiguration = WinUIViewConfiguration
 
-    @InternalCoreApi
+    @InternalComposeUiApi
     override var showLayoutBounds: Boolean = false
 
     init {
@@ -621,7 +621,7 @@ internal class WinUIOwner(
         coordinateMapper.localToScreen(localTransform)
     }
 
-    @OptIn(InternalCoreApi::class)
+    @OptIn(InternalComposeUiApi::class)
     fun sendPointerEventForTest(
         eventType: PointerEventType,
         position: Offset,
@@ -791,7 +791,7 @@ internal data class WinUIOwnerStateForTest(
     val lastMousePointerEvent: WinUIPointerEvent?,
 )
 
-@OptIn(InternalCoreApi::class)
+@OptIn(InternalComposeUiApi::class)
 private class WinUIPointerEventSender(
     private val dispatch: (PointerInputEvent) -> Boolean,
 ) {

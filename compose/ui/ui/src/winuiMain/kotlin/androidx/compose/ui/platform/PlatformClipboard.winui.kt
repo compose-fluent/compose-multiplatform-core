@@ -49,6 +49,7 @@ internal class WinUIClipboardManager(
         clipboard.setClipEntryBlocking(clipEntry)
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override val nativeClipboard: NativeClipboard
         get() = winUIClipboardStatics
 }
@@ -61,6 +62,7 @@ internal class WinUIClipboard : Clipboard {
         setClipEntryBlocking(clipEntry)
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override val nativeClipboard: NativeClipboard
         get() = winUIClipboardStatics
 
@@ -142,7 +144,7 @@ internal class WinUIClipboard : Clipboard {
             }
             else -> return
         }
-        if (clipEntry?.nativeClipEntry !is String) {
+        if (clipEntry.nativeClipEntry !is String) {
             lastPlainText = null
         }
         runCatching { setWinUIContent(dataPackage) }

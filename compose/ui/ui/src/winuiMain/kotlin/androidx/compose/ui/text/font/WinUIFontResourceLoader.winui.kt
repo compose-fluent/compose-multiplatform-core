@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+
 /*
  * Copyright 2026 The Android Open Source Project
  *
@@ -16,7 +18,6 @@
 
 package androidx.compose.ui.text.font
 
-@Suppress("DEPRECATION")
 internal object WinUIFontResourceLoader : Font.ResourceLoader {
     override fun load(font: Font): Any = Any()
 }

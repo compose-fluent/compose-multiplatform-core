@@ -366,8 +366,7 @@ private fun SemanticsConfiguration.accessibilityValue(): String? =
         getOrNull(SemanticsProperties.Text)?.joinToString(separator = "\n") { it.text }
 
 private fun SemanticsConfiguration.isHiddenFromAccessibility(): Boolean =
-    contains(SemanticsProperties.HideFromAccessibility) ||
-        contains(SemanticsProperties.InvisibleToUser)
+    contains(SemanticsProperties.HideFromAccessibility)
 
 private fun SemanticsConfiguration.hasKey(key: SemanticsPropertyKey<*>): Boolean =
     any { it.key == key }

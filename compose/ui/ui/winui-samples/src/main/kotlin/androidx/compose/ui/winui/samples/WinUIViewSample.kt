@@ -80,7 +80,6 @@ import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -298,15 +297,6 @@ private fun ValidateWinUIFillableData() {
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun ValidateWinUIClipboard() {
-    val clipboardManager = LocalClipboardManager.current
-    if (!WinUIClipboardSmokeState.managerPassed) {
-        clipboardManager.setText(AnnotatedString("compose-winui clipboard manager"))
-        val clipboardManagerText = clipboardManager.getText()?.text
-        check(clipboardManagerText == "compose-winui clipboard manager") {
-            "WinUI LocalClipboardManager did not round-trip text: actual=$clipboardManagerText."
-        }
-        WinUIClipboardSmokeState.managerPassed = true
-    }
     val clipboard = LocalClipboard.current
     if (!WinUIClipboardSmokeState.clipboardPassed) {
         LaunchedEffect(clipboard) {
@@ -324,7 +314,6 @@ private fun ValidateWinUIClipboard() {
 }
 
 private object WinUIClipboardSmokeState {
-    var managerPassed: Boolean = false
     var clipboardPassed: Boolean = false
 }
 

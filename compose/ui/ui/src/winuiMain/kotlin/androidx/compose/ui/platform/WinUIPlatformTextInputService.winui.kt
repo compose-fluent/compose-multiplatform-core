@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 
+@Suppress("DEPRECATION")
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputSession: WinUITextInputSessionState? = null
     private var activeInputMethodSession: WinUITextInputMethodSessionState? = null

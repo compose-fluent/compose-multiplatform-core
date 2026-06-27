@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 /*
  * Copyright 2026 The Android Open Source Project
  *
@@ -36,7 +38,7 @@ internal class WinUIRootForTest(
 ) : RootForTest {
     override val density: Density get() = densityProvider()
     override val semanticsOwner: SemanticsOwner get() = semanticsOwnerProvider()
-    @Suppress("DEPRECATION")
+    @Suppress("OVERRIDE_DEPRECATION")
     override val textInputService: TextInputService get() = textInputServiceProvider()
 
     override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = sendKeyEvent.invoke(keyEvent)
