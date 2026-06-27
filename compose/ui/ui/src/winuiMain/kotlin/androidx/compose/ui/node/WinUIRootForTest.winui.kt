@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION")
-
 /*
  * Copyright 2026 The Android Open Source Project
  *
@@ -27,6 +25,7 @@ import androidx.compose.ui.unit.Density
 internal class WinUIRootForTest(
     private val densityProvider: () -> Density,
     private val semanticsOwnerProvider: () -> SemanticsOwner,
+    @Suppress("DEPRECATION")
     private val textInputServiceProvider: () -> TextInputService,
     private val sendKeyEvent: (KeyEvent) -> Boolean,
     private val sendIndirectPointerEvent: (IndirectPointerEvent) -> Boolean,
@@ -38,7 +37,7 @@ internal class WinUIRootForTest(
 ) : RootForTest {
     override val density: Density get() = densityProvider()
     override val semanticsOwner: SemanticsOwner get() = semanticsOwnerProvider()
-    @Suppress("OVERRIDE_DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override val textInputService: TextInputService get() = textInputServiceProvider()
 
     override fun sendKeyEvent(keyEvent: KeyEvent): Boolean = sendKeyEvent.invoke(keyEvent)

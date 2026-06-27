@@ -553,6 +553,48 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun startInputMethodUsesPlatformTextInputMethodRequestAsPrimarySession() = runTest {
+        val editCommandBatches = mutableListOf<List<EditCommand>>()
+        val imeActions = mutableListOf<ImeAction>()
+        val request = TestPlatformTextInputMethodRequest(
+            textValue = TextFieldValue("request text"),
+            imeOptions = ImeOptions.Default.copy(imeAction = ImeAction.Search),
+            onEditCommand = { editCommandBatches += it },
+            onImeAction = { imeActions += it },
+            focusedRectInRoot = { Rect(1f, 2f, 3f, 4f) },
+            textFieldRectInRoot = { Rect(0f, 1f, 4f, 5f) },
+        )
+        val session = WinUIPlatformTextInputSession(this)
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(request)
+        }
+
+        assertEquals(TextFieldValue("request text"), WinUIPlatformTextInputService.currentValue)
+        assertEquals(
+            ImeOptions.Default.copy(imeAction = ImeAction.Search),
+            WinUIPlatformTextInputService.currentImeOptions,
+        )
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(1f, 2f, 3f, 4f),
+                decorationBoxBounds = Rect(0f, 1f, 4f, 5f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
+        )
+
+        assertTrue(WinUIPlatformTextInputService.commitText("new"))
+        assertTrue(WinUIPlatformTextInputService.performImeAction(ImeAction.Search))
+
+        assertEquals(1, editCommandBatches.size)
+        assertEquals(listOf(CommitTextCommand("new", 1)), editCommandBatches.single())
+        assertEquals(listOf(ImeAction.Search), imeActions)
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun startInputMethodCancelsPreviousRequestBeforeStartingNext() = runTest {
         val session = WinUIPlatformTextInputSession(this)
         val firstRequest = TestPlatformTextInputMethodRequest()
@@ -581,9 +623,15 @@ class WinUIPlatformTextInputServiceTest {
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodRequest {
-    private val textValue = TextFieldValue("")
-
+private class TestPlatformTextInputMethodRequest(
+    private val textValue: TextFieldValue = TextFieldValue(""),
+    override val imeOptions: ImeOptions = ImeOptions.Default,
+    override val onEditCommand: (List<EditCommand>) -> Unit = {},
+    override val onImeAction: ((ImeAction) -> Unit)? = null,
+    override val focusedRectInRoot: () -> Rect? = { null },
+    override val textFieldRectInRoot: () -> Rect? = { null },
+    override val textClippingRectInRoot: () -> Rect? = { null },
+) : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = { textValue }
     override val state: TextEditorState = object : TextEditorState {
         override val text: String = ""
@@ -594,13 +642,7 @@ private class TestPlatformTextInputMethodRequest : PlatformTextInputMethodReques
         override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = ""
         override fun toString(): String = ""
     }
-    override val imeOptions: ImeOptions = ImeOptions.Default
-    override val onEditCommand: (List<EditCommand>) -> Unit = {}
-    override val onImeAction: ((ImeAction) -> Unit)? = null
     override val textLayoutResult: () -> TextLayoutResult? = { null }
-    override val focusedRectInRoot: () -> Rect? = { null }
-    override val textFieldRectInRoot: () -> Rect? = { null }
-    override val textClippingRectInRoot: () -> Rect? = { null }
     override val unclippedTextOffsetInRoot: () -> Offset? = { null }
     override val editText: (TextEditingScope.() -> Unit) -> Unit = {}
 }

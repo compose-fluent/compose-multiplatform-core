@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.text.TextLayoutResult
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Suppress("DEPRECATION")
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputSession: WinUITextInputSessionState? = null
@@ -50,13 +52,14 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             activeInputMethodSession?.isSoftwareKeyboardVisible == true
 
     internal val isNativeTextInputFocused: Boolean
-        get() = activeInputSession?.isNativeTextInputFocused == true
+        get() = activeInputSession?.isNativeTextInputFocused == true ||
+            activeInputMethodSession?.isNativeTextInputFocused == true
 
     internal val currentValue: TextFieldValue?
-        get() = activeInputSession?.value
+        get() = activeInputSession?.value ?: activeInputMethodSession?.request?.value?.invoke()
 
     internal val currentImeOptions: ImeOptions?
-        get() = activeInputSession?.imeOptions
+        get() = activeInputSession?.imeOptions ?: activeInputMethodSession?.request?.imeOptions
 
     internal val previousValue: TextFieldValue?
         get() = activeInputSession?.oldValue
@@ -66,6 +69,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     internal val currentTextLayoutBoundsInRoot: WinUITextLayoutBounds?
         get() = activeInputSession?.textLayoutBoundsInRoot
+            ?: activeInputMethodSession?.request?.textLayoutBoundsInRoot()
 
     override fun startInput(
         value: TextFieldValue,
@@ -134,24 +138,46 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     internal fun enterNativeTextInputFocus(): Boolean {
-        val session = activeInputSession ?: return false
-        activeInputSession = session.copy(isNativeTextInputFocused = true)
-        return true
+        val inputSession = activeInputSession
+        if (inputSession != null) {
+            activeInputSession = inputSession.copy(isNativeTextInputFocused = true)
+            return true
+        }
+        val inputMethodSession = activeInputMethodSession
+        if (inputMethodSession != null) {
+            activeInputMethodSession = inputMethodSession.copy(isNativeTextInputFocused = true)
+            return true
+        }
+        return false
     }
 
     internal fun exitNativeTextInputFocus(): Boolean {
-        val session = activeInputSession ?: return false
-        activeInputSession = session.copy(
-            isNativeTextInputFocused = false,
-            isSoftwareKeyboardVisible = false,
-        )
-        return true
+        val inputSession = activeInputSession
+        if (inputSession != null) {
+            activeInputSession = inputSession.copy(
+                isNativeTextInputFocused = false,
+                isSoftwareKeyboardVisible = false,
+            )
+            return true
+        }
+        val inputMethodSession = activeInputMethodSession
+        if (inputMethodSession != null) {
+            activeInputMethodSession = inputMethodSession.copy(
+                isNativeTextInputFocused = false,
+                isSoftwareKeyboardVisible = false,
+            )
+            return true
+        }
+        return false
     }
 
     internal fun sendEditCommands(commands: List<EditCommand>): Boolean {
-        val session = activeInputSession ?: return false
-        session.onEditCommand(commands)
-        return true
+        activeInputSession?.let { session ->
+            session.onEditCommand(commands)
+            return true
+        }
+        activeInputMethodSession?.request?.onEditCommand?.invoke(commands)
+        return activeInputMethodSession != null
     }
 
     internal fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
@@ -178,8 +204,12 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         sendEditCommands(listOf(BackspaceCommand()))
 
     internal fun performImeAction(action: ImeAction): Boolean {
-        val session = activeInputSession ?: return false
-        session.onImeActionPerformed(action)
+        activeInputSession?.let { session ->
+            session.onImeActionPerformed(action)
+            return true
+        }
+        val onImeAction = activeInputMethodSession?.request?.onImeAction ?: return false
+        onImeAction(action)
         return true
     }
 
@@ -190,16 +220,34 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     internal fun startInputMethod(request: PlatformTextInputMethodRequest) {
+        nativeBridge.disposeCoreTextSession()
         activeInputMethodSession = WinUITextInputMethodSessionState(
             request = request,
             isSoftwareKeyboardVisible = true,
         )
+        nativeBridge.attachCoreTextForCurrentInputIfAvailable()
     }
 
     internal fun stopInputMethod(request: PlatformTextInputMethodRequest) {
         if (activeInputMethodSession?.request === request) {
+            nativeBridge.disposeCoreTextSession()
             activeInputMethodSession = null
         }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private fun PlatformTextInputMethodRequest.textLayoutBoundsInRoot(): WinUITextLayoutBounds? {
+    val textFieldBounds = textFieldRectInRoot()
+    val innerBounds = focusedRectInRoot() ?: textClippingRectInRoot() ?: textFieldBounds
+    val decorationBounds = textFieldBounds ?: textClippingRectInRoot() ?: innerBounds
+    return if (innerBounds != null && decorationBounds != null) {
+        WinUITextLayoutBounds(
+            innerTextFieldBounds = innerBounds,
+            decorationBoxBounds = decorationBounds,
+        )
+    } else {
+        null
     }
 }
 
@@ -351,6 +399,7 @@ private data class WinUITextInputSessionState(
 private data class WinUITextInputMethodSessionState(
     val request: PlatformTextInputMethodRequest,
     val isSoftwareKeyboardVisible: Boolean,
+    val isNativeTextInputFocused: Boolean = false,
 )
 
 internal data class WinUITextLayoutBounds(
