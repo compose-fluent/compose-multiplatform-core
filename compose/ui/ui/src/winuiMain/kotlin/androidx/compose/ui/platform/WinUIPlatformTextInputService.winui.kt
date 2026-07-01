@@ -100,6 +100,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             "startInput legacy value=${value.debugString()} imeOptions=${imeOptions.debugString()}"
         }
         nativeBridge.disposeCoreTextSession()
+        nativeBridge.resetWindowsImeInput()
         activeInputSession = WinUITextInputSessionState(
             value = value,
             imeOptions = imeOptions,
@@ -112,6 +113,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     override fun stopInput() {
         debugTextInput { "stopInput legacy active=${activeInputSession != null}" }
         nativeBridge.disposeCoreTextSession()
+        nativeBridge.resetWindowsImeInput()
         activeInputSession = null
     }
 
@@ -259,6 +261,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     internal fun resetForTest() {
         nativeBridge.disposeCoreTextSession()
+        nativeBridge.resetWindowsImeInput()
         activeInputSession = null
         activeInputMethodSession = null
         unregisterRootToScreenMapper(rootToScreenMapperOwner)
@@ -300,6 +303,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     internal fun startInputMethod(request: PlatformTextInputMethodRequest) {
         nativeBridge.disposeCoreTextSession()
+        nativeBridge.resetWindowsImeInput()
         val textLayoutBoundsInRoot = request.textLayoutBoundsInRoot()
         val value = request.value()
         debugTextInput {
@@ -374,6 +378,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         if (activeInputMethodSession?.request === request) {
             debugTextInput { "stopInputMethod request=${request.debugIdentity()}" }
             nativeBridge.disposeCoreTextSession()
+            nativeBridge.resetWindowsImeInput()
             activeInputMethodSession = null
         }
     }
@@ -438,6 +443,8 @@ internal class WinUINativeTextInputBridge(
     private val textInputService: WinUIPlatformTextInputService,
 ) {
     private var coreTextSession: WinUICoreTextInputSession? = null
+    private val windowsImeInputProcessor =
+        WinUIWindowsImeInputProcessor(textInputService::sendEditCommands)
 
     val isFocused: Boolean
         get() = textInputService.isNativeTextInputFocused
@@ -603,6 +610,37 @@ internal class WinUINativeTextInputBridge(
     fun performImeAction(action: ImeAction): Boolean =
         textInputService.performImeAction(action)
 
+    fun onWindowsImeStartComposition() {
+        debugTextInput { "Windows IME startComposition" }
+        windowsImeInputProcessor.onImeStartComposition()
+    }
+
+    fun onWindowsImeComposition(
+        composingText: String,
+        resultText: String,
+    ): Boolean {
+        debugTextInput {
+            "Windows IME composition composing=${composingText.debugForLog()} " +
+                "result=${resultText.debugForLog()}"
+        }
+        return windowsImeInputProcessor.onImeComposition(
+            composingText = composingText,
+            resultText = resultText,
+        )
+    }
+
+    fun onWindowsImeEndComposition(): Boolean {
+        debugTextInput { "Windows IME endComposition" }
+        return windowsImeInputProcessor.onImeEndComposition()
+    }
+
+    fun shouldSuppressCharacterFallback(text: String): Boolean =
+        windowsImeInputProcessor.shouldSuppressCharacterFallback(text)
+
+    fun resetWindowsImeInput() {
+        windowsImeInputProcessor.reset()
+    }
+
     private fun isCoreTextExplicitlyEnabled(): Boolean {
         if (winUISystemBooleanProperty(CoreTextInputDisabledProperty)) {
             debugTextInput { "CoreText attach skipped: disabled by system property" }
@@ -664,7 +702,7 @@ internal val WinUITextLayoutBounds.hasUsableBounds: Boolean
 
 private inline fun debugTextInput(message: () -> String) {
     if (winUISystemBooleanProperty("compose.winui.textInput.debug")) {
-        println("[compose-winui:text-input] ${message()}")
+        winUIDebugLog("text-input", message())
     }
 }
 

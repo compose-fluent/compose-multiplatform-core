@@ -301,6 +301,10 @@ class WinUIComposeView internal constructor(
         composeEventSources = { listOf(root) },
         composeEventSubtreeSources = { listOf(renderHost.component) },
     )
+    private val windowsImeTextInputBackend = createWinUIWindowsImeTextInputBackend(
+        window = window,
+        bridge = WinUIPlatformTextInputService.nativeBridge,
+    )
     private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner)
 
@@ -368,6 +372,7 @@ class WinUIComposeView internal constructor(
         isDisposed = true
         disposeComposition()
         keyInputAdapter.dispose()
+        windowsImeTextInputBackend.dispose()
         pointerInputAdapter.dispose()
         dragAndDropAdapter.dispose()
         pointerCursorAdapter.dispose()

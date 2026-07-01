@@ -16,5 +16,27 @@
 
 package androidx.compose.ui.platform
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+
 internal actual fun winUISystemBooleanProperty(name: String): Boolean =
     System.getProperty(name)?.toBooleanStrictOrNull() ?: false
+
+internal actual fun winUIDebugLog(
+    tag: String,
+    message: String,
+) {
+    val line = "[compose-winui:$tag] $message"
+    println(line)
+
+    val logFile = System.getProperty("compose.winui.debug.logFile") ?: return
+    runCatching {
+        Files.writeString(
+            Path.of(logFile),
+            line + System.lineSeparator(),
+            StandardOpenOption.CREATE,
+            StandardOpenOption.APPEND,
+        )
+    }
+}

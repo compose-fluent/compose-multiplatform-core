@@ -146,6 +146,9 @@ internal class WinUIKeyInputAdapter(
                             isHandled = handledBefore,
                             isCoreTextInputActive = coreTextActive,
                             isCoreTextCompositionActive = coreTextComposing,
+                            shouldSuppressCharacterFallback =
+                                WinUIPlatformTextInputService.nativeBridge
+                                    ::shouldSuppressCharacterFallback,
                             commitText = WinUIPlatformTextInputService::commitText,
                         ).also { handled ->
                             debugKeyInput {
@@ -214,6 +217,7 @@ internal class WinUICharacterInputProcessor {
         isHandled: Boolean,
         isCoreTextInputActive: Boolean = false,
         isCoreTextCompositionActive: Boolean = false,
+        shouldSuppressCharacterFallback: (String) -> Boolean = { false },
         commitText: (String) -> Boolean,
     ): Boolean? {
         if (isHandled) return null
@@ -223,6 +227,10 @@ internal class WinUICharacterInputProcessor {
             return null
         }
         if (isCoreTextInputActive && isCoreTextCompositionActive) {
+            skipNextCharacter = false
+            return true
+        }
+        if (shouldSuppressCharacterFallback(text)) {
             skipNextCharacter = false
             return true
         }
@@ -295,7 +303,7 @@ internal fun <T : Any> isComposeKeyEventSubtreeSource(
 
 private inline fun debugKeyInput(message: () -> String) {
     if (winUISystemBooleanProperty("compose.winui.keyInput.debug")) {
-        println("[compose-winui:key] ${message()}")
+        winUIDebugLog("key", message())
     }
 }
 

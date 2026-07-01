@@ -807,6 +807,6 @@ private inline fun runRealCoreTextCallback(
 
 private inline fun debugCoreTextInput(message: () -> String) {
     if (winUISystemBooleanProperty("compose.winui.textInput.debug")) {
-        println("[compose-winui:core-text] ${message()}")
+        winUIDebugLog("core-text", message())
     }
 }

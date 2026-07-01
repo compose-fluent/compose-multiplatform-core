@@ -16,9 +16,17 @@
 
 package androidx.compose.ui.platform
 
-internal expect fun winUISystemBooleanProperty(name: String): Boolean
+import microsoft.ui.xaml.Window
 
-internal expect fun winUIDebugLog(
-    tag: String,
-    message: String,
-)
+internal interface WinUIWindowsImeTextInputBackend {
+    fun dispose()
+}
+
+internal object WinUINoOpWindowsImeTextInputBackend : WinUIWindowsImeTextInputBackend {
+    override fun dispose() = Unit
+}
+
+internal expect fun createWinUIWindowsImeTextInputBackend(
+    window: Window?,
+    bridge: WinUINativeTextInputBridge,
+): WinUIWindowsImeTextInputBackend

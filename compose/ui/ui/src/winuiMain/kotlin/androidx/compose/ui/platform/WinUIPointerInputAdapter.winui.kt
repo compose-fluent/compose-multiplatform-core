@@ -218,7 +218,7 @@ private val IsPointerInputDebugEnabled: Boolean by lazy {
 
 private inline fun debugPointerInput(message: () -> String) {
     if (IsPointerInputDebugEnabled) {
-        println("[compose-winui:pointer] ${message()}")
+        winUIDebugLog("pointer", message())
     }
 }
 
