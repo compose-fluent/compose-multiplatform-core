@@ -131,6 +131,27 @@ if (composeWinUiGradlePluginAvailable) {
         type("Windows.System.Launcher")
         type("Windows.System.VirtualKey")
         type("Windows.System.VirtualKeyModifiers")
+        type("Windows.UI.Text.Core.CoreTextCompositionCompletedEventArgs")
+        type("Windows.UI.Text.Core.CoreTextCompositionSegment")
+        type("Windows.UI.Text.Core.CoreTextCompositionStartedEventArgs")
+        type("Windows.UI.Text.Core.CoreTextEditContext")
+        type("Windows.UI.Text.Core.CoreTextFormatUpdatingEventArgs")
+        type("Windows.UI.Text.Core.CoreTextFormatUpdatingResult")
+        type("Windows.UI.Text.Core.CoreTextInputPaneDisplayPolicy")
+        type("Windows.UI.Text.Core.CoreTextInputScope")
+        type("Windows.UI.Text.Core.CoreTextLayoutBounds")
+        type("Windows.UI.Text.Core.CoreTextLayoutRequest")
+        type("Windows.UI.Text.Core.CoreTextLayoutRequestedEventArgs")
+        type("Windows.UI.Text.Core.CoreTextRange")
+        type("Windows.UI.Text.Core.CoreTextSelectionRequest")
+        type("Windows.UI.Text.Core.CoreTextSelectionRequestedEventArgs")
+        type("Windows.UI.Text.Core.CoreTextSelectionUpdatingEventArgs")
+        type("Windows.UI.Text.Core.CoreTextSelectionUpdatingResult")
+        type("Windows.UI.Text.Core.CoreTextServicesManager")
+        type("Windows.UI.Text.Core.CoreTextTextRequest")
+        type("Windows.UI.Text.Core.CoreTextTextRequestedEventArgs")
+        type("Windows.UI.Text.Core.CoreTextTextUpdatingEventArgs")
+        type("Windows.UI.Text.Core.CoreTextTextUpdatingResult")
         type("Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop")
         type("Microsoft.UI.Content.ContentIslandEnvironment")
         type("Microsoft.UI.Input.InputSystemCursor")
@@ -164,6 +185,7 @@ if (composeWinUiGradlePluginAvailable) {
         type("Microsoft.UI.Xaml.Controls.TextBox")
         type("Microsoft.UI.Xaml.Controls.ToggleSwitch")
         type("Microsoft.UI.Xaml.Controls.XamlControlsResources")
+        type("Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs")
         type("Microsoft.UI.Xaml.Input.FocusManager")
         type("Microsoft.UI.Xaml.Input.KeyboardAccelerator")
         type("Microsoft.UI.Xaml.Interop.IBindableIterable")
@@ -608,6 +630,38 @@ if (composeWinUiGradlePluginAvailable) {
     tasks.named("generateWinRTProjections").configure {
         sourceRoots.setFrom(project.file("src/winuiMain/kotlin"))
         authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
+    }
+
+    def patchWinRtGeneratedKwinrt048 = tasks.register("patchWinRtGeneratedKwinrt048") {
+        dependsOn("generateWinRTProjections")
+        def controlsFile = layout.buildDirectory.file(
+                "generated/kotlin-winrt/src/commonMain/kotlin/microsoft/ui/xaml/controls/microsoft_ui_xaml_controls.kt"
+        )
+        inputs.file(controlsFile)
+        outputs.file(controlsFile)
+        doLast {
+            def file = controlsFile.get().asFile
+            if (!file.exists()) {
+                return
+            }
+            def source = file.getText("UTF-8")
+            def patched = source
+                    .replace(
+                            "override fun addPropertyChanged(handler: PropertyChangedEventHandler)",
+                            "override fun addPropertyChanged(handler: (Any?, microsoft.ui.xaml.`data`.PropertyChangedEventArgs?) -> Unit)"
+                    )
+                    .replace(
+                            "override fun removePropertyChanged(handler: PropertyChangedEventHandler)",
+                            "override fun removePropertyChanged(handler: (Any?, microsoft.ui.xaml.`data`.PropertyChangedEventArgs?) -> Unit)"
+                    )
+            if (patched != source) {
+                file.setText(patched, "UTF-8")
+            }
+        }
+    }
+
+    tasks.named("compileKotlinWinuiJvm").configure {
+        dependsOn(patchWinRtGeneratedKwinrt048)
     }
 
 }

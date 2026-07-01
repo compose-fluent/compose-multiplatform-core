@@ -19,7 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.Density
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.UIElement
@@ -114,7 +114,7 @@ internal class WinUITextToolbar(
         requests.forEach { request ->
             val item = MenuFlyoutItem()
             item.text = request.label
-            val handler = RoutedEventHandler { _, _ ->
+            val handler: RoutedEventHandler = { _, _ ->
                 request.callback()
                 hide()
             }

@@ -26,6 +26,7 @@ import windows.graphics.PointInt32
 internal class WinUICoordinateMapper(
     private val calculatePositionInWindow: (Offset) -> Offset = { it },
     private val calculateLocalPosition: (Offset) -> Offset = { it },
+    private val screenCoordinatesReady: () -> Boolean = { true },
     private val localToScreen: (Offset) -> Offset = { it },
     private val screenToLocal: (Offset) -> Offset = { it },
 ) {
@@ -36,10 +37,14 @@ internal class WinUICoordinateMapper(
         calculateLocalPosition.invoke(positionInWindow)
 
     fun localToScreen(localPosition: Offset): Offset =
-        localToScreen.invoke(localPosition)
+        if (screenCoordinatesReady()) {
+            localToScreen.invoke(localPosition)
+        } else {
+            calculatePositionInWindow.invoke(localPosition)
+        }
 
     fun screenToLocal(positionOnScreen: Offset): Offset =
-        screenToLocal.invoke(positionOnScreen)
+        if (screenCoordinatesReady()) screenToLocal.invoke(positionOnScreen) else positionOnScreen
 
     fun localToScreen(localTransform: Matrix) {
         val screenOrigin = localToScreen(Offset.Zero)
@@ -47,10 +52,14 @@ internal class WinUICoordinateMapper(
     }
 
     companion object {
-        fun forRoot(root: UIElement): WinUICoordinateMapper =
+        fun forRoot(
+            root: UIElement,
+            screenCoordinatesReady: () -> Boolean = { true },
+        ): WinUICoordinateMapper =
             WinUICoordinateMapper(
                 calculatePositionInWindow = { root.calculatePositionInWindow(it) },
                 calculateLocalPosition = { root.calculateLocalPosition(it) },
+                screenCoordinatesReady = screenCoordinatesReady,
                 localToScreen = { root.localToScreen(it) },
                 screenToLocal = { root.screenToLocal(it) },
             )

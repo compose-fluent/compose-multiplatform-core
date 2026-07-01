@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.EditCommand
@@ -24,7 +25,6 @@ import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
-import windows.foundation.TypedEventHandler
 import windows.foundation.Rect as WinRTRect
 import windows.ui.text.core.CoreTextEditContext
 import windows.ui.text.core.CoreTextFormatUpdatingEventArgs
@@ -34,12 +34,10 @@ import windows.ui.text.core.CoreTextInputScope
 import windows.ui.text.core.CoreTextLayoutRequest
 import windows.ui.text.core.CoreTextRange
 import windows.ui.text.core.CoreTextSelectionRequest
-import windows.ui.text.core.CoreTextSelectionRequestedEventArgs
 import windows.ui.text.core.CoreTextSelectionUpdatingEventArgs
 import windows.ui.text.core.CoreTextSelectionUpdatingResult
 import windows.ui.text.core.CoreTextServicesManager
 import windows.ui.text.core.CoreTextTextRequest
-import windows.ui.text.core.CoreTextTextRequestedEventArgs
 import windows.ui.text.core.CoreTextTextUpdatingEventArgs
 import windows.ui.text.core.CoreTextTextUpdatingResult
 
@@ -47,145 +45,312 @@ internal class WinUICoreTextInputSession private constructor(
     initialValue: TextFieldValue,
     imeOptions: ImeOptions,
     private val editContext: WinUICoreTextEditContext,
-    private val currentLayoutBounds: () -> WinUITextLayoutBounds?,
+    private val currentValue: () -> TextFieldValue?,
+    private val currentLayoutBounds: () -> WinUICoreTextLayoutSnapshot?,
     private val dispatchEditCommands: (List<EditCommand>) -> Boolean,
 ) {
     private val eventTokens = mutableListOf<WinUICoreTextEventToken>()
     private var value: TextFieldValue = initialValue
     private var compositionActive = false
+    private var coreTextUpdateDepth = 0
+    private var isDisposed = false
+    private var isFocused = false
+
+    val isCompositionActive: Boolean
+        get() = compositionActive
+
+    private val isHandlingCoreTextUpdate: Boolean
+        get() = coreTextUpdateDepth > 0
 
     init {
         editContext.name = "Compose WinUI text input"
         editContext.inputScope = imeOptions.toCoreTextInputScope()
         editContext.inputPaneDisplayPolicy = CoreTextInputPaneDisplayPolicy.Automatic
+        debugCoreTextInput {
+            "session init value=${initialValue.debugString()} " +
+                "imeOptions=${imeOptions.debugString()} inputScope=${editContext.inputScope}"
+        }
         registerEventHandlers()
-        notifyInitialTextState()
     }
 
     fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
+        if (isDisposed) return
         val previousValue = value
         value = newValue
 
+        if (isHandlingCoreTextUpdate) {
+            debugCoreTextInput {
+                "updateState skip native notification during CoreText update " +
+                    "old=${oldValue?.debugString()} new=${newValue.debugString()}"
+            }
+            return
+        }
+
         if (oldValue != null && oldValue.text != newValue.text) {
-            editContext.notifyTextChanged(
-                modifiedRange = commonChangedRange(oldValue.text, newValue.text),
-                newLength = newValue.text.length,
-                newSelection = newValue.selection.toCoreTextRange(),
-            )
+            debugCoreTextInput {
+                "updateState notifyTextChanged old=${oldValue.debugString()} " +
+                    "new=${newValue.debugString()}"
+            }
+            val textChange = commonTextChange(oldValue.text, newValue.text)
+            runCoreTextCallback("NotifyTextChanged") {
+                editContext.notifyTextChangedByValueForWinUI(
+                    modifiedRange = textChange.modifiedRange,
+                    newLength = textChange.newLength,
+                    newSelection = newValue.selection.toCoreTextRange(),
+                )
+            }
         } else if (previousValue.selection != newValue.selection) {
-            editContext.notifySelectionChanged(newValue.selection.toCoreTextRange())
+            debugCoreTextInput {
+                "updateState notifySelectionChanged previous=${previousValue.selection} " +
+                    "new=${newValue.selection}"
+            }
+            runCoreTextCallback("NotifySelectionChanged") {
+                editContext.notifySelectionChangedByValueForWinUI(newValue.selection.toCoreTextRange())
+            }
         }
     }
 
     fun notifyLayoutChanged() {
-        editContext.notifyLayoutChanged()
+        debugCoreTextInput { "notifyLayoutChanged bounds=${currentLayoutBounds()?.debugString()}" }
+        runCoreTextCallback("NotifyLayoutChanged") {
+            editContext.notifyLayoutChanged()
+        }
     }
 
     fun notifyFocusEnter() {
-        editContext.notifyFocusEnter()
+        if (!isDisposed && !isFocused) {
+            debugCoreTextInput { "notifyFocusEnter" }
+            runCoreTextCallback("NotifyFocusEnter") {
+                editContext.notifyFocusEnter()
+                isFocused = true
+            }
+        }
     }
 
     fun notifyFocusLeave() {
-        editContext.notifyFocusLeave()
+        if (!isDisposed && isFocused) {
+            debugCoreTextInput { "notifyFocusLeave" }
+            runCoreTextCallback("NotifyFocusLeave") {
+                editContext.notifyFocusLeave()
+                isFocused = false
+            }
+        }
     }
 
     fun dispose() {
-        eventTokens.asReversed().forEach(editContext::removeEventHandler)
+        if (isDisposed) return
+        isDisposed = true
+        eventTokens.asReversed().forEach { token ->
+            runCatching { editContext.removeEventHandler(token) }
+        }
         eventTokens.clear()
     }
 
     private fun registerEventHandlers() {
         eventTokens += editContext.addTextRequested { request ->
-            val range = request.range
-            request.text = value.text.sliceCoreTextRange(
-                range.startCaretPosition,
-                range.endCaretPosition,
-            )
+            runCoreTextCallback("TextRequested") {
+                val range = request.range
+                request.text = latestValue().text.sliceCoreTextRange(
+                    range.startCaretPosition,
+                    range.endCaretPosition,
+                )
+                debugCoreTextInput {
+                    "TextRequested range=${range.debugString()} text=${request.text.debugForLog()}"
+                }
+            }
         }
         eventTokens += editContext.addSelectionRequested { request ->
-            request.selection = value.selection.toCoreTextRange()
+            runCoreTextCallback("SelectionRequested") {
+                val selection = latestValue().selection.toCoreTextRange()
+                // TODO(KWINRT-050): Write CoreTextRange by value; generated
+                // struct setters currently pass the native buffer pointer.
+                request.setSelectionByValueForWinUI(selection)
+                debugCoreTextInput {
+                    "SelectionRequested set=${selection.debugString()} " +
+                        "readBack=${request.selection.debugString()}"
+                }
+            }
         }
         eventTokens += editContext.addLayoutRequested { request ->
-            if (!request.isCanceled) {
-                val bounds = currentLayoutBounds()
-                if (bounds != null && bounds.hasUsableBounds) {
-                    request.setLayoutBounds(bounds)
+            runCoreTextCallback("LayoutRequested") {
+                if (!request.isCanceled) {
+                    val bounds = currentLayoutBounds()
+                    debugCoreTextInput {
+                        "LayoutRequested canceled=false bounds=${bounds?.debugString()} " +
+                            "usable=${bounds?.hasUsableBounds}"
+                    }
+                    if (bounds != null && bounds.hasUsableBounds) {
+                        val normalizedBounds = bounds
+                            .withNonEmptyTextBounds()
+                            .preferVisualBounds()
+                        debugCoreTextInput {
+                            "LayoutRequested write normalizedBounds=${normalizedBounds.debugString()}"
+                        }
+                        request.setLayoutBounds(normalizedBounds)
+                    }
+                } else {
+                    debugCoreTextInput { "LayoutRequested canceled=true" }
                 }
             }
         }
         eventTokens += editContext.addTextUpdating { event ->
-            if (event.isCanceled) {
-                return@addTextUpdating
-            }
-            val commands = buildList {
-                val range = event.range
-                add(SetSelectionCommand(range.startCaretPosition, range.endCaretPosition))
-                if (compositionActive) {
-                    add(SetComposingTextCommand(event.text, 1))
-                } else if (event.text.isNotEmpty() || !range.isCollapsed) {
-                    add(CommitTextCommand(event.text, 1))
+            runCoreTextUpdateCallback("TextUpdating", onFailure = {
+                event.result = CoreTextTextUpdatingResult.Failed
+            }) {
+                if (!event.isCanceled) {
+                    debugCoreTextInput {
+                        "TextUpdating range=${event.range.debugString()} " +
+                            "text=${event.text.debugForLog()} " +
+                            "newSelection=${event.newSelection.debugString()} " +
+                            "compositionActive=$compositionActive"
+                    }
+                    val commands = buildTextUpdatingCommands(event)
+                    event.result = if (runAsCoreTextUpdate { dispatchEditCommands(commands) }) {
+                        currentValue()?.let { value = it }
+                        CoreTextTextUpdatingResult.Succeeded
+                    } else {
+                        CoreTextTextUpdatingResult.Failed
+                    }
+                    debugCoreTextInput { "TextUpdating result=${event.result}" }
+                } else {
+                    debugCoreTextInput { "TextUpdating canceled=true" }
                 }
-                add(SetSelectionCommand(
-                    event.newSelection.startCaretPosition,
-                    event.newSelection.endCaretPosition,
-                ))
-            }
-            event.result = if (dispatchEditCommands(commands)) {
-                CoreTextTextUpdatingResult.Succeeded
-            } else {
-                CoreTextTextUpdatingResult.Failed
             }
         }
         eventTokens += editContext.addSelectionUpdating { event ->
-            if (event.isCanceled) {
-                return@addSelectionUpdating
-            }
-            val selection = event.selection
-            event.result = if (dispatchEditCommands(listOf(
-                    SetSelectionCommand(selection.startCaretPosition, selection.endCaretPosition)
-                ))
-            ) {
-                CoreTextSelectionUpdatingResult.Succeeded
-            } else {
-                CoreTextSelectionUpdatingResult.Failed
+            runCoreTextUpdateCallback("SelectionUpdating", onFailure = {
+                event.result = CoreTextSelectionUpdatingResult.Failed
+            }) {
+                if (!event.isCanceled) {
+                    val selection = event.selection
+                    debugCoreTextInput {
+                        "SelectionUpdating selection=${selection.debugString()}"
+                    }
+                    val commands = listOf(
+                        SetSelectionCommand(
+                            selection.startCaretPosition,
+                            selection.endCaretPosition,
+                        )
+                    )
+                    event.result = if (runAsCoreTextUpdate { dispatchEditCommands(commands) }) {
+                        currentValue()?.let { value = it }
+                        CoreTextSelectionUpdatingResult.Succeeded
+                    } else {
+                        CoreTextSelectionUpdatingResult.Failed
+                    }
+                    debugCoreTextInput { "SelectionUpdating result=${event.result}" }
+                } else {
+                    debugCoreTextInput { "SelectionUpdating canceled=true" }
+                }
             }
         }
         eventTokens += editContext.addFormatUpdating { event ->
-            if (!event.isCanceled) {
-                event.result = CoreTextFormatUpdatingResult.Failed
+            runCoreTextCallback("FormatUpdating") {
+                if (!event.isCanceled) {
+                    debugCoreTextInput { "FormatUpdating result=Failed" }
+                    event.result = CoreTextFormatUpdatingResult.Failed
+                } else {
+                    debugCoreTextInput { "FormatUpdating canceled=true" }
+                }
             }
         }
         eventTokens += editContext.addCompositionStarted {
-            compositionActive = true
+            runCoreTextCallback("CompositionStarted") {
+                debugCoreTextInput { "CompositionStarted" }
+                compositionActive = true
+            }
         }
         eventTokens += editContext.addCompositionCompleted {
-            compositionActive = false
-            dispatchEditCommands(listOf(FinishComposingTextCommand()))
+            runCoreTextCallback("CompositionCompleted") {
+                debugCoreTextInput { "CompositionCompleted" }
+                compositionActive = false
+                runAsCoreTextUpdate {
+                    dispatchEditCommands(listOf(FinishComposingTextCommand()))
+                }
+                currentValue()?.let { value = it }
+            }
         }
     }
 
-    private fun notifyInitialTextState() {
-        if (value.text.isEmpty() && value.selection.start == value.selection.end) {
-            return
+    private inline fun <T> runAsCoreTextUpdate(block: () -> T): T {
+        coreTextUpdateDepth++
+        return try {
+            block()
+        } finally {
+            coreTextUpdateDepth--
         }
-        editContext.notifyTextChanged(
-            modifiedRange = CoreTextRange(0, 0),
-            newLength = value.text.length,
-            newSelection = value.selection.toCoreTextRange(),
-        )
+    }
+
+    private fun buildTextUpdatingCommands(
+        event: WinUICoreTextTextUpdatingEvent,
+    ): List<EditCommand> =
+        buildList {
+            val range = event.range
+            add(SetSelectionCommand(range.startCaretPosition, range.endCaretPosition))
+            if (compositionActive) {
+                add(SetComposingTextCommand(event.text, 1))
+            } else if (event.text.isNotEmpty() || !range.isCollapsed) {
+                add(CommitTextCommand(event.text, 1))
+            }
+            add(
+                SetSelectionCommand(
+                    event.newSelection.startCaretPosition,
+                    event.newSelection.endCaretPosition,
+                )
+            )
+        }
+
+    private fun latestValue(): TextFieldValue {
+        currentValue()?.let { latest ->
+            value = latest
+            return latest
+        }
+        return value
+    }
+
+    private inline fun runCoreTextCallback(
+        name: String,
+        block: () -> Unit,
+    ) {
+        if (isDisposed) return
+        try {
+            block()
+        } catch (throwable: Throwable) {
+            debugCoreTextInput {
+                "CoreText $name callback failed: ${throwable.stackTraceToString()}"
+            }
+        }
+    }
+
+    private inline fun runCoreTextUpdateCallback(
+        name: String,
+        onFailure: () -> Unit,
+        block: () -> Unit,
+    ) {
+        if (isDisposed) return
+        try {
+            block()
+        } catch (throwable: Throwable) {
+            runCatching { onFailure() }
+            debugCoreTextInput {
+                "CoreText $name callback failed: ${throwable.stackTraceToString()}"
+            }
+        }
     }
 
     internal companion object {
         fun create(
             initialValue: TextFieldValue,
             imeOptions: ImeOptions,
-            currentLayoutBounds: () -> WinUITextLayoutBounds?,
+            currentValue: () -> TextFieldValue? = { null },
+            currentLayoutBounds: () -> WinUICoreTextLayoutSnapshot?,
             dispatchEditCommands: (List<EditCommand>) -> Boolean,
         ): WinUICoreTextInputSession =
             create(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
                 editContext = WinUIRealCoreTextEditContext.create(),
+                currentValue = currentValue,
                 currentLayoutBounds = currentLayoutBounds,
                 dispatchEditCommands = dispatchEditCommands,
             )
@@ -194,13 +359,15 @@ internal class WinUICoreTextInputSession private constructor(
             initialValue: TextFieldValue,
             imeOptions: ImeOptions,
             editContext: WinUICoreTextEditContext,
-            currentLayoutBounds: () -> WinUITextLayoutBounds?,
+            currentValue: () -> TextFieldValue? = { null },
+            currentLayoutBounds: () -> WinUICoreTextLayoutSnapshot?,
             dispatchEditCommands: (List<EditCommand>) -> Boolean,
         ): WinUICoreTextInputSession =
             WinUICoreTextInputSession(
                 initialValue = initialValue,
                 imeOptions = imeOptions,
                 editContext = editContext,
+                currentValue = currentValue,
                 currentLayoutBounds = currentLayoutBounds,
                 dispatchEditCommands = dispatchEditCommands,
             )
@@ -228,7 +395,17 @@ internal interface WinUICoreTextEditContext {
         newLength: Int,
         newSelection: CoreTextRange,
     )
+    fun notifyTextChangedByValueForWinUI(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        notifyTextChanged(modifiedRange, newLength, newSelection)
+    }
     fun notifySelectionChanged(selection: CoreTextRange)
+    fun notifySelectionChangedByValueForWinUI(selection: CoreTextRange) {
+        notifySelectionChanged(selection)
+    }
     fun notifyLayoutChanged()
 }
 
@@ -239,12 +416,21 @@ internal interface WinUICoreTextTextRequest {
 
 internal interface WinUICoreTextSelectionRequest {
     var selection: CoreTextRange
+    fun setSelectionByValueForWinUI(selection: CoreTextRange)
 }
 
 internal interface WinUICoreTextLayoutRequest {
     val isCanceled: Boolean
-    fun setLayoutBounds(bounds: WinUITextLayoutBounds)
+    fun setLayoutBounds(bounds: WinUICoreTextLayoutSnapshot)
 }
+
+internal data class WinUICoreTextLayoutSnapshot(
+    val layoutBounds: WinUITextLayoutBounds?,
+    val visualBounds: WinUITextLayoutBounds?,
+)
+
+internal val WinUICoreTextLayoutSnapshot.hasUsableBounds: Boolean
+    get() = visualBounds?.hasUsableBounds == true || layoutBounds?.hasUsableBounds == true
 
 internal interface WinUICoreTextTextUpdatingEvent {
     val range: CoreTextRange
@@ -291,55 +477,70 @@ private class WinUIRealCoreTextEditContext(
         }
 
     override fun addTextRequested(handler: (WinUICoreTextTextRequest) -> Unit): WinUICoreTextEventToken =
-        editContext.addTextRequested(TypedEventHandler { _, args ->
+        editContext.addTextRequested { _, args ->
+            runRealCoreTextCallback("TextRequested") {
                 args.request?.let { handler(WinUIRealCoreTextTextRequest(it)) }
-            }).let { token -> WinUICoreTextEventToken { editContext.removeTextRequested(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeTextRequested(token) } }
 
     override fun addSelectionRequested(
         handler: (WinUICoreTextSelectionRequest) -> Unit,
     ): WinUICoreTextEventToken =
-        editContext.addSelectionRequested(TypedEventHandler { _, args ->
+        editContext.addSelectionRequested { _, args ->
+            runRealCoreTextCallback("SelectionRequested") {
                 args.request?.let { handler(WinUIRealCoreTextSelectionRequest(it)) }
-            }).let { token -> WinUICoreTextEventToken { editContext.removeSelectionRequested(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeSelectionRequested(token) } }
 
     override fun addLayoutRequested(
         handler: (WinUICoreTextLayoutRequest) -> Unit,
     ): WinUICoreTextEventToken =
-        editContext.addLayoutRequested(TypedEventHandler { _, args ->
+        editContext.addLayoutRequested { _, args ->
+            runRealCoreTextCallback("LayoutRequested") {
                 args.request?.let { handler(WinUIRealCoreTextLayoutRequest(it)) }
-            }).let { token -> WinUICoreTextEventToken { editContext.removeLayoutRequested(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeLayoutRequested(token) } }
 
     override fun addTextUpdating(
         handler: (WinUICoreTextTextUpdatingEvent) -> Unit,
     ): WinUICoreTextEventToken =
-        editContext.addTextUpdating(TypedEventHandler { _, args ->
+        editContext.addTextUpdating { _, args ->
+            runRealCoreTextCallback("TextUpdating") {
                 handler(WinUIRealCoreTextTextUpdatingEvent(args))
-            }).let { token -> WinUICoreTextEventToken { editContext.removeTextUpdating(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeTextUpdating(token) } }
 
     override fun addSelectionUpdating(
         handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit,
     ): WinUICoreTextEventToken =
-        editContext.addSelectionUpdating(TypedEventHandler { _, args ->
+        editContext.addSelectionUpdating { _, args ->
+            runRealCoreTextCallback("SelectionUpdating") {
                 handler(WinUIRealCoreTextSelectionUpdatingEvent(args))
-            }).let { token -> WinUICoreTextEventToken { editContext.removeSelectionUpdating(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeSelectionUpdating(token) } }
 
     override fun addFormatUpdating(
         handler: (WinUICoreTextFormatUpdatingEvent) -> Unit,
     ): WinUICoreTextEventToken =
-        editContext.addFormatUpdating(TypedEventHandler { _, args ->
+        editContext.addFormatUpdating { _, args ->
+            runRealCoreTextCallback("FormatUpdating") {
                 handler(WinUIRealCoreTextFormatUpdatingEvent(args))
-            }).let { token -> WinUICoreTextEventToken { editContext.removeFormatUpdating(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeFormatUpdating(token) } }
 
     override fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken =
-        editContext.addCompositionStarted(TypedEventHandler { _, args ->
+        editContext.addCompositionStarted { _, args ->
+            runRealCoreTextCallback("CompositionStarted") {
                 if (!args.isCanceled) {
                     handler()
                 }
-            }).let { token -> WinUICoreTextEventToken { editContext.removeCompositionStarted(token) } }
+            }
+        }.let { token -> WinUICoreTextEventToken { editContext.removeCompositionStarted(token) } }
 
     override fun addCompositionCompleted(handler: () -> Unit): WinUICoreTextEventToken =
-        editContext.addCompositionCompleted(TypedEventHandler { _, _ -> handler() })
-            .let { token -> WinUICoreTextEventToken { editContext.removeCompositionCompleted(token) } }
+        editContext.addCompositionCompleted { _, _ ->
+            runRealCoreTextCallback("CompositionCompleted", handler)
+        }.let { token -> WinUICoreTextEventToken { editContext.removeCompositionCompleted(token) } }
 
     override fun removeEventHandler(token: WinUICoreTextEventToken) {
         token.remove()
@@ -361,8 +562,20 @@ private class WinUIRealCoreTextEditContext(
         editContext.notifyTextChanged(modifiedRange, newLength, newSelection)
     }
 
+    override fun notifyTextChangedByValueForWinUI(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        editContext.notifyTextChangedByValueForWinUI(modifiedRange, newLength, newSelection)
+    }
+
     override fun notifySelectionChanged(selection: CoreTextRange) {
         editContext.notifySelectionChanged(selection)
+    }
+
+    override fun notifySelectionChangedByValueForWinUI(selection: CoreTextRange) {
+        editContext.notifySelectionChangedByValueForWinUI(selection)
     }
 
     override fun notifyLayoutChanged() {
@@ -398,6 +611,10 @@ private class WinUIRealCoreTextSelectionRequest(
         set(value) {
             request.selection = value
         }
+
+    override fun setSelectionByValueForWinUI(selection: CoreTextRange) {
+        request.setSelectionByValueForWinUI(selection)
+    }
 }
 
 private class WinUIRealCoreTextLayoutRequest(
@@ -406,9 +623,17 @@ private class WinUIRealCoreTextLayoutRequest(
     override val isCanceled: Boolean
         get() = request.isCanceled
 
-    override fun setLayoutBounds(bounds: WinUITextLayoutBounds) {
-        request.layoutBounds?.setFrom(bounds)
-        request.layoutBoundsVisualPixels?.setFrom(bounds)
+    override fun setLayoutBounds(bounds: WinUICoreTextLayoutSnapshot) {
+        val layoutBounds = bounds.layoutBounds
+        if (layoutBounds != null && layoutBounds.hasUsableBounds) {
+            debugCoreTextInput { "setLayoutBounds layout=${layoutBounds.debugString()}" }
+            request.layoutBounds?.setFrom(layoutBounds)
+        }
+        val visualBounds = bounds.visualBounds
+        if (visualBounds != null && visualBounds.hasUsableBounds) {
+            debugCoreTextInput { "setLayoutBounds visual=${visualBounds.debugString()}" }
+            request.layoutBoundsVisualPixels?.setFrom(visualBounds)
+        }
     }
 }
 
@@ -462,13 +687,67 @@ private fun TextRange.toCoreTextRange(): CoreTextRange =
 private val CoreTextRange.isCollapsed: Boolean
     get() = startCaretPosition == endCaretPosition
 
+private fun CoreTextRange.debugString(): String =
+    "CoreTextRange(start=$startCaretPosition, end=$endCaretPosition)"
+
+private fun WinUICoreTextLayoutSnapshot.debugString(): String =
+    "WinUICoreTextLayoutSnapshot(layout=${layoutBounds?.debugString()}, " +
+        "visual=${visualBounds?.debugString()})"
+
 private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
-    textBounds = bounds.innerTextFieldBounds.toWinRTRect()
-    controlBounds = bounds.decorationBoxBounds.toWinRTRect()
+    // TODO(KWINRT-050): Generated struct setters pass a pointer instead of the
+    // struct by value. Use a narrow CoreText workaround until kotlin-winrt fixes it.
+    setTextBoundsByValueForWinUI(bounds.innerTextFieldBounds.toWinRTRect())
+    setControlBoundsByValueForWinUI(bounds.decorationBoxBounds.toWinRTRect())
 }
 
-private fun androidx.compose.ui.geometry.Rect.toWinRTRect(): WinRTRect =
+private fun WinUICoreTextLayoutSnapshot.withNonEmptyTextBounds(): WinUICoreTextLayoutSnapshot =
+    copy(
+        layoutBounds = layoutBounds?.withNonEmptyTextBounds(),
+        visualBounds = visualBounds?.withNonEmptyTextBounds(),
+    )
+
+private fun WinUICoreTextLayoutSnapshot.preferVisualBounds(): WinUICoreTextLayoutSnapshot =
+    if (visualBounds?.hasUsableBounds == true) {
+        copy(layoutBounds = null)
+    } else {
+        copy(visualBounds = null)
+    }
+
+private fun WinUITextLayoutBounds.withNonEmptyTextBounds(): WinUITextLayoutBounds =
+    copy(innerTextFieldBounds = innerTextFieldBounds.withMinimumWidth())
+
+private fun Rect.withMinimumWidth(): Rect =
+    if (width > 0f) {
+        this
+    } else {
+        Rect(left, top, left + MinimumCoreTextTextBoundsWidth, bottom)
+    }
+
+private fun Rect.toWinRTRect(): WinRTRect =
     WinRTRect(left, top, width, height)
+
+private const val MinimumCoreTextTextBoundsWidth = 1f
+
+internal expect fun CoreTextSelectionRequest.setSelectionByValueForWinUI(range: CoreTextRange)
+
+internal expect fun CoreTextEditContext.notifyTextChangedByValueForWinUI(
+    modifiedRange: CoreTextRange,
+    newLength: Int,
+    newSelection: CoreTextRange,
+)
+
+internal expect fun CoreTextEditContext.notifySelectionChangedByValueForWinUI(
+    selection: CoreTextRange,
+)
+
+internal expect fun windows.ui.text.core.CoreTextLayoutBounds.setTextBoundsByValueForWinUI(
+    bounds: WinRTRect,
+)
+
+internal expect fun windows.ui.text.core.CoreTextLayoutBounds.setControlBoundsByValueForWinUI(
+    bounds: WinRTRect,
+)
 
 private fun String.sliceCoreTextRange(startCaretPosition: Int, endCaretPosition: Int): String {
     val start = startCaretPosition.coerceIn(0, length)
@@ -476,7 +755,7 @@ private fun String.sliceCoreTextRange(startCaretPosition: Int, endCaretPosition:
     return substring(start, end)
 }
 
-private fun commonChangedRange(oldText: String, newText: String): CoreTextRange {
+private fun commonTextChange(oldText: String, newText: String): CoreTextChange {
     var prefix = 0
     val minLength = minOf(oldText.length, newText.length)
     while (prefix < minLength && oldText[prefix] == newText[prefix]) {
@@ -490,8 +769,16 @@ private fun commonChangedRange(oldText: String, newText: String): CoreTextRange 
         oldSuffix--
         newSuffix--
     }
-    return CoreTextRange(prefix, oldSuffix)
+    return CoreTextChange(
+        modifiedRange = CoreTextRange(prefix, oldSuffix),
+        newLength = newSuffix - prefix,
+    )
 }
+
+private data class CoreTextChange(
+    val modifiedRange: CoreTextRange,
+    val newLength: Int,
+)
 
 private fun ImeOptions.toCoreTextInputScope(): CoreTextInputScope =
     when (keyboardType) {
@@ -502,5 +789,24 @@ private fun ImeOptions.toCoreTextInputScope(): CoreTextInputScope =
         androidx.compose.ui.text.input.KeyboardType.Email -> CoreTextInputScope.EmailAddress
         androidx.compose.ui.text.input.KeyboardType.Password,
         androidx.compose.ui.text.input.KeyboardType.NumberPassword -> CoreTextInputScope.Password
-        else -> CoreTextInputScope.Default
+        else -> CoreTextInputScope.Text
     }
+
+private inline fun runRealCoreTextCallback(
+    name: String,
+    block: () -> Unit,
+) {
+    try {
+        block()
+    } catch (throwable: Throwable) {
+        debugCoreTextInput {
+            "CoreText $name WinRT callback failed: ${throwable.stackTraceToString()}"
+        }
+    }
+}
+
+private inline fun debugCoreTextInput(message: () -> String) {
+    if (winUISystemBooleanProperty("compose.winui.textInput.debug")) {
+        println("[compose-winui:core-text] ${message()}")
+    }
+}

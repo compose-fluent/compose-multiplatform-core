@@ -16,10 +16,14 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.MultiParagraph
 import androidx.compose.ui.text.TextLayoutInput
@@ -27,13 +31,13 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.createFontFamilyResolver
-import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
@@ -51,6 +55,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlin.test.BeforeTest
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -66,9 +71,16 @@ import windows.ui.text.core.CoreTextSelectionUpdatingResult
 import windows.ui.text.core.CoreTextTextUpdatingResult
 
 class WinUIPlatformTextInputServiceTest {
+    @BeforeTest
+    fun setUp() {
+        System.setProperty(CoreTextInputDisabledProperty, "true")
+    }
+
     @AfterTest
     fun tearDown() {
         WinUIPlatformTextInputService.resetForTest()
+        System.clearProperty(CoreTextInputDisabledProperty)
+        System.clearProperty(CoreTextInputEnabledProperty)
     }
 
     @Test
@@ -133,7 +145,7 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     fun editCommandsAndImeActionsDelegateToActiveSessionCallbacks() {
-        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val editCommandBatches = mutableListOf<List<EditCommand>>()
         val imeActions = mutableListOf<ImeAction>()
         val commit = CommitTextCommand("hello", 1)
         val selection = SetSelectionCommand(1, 3)
@@ -161,7 +173,7 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     fun nativeTextInputHelpersDelegateStandardEditCommands() {
-        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val editCommandBatches = mutableListOf<List<EditCommand>>()
 
         WinUIPlatformTextInputService.startInput(
             value = TextFieldValue(""),
@@ -204,7 +216,7 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     fun nativeTextInputBridgeTracksFocusAndDelegatesEditingEvents() {
-        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val editCommandBatches = mutableListOf<List<EditCommand>>()
         val imeActions = mutableListOf<ImeAction>()
         val bridge = WinUIPlatformTextInputService.nativeBridge
 
@@ -279,249 +291,9 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
-    fun coreTextBridgeHandlesRequestAndUpdateEvents() {
-        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-        val editContext = FakeCoreTextEditContext()
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("hello", selection = TextRange(1, 4)),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = { editCommandBatches += it },
-            onImeActionPerformed = {},
-        )
-
-        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
-        assertTrue(bridge.isCoreTextSessionActive)
-        assertTrue(bridge.isFocused)
-        assertEquals("Compose WinUI text input", editContext.name)
-        assertEquals(CoreTextInputScope.Default, editContext.inputScope)
-        assertEquals(CoreTextInputPaneDisplayPolicy.Automatic, editContext.inputPaneDisplayPolicy)
-        assertFalse(editContext.didNotifyFocusEnter)
-        assertEquals(1, editContext.textChanges.size)
-        editContext.textChanges.single().let { initialChange ->
-            assertCoreTextRangeEquals(CoreTextRange(0, 0), initialChange.modifiedRange)
-            assertEquals(5, initialChange.newLength)
-            assertCoreTextRangeEquals(CoreTextRange(1, 4), initialChange.newSelection)
-        }
-
-        val textRequest = FakeCoreTextTextRequest(CoreTextRange(1, 4))
-        editContext.dispatchTextRequested(textRequest)
-        assertEquals("ell", textRequest.text)
-
-        val selectionRequest = FakeCoreTextSelectionRequest()
-        editContext.dispatchSelectionRequested(selectionRequest)
-        assertCoreTextRangeEquals(CoreTextRange(1, 4), selectionRequest.selection)
-
-        val textUpdate = FakeCoreTextTextUpdatingEvent(
-            range = CoreTextRange(1, 4),
-            text = "abc",
-            newSelection = CoreTextRange(4, 4),
-        )
-        editContext.dispatchTextUpdating(textUpdate)
-        assertEquals(CoreTextTextUpdatingResult.Succeeded, textUpdate.result)
-        assertEquals(
-            listOf(
-                SetSelectionCommand(1, 4),
-                CommitTextCommand("abc", 1),
-                SetSelectionCommand(4, 4),
-            ),
-            editCommandBatches.single(),
-        )
-
-        val selectionUpdate = FakeCoreTextSelectionUpdatingEvent(CoreTextRange(0, 2))
-        editContext.dispatchSelectionUpdating(selectionUpdate)
-        assertEquals(CoreTextSelectionUpdatingResult.Succeeded, selectionUpdate.result)
-        assertEquals(listOf(SetSelectionCommand(0, 2)), editCommandBatches.last())
-
-        val formatUpdate = FakeCoreTextFormatUpdatingEvent()
-        editContext.dispatchFormatUpdating(formatUpdate)
-        assertEquals(CoreTextFormatUpdatingResult.Failed, formatUpdate.result)
-
-        val deleteUpdate = FakeCoreTextTextUpdatingEvent(
-            range = CoreTextRange(1, 4),
-            text = "",
-            newSelection = CoreTextRange(1, 1),
-        )
-        editContext.dispatchTextUpdating(deleteUpdate)
-        assertEquals(CoreTextTextUpdatingResult.Succeeded, deleteUpdate.result)
-        assertEquals(
-            listOf(
-                SetSelectionCommand(1, 4),
-                CommitTextCommand("", 1),
-                SetSelectionCommand(1, 1),
-            ),
-            editCommandBatches.last(),
-        )
-    }
-
-    @Test
-    fun coreTextBridgeDispatchesComposingUpdatesUntilCompositionCompletes() {
-        val editCommandBatches = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-        val editContext = FakeCoreTextEditContext()
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("input", selection = TextRange(2)),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = { editCommandBatches += it },
-            onImeActionPerformed = {},
-        )
-
-        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
-
-        editContext.dispatchCompositionStarted()
-        val composingUpdate = FakeCoreTextTextUpdatingEvent(
-            range = CoreTextRange(2, 2),
-            text = "draft",
-            newSelection = CoreTextRange(7, 7),
-        )
-        editContext.dispatchTextUpdating(composingUpdate)
-
-        assertEquals(CoreTextTextUpdatingResult.Succeeded, composingUpdate.result)
-        assertEquals(
-            listOf(
-                SetSelectionCommand(2, 2),
-                SetComposingTextCommand("draft", 1),
-                SetSelectionCommand(7, 7),
-            ),
-            editCommandBatches.single(),
-        )
-
-        editContext.dispatchCompositionCompleted()
-
-        assertEquals(listOf(FinishComposingTextCommand()), editCommandBatches.last())
-
-        val committedUpdate = FakeCoreTextTextUpdatingEvent(
-            range = CoreTextRange(0, 5),
-            text = "final",
-            newSelection = CoreTextRange(5, 5),
-        )
-        editContext.dispatchTextUpdating(committedUpdate)
-
-        assertEquals(CoreTextTextUpdatingResult.Succeeded, committedUpdate.result)
-        assertEquals(
-            listOf(
-                SetSelectionCommand(0, 5),
-                CommitTextCommand("final", 1),
-                SetSelectionCommand(5, 5),
-            ),
-            editCommandBatches.last(),
-        )
-    }
-
-    @Test
-    fun coreTextBridgeNotifiesNativeStateChangesAfterAttach() {
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-        val editContext = FakeCoreTextEditContext()
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("hello", selection = TextRange(1)),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = {},
-            onImeActionPerformed = {},
-        )
-        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
-
-        editContext.textChanges.clear()
-        WinUIPlatformTextInputService.updateState(
-            oldValue = TextFieldValue("hello", selection = TextRange(1)),
-            newValue = TextFieldValue("heLlo", selection = TextRange(3)),
-        )
-
-        val textChange = editContext.textChanges.single()
-        assertCoreTextRangeEquals(CoreTextRange(2, 3), textChange.modifiedRange)
-        assertEquals(5, textChange.newLength)
-        assertCoreTextRangeEquals(CoreTextRange(3, 3), textChange.newSelection)
-
-        WinUIPlatformTextInputService.updateState(
-            oldValue = TextFieldValue("heLlo", selection = TextRange(3)),
-            newValue = TextFieldValue("heLlo", selection = TextRange(0, 2)),
-        )
-
-        assertCoreTextRangeEquals(CoreTextRange(0, 2), editContext.selectionChanges.single())
-
-        WinUIPlatformTextInputService.stopInput()
-
-        assertFalse(bridge.isCoreTextSessionActive)
-        assertEquals(8, editContext.removedHandlerCount)
-    }
-
-    @Test
-    fun updateTextLayoutResultStoresRootTransformedBoundsAndNotifiesCoreTextLayout() {
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-        val editContext = FakeCoreTextEditContext()
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("hello", selection = TextRange(1)),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = {},
-            onImeActionPerformed = {},
-        )
-        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
-
-        WinUIPlatformTextInputService.updateTextLayoutResult(
-            textFieldValue = TextFieldValue("hello", selection = TextRange(1)),
-            offsetMapping = OffsetMapping.Identity,
-            textLayoutResult = testTextLayoutResult("hello"),
-            textFieldToRootTransform = { matrix -> matrix.setTranslate(Offset(20f, 30f)) },
-            innerTextFieldBounds = Rect(1f, 2f, 11f, 12f),
-            decorationBoxBounds = Rect(0f, 1f, 12f, 13f),
-        )
-
-        assertEquals(
-            WinUITextLayoutBounds(
-                innerTextFieldBounds = Rect(21f, 32f, 31f, 42f),
-                decorationBoxBounds = Rect(20f, 31f, 32f, 43f),
-            ),
-            WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
-        )
-        assertEquals(1, editContext.layoutChangedCount)
-
-        val layoutRequest = FakeCoreTextLayoutRequest()
-        editContext.dispatchLayoutRequested(layoutRequest)
-
-        assertEquals(Rect(21f, 32f, 31f, 42f), layoutRequest.textBounds)
-        assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.controlBounds)
-        assertEquals(Rect(21f, 32f, 31f, 42f), layoutRequest.visualPixelsTextBounds)
-        assertEquals(Rect(20f, 31f, 32f, 43f), layoutRequest.visualPixelsControlBounds)
-    }
-
-    @Test
-    fun coreTextLayoutRequestSkipsZeroSizedBounds() {
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-        val editContext = FakeCoreTextEditContext()
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue("hello"),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = {},
-            onImeActionPerformed = {},
-        )
-        assertTrue(bridge.attachCoreTextForCurrentInput(editContext))
-
-        WinUIPlatformTextInputService.updateTextLayoutResult(
-            textFieldValue = TextFieldValue("hello"),
-            offsetMapping = OffsetMapping.Identity,
-            textLayoutResult = testTextLayoutResult("hello"),
-            textFieldToRootTransform = {},
-            innerTextFieldBounds = Rect.Zero,
-            decorationBoxBounds = Rect.Zero,
-        )
-
-        val layoutRequest = FakeCoreTextLayoutRequest()
-        editContext.dispatchLayoutRequested(layoutRequest)
-
-        assertEquals(null, layoutRequest.textBounds)
-        assertEquals(null, layoutRequest.controlBounds)
-        assertEquals(null, layoutRequest.visualPixelsTextBounds)
-        assertEquals(null, layoutRequest.visualPixelsControlBounds)
-    }
-
-    @Test
     fun startInputReplacesPreviousSessionCallbacks() {
-        val firstCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
-        val secondCommands = mutableListOf<List<androidx.compose.ui.text.input.EditCommand>>()
+        val firstCommands = mutableListOf<List<EditCommand>>()
+        val secondCommands = mutableListOf<List<EditCommand>>()
 
         WinUIPlatformTextInputService.startInput(
             value = TextFieldValue("first"),
@@ -565,6 +337,76 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
+    fun updateTextLayoutResultStoresRootAndScreenBounds() {
+        val mapperOwner = Any()
+        WinUIPlatformTextInputService.registerRootToScreenMapper(
+            owner = mapperOwner,
+            mapper = { offset -> offset + Offset(100f, 200f) },
+            viewportBoundsInRoot = { Rect(0f, 0f, 200f, 200f) },
+        )
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("hello"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+
+        WinUIPlatformTextInputService.updateTextLayoutResult(
+            textFieldValue = TextFieldValue("hello"),
+            offsetMapping = OffsetMapping.Identity,
+            textLayoutResult = testTextLayoutResult("hello"),
+            textFieldToRootTransform = { it.setTranslate(Offset(5f, 7f)) },
+            innerTextFieldBounds = Rect(10f, 20f, 30f, 40f),
+            decorationBoxBounds = Rect(0f, 10f, 50f, 60f),
+        )
+
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(15f, 27f, 35f, 47f),
+                decorationBoxBounds = Rect(5f, 17f, 55f, 67f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
+        )
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(115f, 227f, 135f, 247f),
+                decorationBoxBounds = Rect(105f, 217f, 155f, 267f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsOnScreen,
+        )
+
+        WinUIPlatformTextInputService.unregisterRootToScreenMapper(mapperOwner)
+    }
+
+    @Test
+    fun coreTextViewportVisualPixelsUseDeviceIndependentPixels() {
+        assertEquals(
+            Offset(1920f, 1032.5f),
+            rootPixelOffsetToCoreTextViewportVisualPixels(
+                Offset(3840f, 2065f),
+                densityScale = 2f,
+            ),
+        )
+    }
+
+    @Test
+    fun coreTextScreenBoundsUseDeviceIndependentPixels() {
+        assertEquals(
+            Offset(341f, 563.5f),
+            rootPixelOffsetToCoreTextScreenPixels(
+                offset = Offset(32f, 432f),
+                densityScale = 2f,
+                localDipToScreenPixel = { localDip ->
+                    Offset(
+                        x = localDip.x * 2f + 650f,
+                        y = localDip.y * 2f + 695f,
+                    )
+                },
+            ),
+        )
+    }
+
+    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun startInputMethodTracksActiveRequestUntilCancelled() = runTest {
         val session = WinUIPlatformTextInputSession(this)
@@ -595,7 +437,7 @@ class WinUIPlatformTextInputServiceTest {
         val editCommandBatches = mutableListOf<List<EditCommand>>()
         val imeActions = mutableListOf<ImeAction>()
         val request = TestPlatformTextInputMethodRequest(
-            textValue = TextFieldValue("request text"),
+            textValue = { TextFieldValue("request text") },
             imeOptions = ImeOptions.Default.copy(imeAction = ImeAction.Search),
             onEditCommand = { editCommandBatches += it },
             onImeAction = { imeActions += it },
@@ -633,6 +475,125 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun startInputMethodNotifiesCoreTextWhenRequestStateChanges() = runTest {
+        var textValue by mutableStateOf(TextFieldValue("cat", selection = TextRange(3)))
+        val request = TestPlatformTextInputMethodRequest(
+            textValue = { textValue },
+        )
+        val session = WinUIPlatformTextInputSession(this)
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(request)
+        }
+        runCurrent()
+
+        withCoreTextEnabledForTest {
+            val editContext = RecordingCoreTextEditContext()
+            assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+            editContext.textChanges.clear()
+
+            textValue = TextFieldValue("cart", selection = TextRange(4))
+            Snapshot.sendApplyNotifications()
+            runCurrent()
+
+            editContext.textChanges.single().let { change ->
+                assertCoreTextRangeEquals(CoreTextRange(2, 2), change.modifiedRange)
+                assertEquals(1, change.newLength)
+                assertCoreTextRangeEquals(CoreTextRange(4, 4), change.newSelection)
+            }
+        }
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun coreTextAttachRequiresExplicitOptIn() {
+        System.clearProperty(CoreTextInputDisabledProperty)
+        System.clearProperty(CoreTextInputEnabledProperty)
+        WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
+
+        val editContext = RecordingCoreTextEditContext()
+
+        assertFalse(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+        assertFalse(WinUIPlatformTextInputService.isCoreTextInputActive)
+    }
+
+    @Test
+    fun updateInputMethodStateRefreshesLayoutBeforeCoreTextSelectionNotification() {
+        var textValue = TextFieldValue("hello", selection = TextRange(5))
+        val request = TestPlatformTextInputMethodRequest(
+            textValue = { textValue },
+            focusedRectInRoot = {
+                if (textValue.selection.min == 1) {
+                    Rect(10f, 20f, 10f, 40f)
+                } else {
+                    Rect(50f, 20f, 50f, 40f)
+                }
+            },
+            textFieldRectInRoot = { Rect(0f, 10f, 100f, 50f) },
+        )
+
+        WinUIPlatformTextInputService.startInputMethod(request)
+        withCoreTextEnabledForTest {
+            val editContext = RecordingCoreTextEditContext()
+            assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+
+            textValue = TextFieldValue("hello", selection = TextRange(1))
+            WinUIPlatformTextInputService.updateInputMethodState(request, textValue)
+
+            assertCoreTextRangeEquals(CoreTextRange(1, 1), editContext.selectionChanges.single())
+            assertEquals(
+                null,
+                editContext.layoutRequestsDuringSelectionChange.single().layoutTextBounds,
+            )
+            assertEquals(
+                Rect(10f, 20f, 11f, 40f),
+                editContext.layoutRequestsDuringSelectionChange.single().visualTextBounds,
+            )
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun startInputMethodNotifiesCoreTextWhenRequestLayoutChanges() = runTest {
+        var focusedRect by mutableStateOf(Rect(1f, 2f, 3f, 4f))
+        var textFieldRect by mutableStateOf(Rect(0f, 1f, 4f, 5f))
+        val request = TestPlatformTextInputMethodRequest(
+            focusedRectInRoot = { focusedRect },
+            textFieldRectInRoot = { textFieldRect },
+        )
+        val session = WinUIPlatformTextInputSession(this)
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            session.startInputMethod(request)
+        }
+        runCurrent()
+
+        withCoreTextEnabledForTest {
+            val editContext = RecordingCoreTextEditContext()
+            assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+            editContext.layoutChangedCount = 0
+
+            focusedRect = Rect(11f, 12f, 13f, 14f)
+            textFieldRect = Rect(10f, 11f, 14f, 15f)
+            Snapshot.sendApplyNotifications()
+            runCurrent()
+
+            assertEquals(1, editContext.layoutChangedCount)
+            assertEquals(
+                WinUITextLayoutBounds(
+                    innerTextFieldBounds = Rect(11f, 12f, 13f, 14f),
+                    decorationBoxBounds = Rect(10f, 11f, 14f, 15f),
+                ),
+                WinUIPlatformTextInputService.currentTextLayoutBoundsInRoot,
+            )
+        }
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun startInputMethodCancelsPreviousRequestBeforeStartingNext() = runTest {
         val session = WinUIPlatformTextInputSession(this)
         val firstRequest = TestPlatformTextInputMethodRequest()
@@ -660,9 +621,33 @@ class WinUIPlatformTextInputServiceTest {
     }
 }
 
+private const val CoreTextInputDisabledProperty = "compose.winui.textInput.coreText.disabled"
+private const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
+
+private inline fun <T> withCoreTextEnabledForTest(block: () -> T): T {
+    val previousDisabled = System.getProperty(CoreTextInputDisabledProperty)
+    val previousEnabled = System.getProperty(CoreTextInputEnabledProperty)
+    System.clearProperty(CoreTextInputDisabledProperty)
+    System.setProperty(CoreTextInputEnabledProperty, "true")
+    return try {
+        block()
+    } finally {
+        restoreSystemProperty(CoreTextInputDisabledProperty, previousDisabled)
+        restoreSystemProperty(CoreTextInputEnabledProperty, previousEnabled)
+    }
+}
+
+private fun restoreSystemProperty(name: String, value: String?) {
+    if (value == null) {
+        System.clearProperty(name)
+    } else {
+        System.setProperty(name, value)
+    }
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 private class TestPlatformTextInputMethodRequest(
-    private val textValue: TextFieldValue = TextFieldValue(""),
+    private val textValue: () -> TextFieldValue = { TextFieldValue("") },
     override val imeOptions: ImeOptions = ImeOptions.Default,
     override val onEditCommand: (List<EditCommand>) -> Unit = {},
     override val onImeAction: ((ImeAction) -> Unit)? = null,
@@ -670,19 +655,118 @@ private class TestPlatformTextInputMethodRequest(
     override val textFieldRectInRoot: () -> Rect? = { null },
     override val textClippingRectInRoot: () -> Rect? = { null },
 ) : PlatformTextInputMethodRequest {
-    override val value: () -> TextFieldValue = { textValue }
+    override val value: () -> TextFieldValue = textValue
     override val state: TextEditorState = object : TextEditorState {
-        override val text: String = ""
-        override val selection: TextRange = TextRange.Zero
-        override val composition: TextRange? = null
-        override val length: Int = 0
-        override fun get(index: Int): Char = throw IndexOutOfBoundsException(index)
-        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = ""
-        override fun toString(): String = ""
+        override val text: String get() = textValue().text
+        override val selection: TextRange get() = textValue().selection
+        override val composition: TextRange? get() = textValue().composition
+        override val length: Int get() = textValue().text.length
+        override fun get(index: Int): Char = textValue().text[index]
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+            textValue().text.subSequence(startIndex, endIndex)
+        override fun toString(): String = textValue().text
     }
     override val textLayoutResult: () -> TextLayoutResult? = { null }
     override val unclippedTextOffsetInRoot: () -> Offset? = { null }
     override val editText: (TextEditingScope.() -> Unit) -> Unit = {}
+}
+
+private fun assertCoreTextRangeEquals(expected: CoreTextRange, actual: CoreTextRange) {
+    assertEquals(expected.startCaretPosition, actual.startCaretPosition)
+    assertEquals(expected.endCaretPosition, actual.endCaretPosition)
+}
+
+private data class RecordingTextChange(
+    val modifiedRange: CoreTextRange,
+    val newLength: Int,
+    val newSelection: CoreTextRange,
+)
+
+private class RecordingCoreTextEditContext : WinUICoreTextEditContext {
+    override var name: String = ""
+    override var inputScope: CoreTextInputScope = CoreTextInputScope.Default
+    override var inputPaneDisplayPolicy: CoreTextInputPaneDisplayPolicy =
+        CoreTextInputPaneDisplayPolicy.Manual
+    var layoutChangedCount = 0
+    val textChanges = mutableListOf<RecordingTextChange>()
+    val selectionChanges = mutableListOf<CoreTextRange>()
+    val layoutRequestsDuringSelectionChange = mutableListOf<RecordingCoreTextLayoutRequest>()
+
+    private var layoutRequested: ((WinUICoreTextLayoutRequest) -> Unit)? = null
+
+    override fun addTextRequested(
+        handler: (WinUICoreTextTextRequest) -> Unit,
+    ): WinUICoreTextEventToken = token()
+
+    override fun addSelectionRequested(
+        handler: (WinUICoreTextSelectionRequest) -> Unit,
+    ): WinUICoreTextEventToken = token()
+
+    override fun addLayoutRequested(
+        handler: (WinUICoreTextLayoutRequest) -> Unit,
+    ): WinUICoreTextEventToken {
+        layoutRequested = handler
+        return token()
+    }
+
+    override fun addTextUpdating(
+        handler: (WinUICoreTextTextUpdatingEvent) -> Unit,
+    ): WinUICoreTextEventToken = token()
+
+    override fun addSelectionUpdating(
+        handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit,
+    ): WinUICoreTextEventToken = token()
+
+    override fun addFormatUpdating(
+        handler: (WinUICoreTextFormatUpdatingEvent) -> Unit,
+    ): WinUICoreTextEventToken = token()
+
+    override fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken = token()
+
+    override fun addCompositionCompleted(handler: () -> Unit): WinUICoreTextEventToken = token()
+
+    override fun removeEventHandler(token: WinUICoreTextEventToken) {
+        token.remove()
+    }
+
+    override fun notifyFocusEnter() = Unit
+
+    override fun notifyFocusLeave() = Unit
+
+    override fun notifyTextChanged(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        textChanges += RecordingTextChange(modifiedRange, newLength, newSelection)
+    }
+
+    override fun notifySelectionChanged(selection: CoreTextRange) {
+        selectionChanges += selection
+        val request = RecordingCoreTextLayoutRequest()
+        layoutRequested?.invoke(request)
+        layoutRequestsDuringSelectionChange += request
+    }
+
+    override fun notifyLayoutChanged() {
+        layoutChangedCount += 1
+    }
+
+    private fun token(): WinUICoreTextEventToken = WinUICoreTextEventToken {}
+}
+
+private class RecordingCoreTextLayoutRequest(
+    override val isCanceled: Boolean = false,
+) : WinUICoreTextLayoutRequest {
+    var layoutTextBounds: Rect? = null
+        private set
+    var visualTextBounds: Rect? = null
+        private set
+
+    override fun setLayoutBounds(bounds: WinUICoreTextLayoutSnapshot) {
+        layoutTextBounds = bounds.layoutBounds?.innerTextFieldBounds
+        visualTextBounds = bounds.visualBounds?.innerTextFieldBounds
+    }
 }
 
 private fun testTextLayoutResult(text: String): TextLayoutResult {
@@ -715,202 +799,4 @@ private fun testTextLayoutResult(text: String): TextLayoutResult {
 private fun Matrix.setTranslate(offset: Offset) {
     reset()
     translate(offset.x, offset.y)
-}
-
-private fun assertCoreTextRangeEquals(expected: CoreTextRange, actual: CoreTextRange) {
-    assertEquals(expected.startCaretPosition, actual.startCaretPosition)
-    assertEquals(expected.endCaretPosition, actual.endCaretPosition)
-}
-
-private class FakeCoreTextEditContext : WinUICoreTextEditContext {
-    override var name: String = ""
-    override var inputScope: CoreTextInputScope = CoreTextInputScope.Default
-    override var inputPaneDisplayPolicy: CoreTextInputPaneDisplayPolicy =
-        CoreTextInputPaneDisplayPolicy.Manual
-
-    var didNotifyFocusEnter = false
-    var removedHandlerCount = 0
-    var layoutChangedCount = 0
-    val textChanges = mutableListOf<FakeTextChange>()
-    val selectionChanges = mutableListOf<CoreTextRange>()
-
-    private var textRequested: ((WinUICoreTextTextRequest) -> Unit)? = null
-    private var selectionRequested: ((WinUICoreTextSelectionRequest) -> Unit)? = null
-    private var layoutRequested: ((WinUICoreTextLayoutRequest) -> Unit)? = null
-    private var textUpdating: ((WinUICoreTextTextUpdatingEvent) -> Unit)? = null
-    private var selectionUpdating: ((WinUICoreTextSelectionUpdatingEvent) -> Unit)? = null
-    private var formatUpdating: ((WinUICoreTextFormatUpdatingEvent) -> Unit)? = null
-    private var compositionStarted: (() -> Unit)? = null
-    private var compositionCompleted: (() -> Unit)? = null
-
-    override fun addTextRequested(
-        handler: (WinUICoreTextTextRequest) -> Unit,
-    ): WinUICoreTextEventToken {
-        textRequested = handler
-        return token()
-    }
-
-    override fun addSelectionRequested(
-        handler: (WinUICoreTextSelectionRequest) -> Unit,
-    ): WinUICoreTextEventToken {
-        selectionRequested = handler
-        return token()
-    }
-
-    override fun addLayoutRequested(
-        handler: (WinUICoreTextLayoutRequest) -> Unit,
-    ): WinUICoreTextEventToken {
-        layoutRequested = handler
-        return token()
-    }
-
-    override fun addTextUpdating(
-        handler: (WinUICoreTextTextUpdatingEvent) -> Unit,
-    ): WinUICoreTextEventToken {
-        textUpdating = handler
-        return token()
-    }
-
-    override fun addSelectionUpdating(
-        handler: (WinUICoreTextSelectionUpdatingEvent) -> Unit,
-    ): WinUICoreTextEventToken {
-        selectionUpdating = handler
-        return token()
-    }
-
-    override fun addFormatUpdating(
-        handler: (WinUICoreTextFormatUpdatingEvent) -> Unit,
-    ): WinUICoreTextEventToken {
-        formatUpdating = handler
-        return token()
-    }
-
-    override fun addCompositionStarted(handler: () -> Unit): WinUICoreTextEventToken {
-        compositionStarted = handler
-        return token()
-    }
-
-    override fun addCompositionCompleted(handler: () -> Unit): WinUICoreTextEventToken {
-        compositionCompleted = handler
-        return token()
-    }
-
-    override fun removeEventHandler(token: WinUICoreTextEventToken) {
-        token.remove()
-    }
-
-    override fun notifyFocusEnter() {
-        didNotifyFocusEnter = true
-    }
-
-    override fun notifyFocusLeave() = Unit
-
-    override fun notifyTextChanged(
-        modifiedRange: CoreTextRange,
-        newLength: Int,
-        newSelection: CoreTextRange,
-    ) {
-        textChanges += FakeTextChange(modifiedRange, newLength, newSelection)
-    }
-
-    override fun notifySelectionChanged(selection: CoreTextRange) {
-        selectionChanges += selection
-    }
-
-    override fun notifyLayoutChanged() {
-        layoutChangedCount++
-    }
-
-    fun dispatchTextRequested(request: WinUICoreTextTextRequest) {
-        textRequested?.invoke(request)
-    }
-
-    fun dispatchSelectionRequested(request: WinUICoreTextSelectionRequest) {
-        selectionRequested?.invoke(request)
-    }
-
-    fun dispatchLayoutRequested(request: WinUICoreTextLayoutRequest) {
-        layoutRequested?.invoke(request)
-    }
-
-    fun dispatchTextUpdating(event: WinUICoreTextTextUpdatingEvent) {
-        textUpdating?.invoke(event)
-    }
-
-    fun dispatchSelectionUpdating(event: WinUICoreTextSelectionUpdatingEvent) {
-        selectionUpdating?.invoke(event)
-    }
-
-    fun dispatchFormatUpdating(event: WinUICoreTextFormatUpdatingEvent) {
-        formatUpdating?.invoke(event)
-    }
-
-    fun dispatchCompositionStarted() {
-        compositionStarted?.invoke()
-    }
-
-    fun dispatchCompositionCompleted() {
-        compositionCompleted?.invoke()
-    }
-
-    private fun token(): WinUICoreTextEventToken =
-        WinUICoreTextEventToken { removedHandlerCount++ }
-}
-
-private data class FakeTextChange(
-    val modifiedRange: CoreTextRange,
-    val newLength: Int,
-    val newSelection: CoreTextRange,
-)
-
-private class FakeCoreTextTextRequest(
-    override val range: CoreTextRange,
-) : WinUICoreTextTextRequest {
-    override var text: String = ""
-}
-
-private class FakeCoreTextSelectionRequest : WinUICoreTextSelectionRequest {
-    override var selection: CoreTextRange = CoreTextRange(0, 0)
-}
-
-private class FakeCoreTextLayoutRequest(
-    override val isCanceled: Boolean = false,
-) : WinUICoreTextLayoutRequest {
-    var textBounds: Rect? = null
-        private set
-    var controlBounds: Rect? = null
-        private set
-    var visualPixelsTextBounds: Rect? = null
-        private set
-    var visualPixelsControlBounds: Rect? = null
-        private set
-
-    override fun setLayoutBounds(bounds: WinUITextLayoutBounds) {
-        textBounds = bounds.innerTextFieldBounds
-        controlBounds = bounds.decorationBoxBounds
-        visualPixelsTextBounds = bounds.innerTextFieldBounds
-        visualPixelsControlBounds = bounds.decorationBoxBounds
-    }
-}
-
-private class FakeCoreTextTextUpdatingEvent(
-    override val range: CoreTextRange,
-    override val text: String,
-    override val newSelection: CoreTextRange,
-    override val isCanceled: Boolean = false,
-) : WinUICoreTextTextUpdatingEvent {
-    override var result: CoreTextTextUpdatingResult = CoreTextTextUpdatingResult.Failed
-}
-
-private class FakeCoreTextSelectionUpdatingEvent(
-    override val selection: CoreTextRange,
-    override val isCanceled: Boolean = false,
-) : WinUICoreTextSelectionUpdatingEvent {
-    override var result: CoreTextSelectionUpdatingResult = CoreTextSelectionUpdatingResult.Failed
-}
-
-private class FakeCoreTextFormatUpdatingEvent(
-    override val isCanceled: Boolean = false,
-) : WinUICoreTextFormatUpdatingEvent {
-    override var result: CoreTextFormatUpdatingResult = CoreTextFormatUpdatingResult.Succeeded
 }

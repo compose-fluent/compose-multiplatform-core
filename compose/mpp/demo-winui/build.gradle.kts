@@ -287,8 +287,14 @@ tasks.named("processWinuiJvmMainResources") {
 
 tasks.named<BuildWinRTApplicationHostTask>("buildWinRTApplicationHost") {
     val winuiJvmJar = tasks.named("winuiJvmJar", Jar::class)
+    val localWinUiJars = localWinUiJarProjects.map { projectPath ->
+        project(projectPath).tasks.named("winuiJvmJar", Jar::class).flatMap { it.archiveFile }
+    }
+    // KWINRT-041: keep compose-owned WinRT projections before skiko-winui projections.
+    runtimeClasspath.from(localWinUiJars)
     runtimeClasspath.from(configurations.named("winuiJvmRuntimeClasspath"))
     runtimeClasspath.from(winuiJvmJar.flatMap { it.archiveFile })
+    dependsOn(localWinUiJars)
     dependsOn(winuiJvmJar)
 }
 
@@ -332,7 +338,6 @@ fun Exec.configureWinUIMppSampleApplicationHost(
             "-Dcompose.winui.mpp.sample.autoExit=$autoExit",
             "-Dcompose.winui.mpp.sample.autoTraverse=$autoTraverse",
             "-Dcompose.winui.mpp.sample.validationReport=${report.absolutePath}",
-            "-Dcompose.winui.textInput.coreText.enabled=true",
         )
         environment("KOTLIN_WINRT_JVM_OPTIONS", jvmOptions.joinToString(separator = ";"))
 

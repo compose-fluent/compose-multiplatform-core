@@ -25,7 +25,6 @@ import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.areAnyPressed
 import androidx.compose.ui.node.WinUIOwner
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.WinRTEvent
 import microsoft.ui.input.PointerDeviceType
 import microsoft.ui.input.PointerPoint
@@ -34,6 +33,7 @@ import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.input.Pointer
 import microsoft.ui.xaml.input.PointerEventHandler
 import microsoft.ui.xaml.input.PointerRoutedEventArgs
+import windows.foundation.EventRegistrationToken
 
 internal class WinUIPointerInputAdapter(
     private val root: UIElement,
@@ -67,7 +67,7 @@ internal class WinUIPointerInputAdapter(
         eventType: PointerEventType,
         event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
-        val handler = PointerEventHandler { sender, args ->
+        val handler: PointerEventHandler = { sender, args ->
             if (!isDisposed) {
                 val pointerEvent = createPointerEvent(eventType, args)
                 updatePointerCapture(pointerEvent, args)
@@ -116,7 +116,7 @@ internal class WinUIPointerInputAdapter(
     private fun registerCancel(
         event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
-        val handler = PointerEventHandler { sender, args ->
+        val handler: PointerEventHandler = { sender, args ->
             if (!isDisposed) {
                 debugPointerInput {
                     "native cancel sender=${sender?.debugClassName()} handledBefore=${args.handled}"
@@ -131,7 +131,7 @@ internal class WinUIPointerInputAdapter(
     private fun registerCaptureLost(
         event: WinRTEvent<PointerEventHandler>,
     ): WinUIPointerEventRegistration {
-        val handler = PointerEventHandler { sender, args ->
+        val handler: PointerEventHandler = { sender, args ->
             debugPointerInput {
                 "native captureLost sender=${sender?.debugClassName()} handledBefore=${args.handled}"
             }
@@ -152,7 +152,7 @@ internal class WinUIPointerInputAdapter(
         val buttons = properties.toComposeButtons()
         return WinUIPointerEvent(
             eventType = eventType,
-            position = winUIPositionToComposeOffset(position.x, position.y, owner.density),
+            position = winUIPositionToComposeOffset(position.x, position.y),
             uptimeMillis = point.timestamp.toLong() / MicrosecondsPerMillisecond,
             pointerId = point.pointerId.toLong(),
             down = point.isComposePointerDown(eventType, buttons),
@@ -284,10 +284,8 @@ internal data class WinUIPointerEvent(
 internal fun winUIPositionToComposeOffset(
     x: Float,
     y: Float,
-    density: Density,
 ): Offset {
-    val scale = density.density
-    return Offset(x * scale, y * scale)
+    return Offset(x, y)
 }
 
 private data class WinUIPointerEventRegistration(

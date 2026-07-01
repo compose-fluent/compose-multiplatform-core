@@ -54,7 +54,7 @@ import androidx.compose.ui.viewinterop.collectWinUIInteropRoots
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.enableSavedStateHandles
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.UIElement
 import microsoft.ui.xaml.Window
@@ -78,7 +78,7 @@ import kotlin.coroutines.EmptyCoroutineContext
  */
 class WinUIComposeView internal constructor(
     private val rootContentControl: WinUIRootContentControl,
-    private val setRenderContent: (UIElement) -> Unit,
+    private val setBaseContent: (List<UIElement>) -> Unit,
     private val setRootContent: (List<UIElement>) -> Unit,
     private val scheduleInteropUpdate: (WinUIInteropAction) -> Unit,
     private val retrieveInteropTransaction: () -> WinUIInteropTransaction,
@@ -236,7 +236,7 @@ class WinUIComposeView internal constructor(
         beforeDrawSubmission = ::drainPendingInteropTransactions,
     )
     init {
-        setRenderContent(renderHost.component)
+        setBaseContent(listOf(renderHost.component))
     }
     private val dispatchQueue by lazy { WinUIDispatchQueue(requireRootDispatcherQueue()) }
     private var ownerCoroutineContext: CoroutineContext = EmptyCoroutineContext
@@ -254,15 +254,26 @@ class WinUIComposeView internal constructor(
         onKeepScreenOnChanged = displayRequestController::setKeepScreenOn,
         onSensitiveContentChanged = onSensitiveContentChanged,
         scheduleOutOfFrame = ::scheduleOutOfFrame,
-        coordinateMapper = WinUICoordinateMapper.forRoot(root),
+        coordinateMapper = WinUICoordinateMapper.forRoot(
+            root,
+            screenCoordinatesReady = { isScreenCoordinateConversionReady },
+        ),
         textToolbar = WinUITextToolbar(
             hostProvider = { rootContentControl },
             densityProvider = { rootNode.density },
         ),
         pointerIconService = pointerIconService,
     )
+    internal val isScreenCoordinateConversionReady: Boolean
+        get() = rootContentControl.isLoaded && !owner.isMeasureLayoutInProgress
     init {
         renderHost.setAccessibilityProvider(owner.accessibilityProvider)
+        WinUIPlatformTextInputService.registerRootToScreenMapper(
+            owner = this,
+            mapper = ::rootPixelOffsetToScreen,
+            viewportMapper = ::rootPixelOffsetToViewport,
+            viewportBoundsInRoot = ::rootViewportBoundsInRoot,
+        )
     }
 
     private var frameRecomposer: FrameRecomposer? = null
@@ -284,7 +295,12 @@ class WinUIComposeView internal constructor(
     private var xamlRootChangedHandler: TypedEventHandler<XamlRoot, XamlRootChangedEventArgs>? =
         null
     private var xamlRootChangedToken: EventRegistrationToken? = null
-    private val keyInputAdapter = WinUIKeyInputAdapter(root, owner)
+    private val keyInputAdapter = WinUIKeyInputAdapter(
+        root = root,
+        owner = owner,
+        composeEventSources = { listOf(root) },
+        composeEventSubtreeSources = { listOf(renderHost.component) },
+    )
     private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner)
 
@@ -358,6 +374,7 @@ class WinUIComposeView internal constructor(
         retainedValuesStore.dispose()
         architectureComponentsOwner.setLifecycleState(Lifecycle.State.DESTROYED)
         clearXamlRootDensityObserver()
+        WinUIPlatformTextInputService.unregisterRootToScreenMapper(this)
         owner.dispose()
         clearLoadedRenderSchedulerRequest()
         renderHost.close()
@@ -471,7 +488,7 @@ class WinUIComposeView internal constructor(
         if (runCatching { rootContentControl.isLoaded }.getOrDefault(false)) {
             startRenderScheduler()
         } else if (loadedRenderSchedulerToken == null) {
-            val handler = RoutedEventHandler { _, _ ->
+            val handler: RoutedEventHandler = { _, _ ->
                 clearLoadedRenderSchedulerRequest()
                 if (!isDisposed) {
                     updateDensityFromXamlRoot()
@@ -504,7 +521,7 @@ class WinUIComposeView internal constructor(
             clearXamlRootDensityObserver()
             xamlRoot = currentXamlRoot
             if (currentXamlRoot != null) {
-                val handler = TypedEventHandler<XamlRoot, XamlRootChangedEventArgs> { _, _ ->
+                val handler: TypedEventHandler<XamlRoot, XamlRootChangedEventArgs> = { _, _ ->
                     if (!isDisposed) {
                         updateDensityFromXamlRoot()
                         scheduleRootContentSync()
@@ -622,6 +639,29 @@ class WinUIComposeView internal constructor(
         "WinUI root DispatcherQueue is not available."
     }
 
+    private fun rootPixelOffsetToScreen(offset: Offset): Offset {
+        val scale = owner.density.density.takeIf { it.isFinite() && it > 0f } ?: 1f
+        return rootPixelOffsetToCoreTextScreenPixels(
+            offset = offset,
+            densityScale = scale,
+            localDipToScreenPixel = owner::localToScreen,
+        )
+    }
+
+    private fun rootPixelOffsetToViewport(offset: Offset): Offset {
+        val scale = owner.density.density.takeIf { it.isFinite() && it > 0f } ?: 1f
+        return rootPixelOffsetToCoreTextViewportVisualPixels(offset, scale)
+    }
+
+    private fun rootViewportBoundsInRoot(): Rect? {
+        val size = owner.windowInfo.containerSize
+        return if (size.width > 0 && size.height > 0) {
+            Rect(0f, 0f, size.width.toFloat(), size.height.toFloat())
+        } else {
+            null
+        }
+    }
+
     private fun updateRootContent(content: List<UIElement>) {
         val contentChanged = !currentInteropRoots.hasSameIdentityOrder(content)
         if (contentChanged) {
@@ -650,7 +690,7 @@ class WinUIComposeView internal constructor(
 
     private constructor(host: WinUIRootContentHost) : this(
         host.root,
-        host::setRenderContent,
+        host::setBaseContent,
         host::setRootContent,
         host::scheduleUpdate,
         host::retrieveTransaction,
@@ -662,13 +702,35 @@ class WinUIComposeView internal constructor(
         window: Window? = null,
     ) : this(
         host.root,
-        host::setRenderContent,
+        host::setBaseContent,
         host::setRootContent,
         host::scheduleUpdate,
         host::retrieveTransaction,
         onSensitiveContentChanged,
         window,
     )
+}
+
+@Suppress("UNUSED_PARAMETER")
+internal fun rootPixelOffsetToCoreTextViewportVisualPixels(
+    offset: Offset,
+    densityScale: Float,
+): Offset {
+    val scale = densityScale.takeIf { it.isFinite() && it > 0f } ?: 1f
+    // Despite the property name, CoreText LayoutBoundsVisualPixels are
+    // viewport-relative device-independent pixels.
+    return Offset(offset.x / scale, offset.y / scale)
+}
+
+internal fun rootPixelOffsetToCoreTextScreenPixels(
+    offset: Offset,
+    densityScale: Float,
+    localDipToScreenPixel: (Offset) -> Offset,
+): Offset {
+    val scale = densityScale.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val localDip = Offset(offset.x / scale, offset.y / scale)
+    val screenPixel = localDipToScreenPixel(localDip)
+    return Offset(screenPixel.x / scale, screenPixel.y / scale)
 }
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {

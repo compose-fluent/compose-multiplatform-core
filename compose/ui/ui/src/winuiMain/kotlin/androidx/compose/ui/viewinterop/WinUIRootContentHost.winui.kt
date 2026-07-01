@@ -28,8 +28,8 @@ internal class WinUIRootContentHost {
         root.content = interopContainer.root
     }
 
-    fun setRenderContent(content: UIElement) {
-        interopContainer.setBaseChildren(listOf(content))
+    fun setBaseContent(content: List<UIElement>) {
+        interopContainer.setBaseChildren(content)
     }
 
     fun setRootContent(content: List<UIElement>) {

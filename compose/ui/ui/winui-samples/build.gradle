@@ -15,6 +15,7 @@
  */
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import io.github.composefluent.winrt.gradle.BuildWinRTApplicationHostTask
 
 plugins {
     id("AndroidXPlugin")
@@ -93,6 +94,11 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
+tasks.withType(BuildWinRTApplicationHostTask).configureEach {
+    // KWINRT-041: keep compose-owned WinRT projections before skiko-winui projections.
+    runtimeClasspath.from(project(":compose:ui:ui").tasks.named("winuiJvmJar"))
+}
+
 def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null, Closure extraConfig = null ->
     tasks.register(taskName, Exec) {
         group = "verification"
@@ -101,7 +107,6 @@ def registerWinUISampleTask = { String taskName, String descriptionText, String 
         outputs.file(sampleLog)
         def jvmOptions = [
                 "-Dcompose.winui.sample.autoExit=true",
-                "-Dcompose.winui.textInput.coreText.enabled=true",
         ]
         if (mode != null) {
             jvmOptions.add("-Dcompose.winui.sample.mode=${mode}")

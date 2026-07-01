@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.asWinRT
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
@@ -466,7 +466,7 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun requestNativeFocusOnLoaded(frameworkElement: FrameworkElement) {
         if (loadedFocusToken != null) return
-        val handler = RoutedEventHandler { _, _ ->
+        val handler: RoutedEventHandler = { _, _ ->
             clearLoadedFocusRequest(frameworkElement)
             if (!requestNativeFocusNow()) {
                 requestNativeFocusOnNextLayoutUpdated(frameworkElement)

@@ -16,7 +16,7 @@
 
 package androidx.compose.ui.platform
 
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import kotlin.time.Duration.Companion.milliseconds
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.dispatching.DispatcherQueueHandler
@@ -31,7 +31,7 @@ internal class WinUIDispatchQueue(
     private var isScheduled = false
     private var isDraining = false
     private var isClosed = false
-    private val tickHandler = TypedEventHandler<DispatcherQueueTimer, Any?> { _, _ ->
+    private val tickHandler: TypedEventHandler<DispatcherQueueTimer, Any?> = { _, _ ->
         runCatching {
             drain()
         }.onFailure { throwable ->

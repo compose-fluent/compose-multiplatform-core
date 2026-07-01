@@ -34,7 +34,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.currentComposeViewForTest
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -207,7 +207,7 @@ private class WinUIMppSampleAutoRunner(
         } else {
             phase = Phase.ExitSettle
         }
-        val handler = TypedEventHandler<DispatcherQueueTimer, Any?> { _, _ -> tick() }
+        val handler: TypedEventHandler<DispatcherQueueTimer, Any?> = { _, _ -> tick() }
         tickHandler = handler
         token = timer.tick.add(handler)
         timer.start()

@@ -21,51 +21,156 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.node.WinUIOwner
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.WinRTEvent
+import io.github.composefluent.winrt.runtime.asWinRT
+import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.input.CharacterReceivedRoutedEventArgs
 import microsoft.ui.xaml.input.KeyEventHandler
+import windows.foundation.TypedEventHandler
 import windows.system.VirtualKey
 
 internal class WinUIKeyInputAdapter(
     private val root: UIElement,
     private val owner: WinUIOwner,
+    private val composeEventSources: () -> List<Any?> = { listOf(root) },
+    private val composeEventSubtreeSources: () -> List<Any?> = { emptyList() },
 ) {
     private var isDisposed = false
     private val keyEventProcessor = WinUIKeyEventProcessor()
+    private val characterInputProcessor = WinUICharacterInputProcessor()
     private val registrations = listOf(
-        register(KeyEventType.KeyDown, root.keyDown),
-        register(KeyEventType.KeyUp, root.keyUp),
+        registerKey(KeyEventType.KeyDown, root.keyDown),
+        registerKey(KeyEventType.KeyUp, root.keyUp),
+        registerCharacter(root.characterReceived),
     )
 
     fun dispose() {
         if (isDisposed) return
         isDisposed = true
         registrations.forEach { registration ->
-            runCatching { registration.event.remove(registration.token) }
+            runCatching { registration.remove() }
         }
     }
 
     @OptIn(InternalComposeUiApi::class)
-    private fun register(
+    private fun registerKey(
         eventType: KeyEventType,
         event: WinRTEvent<KeyEventHandler>,
-    ): WinUIKeyEventRegistration {
-        val handler = KeyEventHandler { _, args ->
+    ): WinUIInputEventRegistration<KeyEventHandler> {
+        val handler: KeyEventHandler = { _, args ->
             if (!isDisposed) {
-                keyEventProcessor.process(
-                    eventType = eventType,
-                    key = args.key,
-                    isHandled = args.handled,
-                    nativeEvent = args,
-                    shouldDispatchEvent = { args.originalSource.isComposeRootSource(root) },
-                    sendKeyEvent = owner::sendKeyEvent,
-                )?.let { handled ->
-                    args.handled = handled
+                try {
+                    val key = args.key
+                    val handledBefore = args.handled
+                    val originalSource = args.originalSource
+                    val composeSources = composeEventSources()
+                    val composeSubtreeSources = composeEventSubtreeSources()
+                    val shouldDispatch = originalSource.isComposeSource(
+                        composeSources = composeSources,
+                        composeSubtreeSources = composeSubtreeSources,
+                    )
+                    debugKeyInput {
+                        "native event=$eventType key=$key handledBefore=$handledBefore " +
+                            "source=${originalSource.debugClassNameOrNull()} " +
+                            "composeSources=${composeSources.debugClassNames()} " +
+                            "composeSubtreeSources=${composeSubtreeSources.debugClassNames()} " +
+                            "shouldDispatch=$shouldDispatch"
+                    }
+                    val handled = keyEventProcessor.process(
+                        eventType = eventType,
+                        key = key,
+                        isHandled = handledBefore,
+                        nativeEvent = args,
+                        shouldDispatchEvent = {
+                            shouldDispatch
+                        },
+                        sendKeyEvent = owner::sendKeyEvent,
+                    ).also { handled ->
+                        debugKeyInput {
+                            "compose event=$eventType key=$key handled=$handled"
+                        }
+                    }
+                    if (eventType == KeyEventType.KeyDown) {
+                        characterInputProcessor.onKeyDownProcessed(
+                            keyCodePoint = 0,
+                            wasHandled = handled == true,
+                        )
+                    }
+                    handled?.let { didHandle ->
+                        args.handled = didHandle
+                    }
+                    debugKeyInput {
+                        "native handledAfter event=$eventType key=$key " +
+                            "handled=${args.handled}"
+                    }
+                } catch (throwable: Throwable) {
+                    debugKeyInput {
+                        "native event=$eventType failed before leaving WinRT callback: " +
+                            throwable.stackTraceToString()
+                    }
                 }
             }
         }
-        return WinUIKeyEventRegistration(event, event.add(handler), handler)
+        return WinUIInputEventRegistration(event, event.add(handler), handler)
+    }
+
+    private fun registerCharacter(
+        event: WinRTEvent<TypedEventHandler<UIElement, CharacterReceivedRoutedEventArgs>>,
+    ): WinUIInputEventRegistration<TypedEventHandler<UIElement, CharacterReceivedRoutedEventArgs>> {
+        val handler: TypedEventHandler<UIElement, CharacterReceivedRoutedEventArgs> = { _, args ->
+            if (!isDisposed) {
+                try {
+                    val character = args.character
+                    val handledBefore = args.handled
+                    val originalSource = args.originalSource
+                    val composeSources = composeEventSources()
+                    val composeSubtreeSources = composeEventSubtreeSources()
+                    val shouldDispatch = originalSource.isComposeSource(
+                        composeSources = composeSources,
+                        composeSubtreeSources = composeSubtreeSources,
+                    )
+                    debugKeyInput {
+                        "native event=CharacterReceived character=${character.code} " +
+                            "handledBefore=$handledBefore " +
+                            "source=${originalSource.debugClassNameOrNull()} " +
+                            "shouldDispatch=$shouldDispatch"
+                    }
+                    if (shouldDispatch) {
+                        val coreTextActive = WinUIPlatformTextInputService.isCoreTextInputActive
+                        val coreTextComposing =
+                            WinUIPlatformTextInputService.isCoreTextCompositionActive
+                        characterInputProcessor.process(
+                            codePoint = character.code,
+                            isHandled = handledBefore,
+                            isCoreTextInputActive = coreTextActive,
+                            isCoreTextCompositionActive = coreTextComposing,
+                            commitText = WinUIPlatformTextInputService::commitText,
+                        ).also { handled ->
+                            debugKeyInput {
+                                "compose event=CharacterReceived character=${character.code} " +
+                                    "handled=$handled coreTextActive=$coreTextActive " +
+                                    "coreTextComposing=$coreTextComposing"
+                            }
+                        }?.let { handled ->
+                            args.handled = handled
+                        }
+                    }
+                    debugKeyInput {
+                        "native handledAfter event=CharacterReceived " +
+                            "character=${character.code} " +
+                            "handled=${args.handled}"
+                    }
+                } catch (throwable: Throwable) {
+                    debugKeyInput {
+                        "native event=CharacterReceived failed before leaving WinRT callback: " +
+                            throwable.stackTraceToString()
+                    }
+                }
+            }
+        }
+        return WinUIInputEventRegistration(event, event.add(handler), handler)
     }
 }
 
@@ -94,14 +199,128 @@ internal class WinUIKeyEventProcessor {
     }
 }
 
-private fun Any?.isComposeRootSource(root: UIElement): Boolean =
-    this == null || this == root
+internal class WinUICharacterInputProcessor {
+    private var skipNextCharacter = false
 
-private data class WinUIKeyEventRegistration(
-    val event: WinRTEvent<KeyEventHandler>,
+    fun onKeyDownProcessed(
+        keyCodePoint: Int,
+        wasHandled: Boolean,
+    ) {
+        skipNextCharacter = wasHandled && keyCodePoint.toCommittedTextOrNull() != null
+    }
+
+    fun process(
+        codePoint: Int,
+        isHandled: Boolean,
+        isCoreTextInputActive: Boolean = false,
+        isCoreTextCompositionActive: Boolean = false,
+        commitText: (String) -> Boolean,
+    ): Boolean? {
+        if (isHandled) return null
+        val text = codePoint.toCommittedTextOrNull()
+        if (text == null) {
+            skipNextCharacter = false
+            return null
+        }
+        if (isCoreTextInputActive && isCoreTextCompositionActive) {
+            skipNextCharacter = false
+            return true
+        }
+        if (skipNextCharacter) {
+            skipNextCharacter = false
+            return null
+        }
+        return commitText(text)
+    }
+}
+
+private fun Any?.isComposeSource(
+    composeSources: List<Any?>,
+    composeSubtreeSources: List<Any?>,
+): Boolean {
+    if (this == null) return true
+    if (composeSources.any { source -> this == source }) return true
+    val sourceElement = asWinRTUIElement() ?: return false
+    val subtreeSources = composeSubtreeSources.filterIsInstance<UIElement>()
+    return runCatching {
+        isComposeKeyEventSubtreeSource(
+            source = sourceElement,
+            subtreeSources = subtreeSources,
+            parentOf = { element ->
+                element.asWinRTFrameworkElement()
+                    ?.let { frameworkElement ->
+                        runCatching { frameworkElement.parent.asWinRTUIElement() }.getOrNull()
+                    }
+            },
+            sameIdentity = { first, second ->
+                first.nativeObject.sameIdentity(second.nativeObject)
+            },
+        )
+    }.getOrDefault(false)
+}
+
+private fun Any?.asWinRTUIElement(): UIElement? =
+    asExistingInstance(UIElement::class.java)
+        ?: runCatching { this?.asWinRT<UIElement>() }.getOrNull()
+
+private fun Any?.asWinRTFrameworkElement(): FrameworkElement? =
+    asExistingInstance(FrameworkElement::class.java)
+        ?: runCatching { this?.asWinRT<FrameworkElement>() }.getOrNull()
+
+private fun <T> Any?.asExistingInstance(type: Class<T>): T? =
+    if (this != null && type.isInstance(this)) type.cast(this) else null
+
+internal fun <T : Any> isComposeKeyEventSubtreeSource(
+    source: T?,
+    subtreeSources: List<T>,
+    parentOf: (T) -> T?,
+    sameIdentity: (T, T) -> Boolean,
+    maxDepth: Int = 32,
+): Boolean {
+    var current = source
+    var depth = 0
+    while (current != null && depth < maxDepth) {
+        val currentSource = current
+        if (subtreeSources.any { candidate ->
+                runCatching { sameIdentity(currentSource, candidate) }.getOrDefault(false)
+            }
+        ) {
+            return true
+        }
+        current = runCatching { parentOf(currentSource) }.getOrNull()
+        depth += 1
+    }
+    return false
+}
+
+private inline fun debugKeyInput(message: () -> String) {
+    if (winUISystemBooleanProperty("compose.winui.keyInput.debug")) {
+        println("[compose-winui:key] ${message()}")
+    }
+}
+
+private fun Any?.debugClassNameOrNull(): String =
+    this?.let { it::class.qualifiedName ?: it::class.simpleName ?: it.toString() } ?: "null"
+
+private fun List<Any?>.debugClassNames(): String =
+    joinToString(prefix = "[", postfix = "]") { it.debugClassNameOrNull() }
+
+private data class WinUIInputEventRegistration<T : Any>(
+    val event: WinRTEvent<T>,
     val token: EventRegistrationToken,
-    val handler: KeyEventHandler,
-)
+    val handler: T,
+) {
+    fun remove() {
+        event.remove(token)
+    }
+}
+
+private fun Int.toCommittedTextOrNull(): String? {
+    if (this <= 0 || this > Char.MAX_VALUE.code) return null
+    val char = toChar()
+    if (char.isISOControl() || char.isSurrogate()) return null
+    return char.toString()
+}
 
 private class WinUIKeyModifierState {
     var isCtrlPressed = false
@@ -139,7 +358,7 @@ private fun VirtualKey.toComposeKeyEvent(
 ) = KeyEvent(
     key = toComposeKey(),
     type = eventType,
-    codePoint = toUtf16CodePoint(),
+    codePoint = 0,
     isCtrlPressed = modifierState.isCtrlPressed,
     isMetaPressed = modifierState.isMetaPressed,
     isAltPressed = modifierState.isAltPressed,
@@ -269,46 +488,4 @@ private fun VirtualKey.toComposeKey(): Key =
         VirtualKey.GamepadLeftThumbstickButton -> Key.ButtonThumbLeft
         VirtualKey.GamepadRightThumbstickButton -> Key.ButtonThumbRight
         else -> Key.Unknown
-    }
-
-private fun VirtualKey.toUtf16CodePoint(): Int =
-    when (this) {
-        VirtualKey.Number0 -> '0'.code
-        VirtualKey.Number1 -> '1'.code
-        VirtualKey.Number2 -> '2'.code
-        VirtualKey.Number3 -> '3'.code
-        VirtualKey.Number4 -> '4'.code
-        VirtualKey.Number5 -> '5'.code
-        VirtualKey.Number6 -> '6'.code
-        VirtualKey.Number7 -> '7'.code
-        VirtualKey.Number8 -> '8'.code
-        VirtualKey.Number9 -> '9'.code
-        VirtualKey.A -> 'A'.code
-        VirtualKey.B -> 'B'.code
-        VirtualKey.C -> 'C'.code
-        VirtualKey.D -> 'D'.code
-        VirtualKey.E -> 'E'.code
-        VirtualKey.F -> 'F'.code
-        VirtualKey.G -> 'G'.code
-        VirtualKey.H -> 'H'.code
-        VirtualKey.I -> 'I'.code
-        VirtualKey.J -> 'J'.code
-        VirtualKey.K -> 'K'.code
-        VirtualKey.L -> 'L'.code
-        VirtualKey.M -> 'M'.code
-        VirtualKey.N -> 'N'.code
-        VirtualKey.O -> 'O'.code
-        VirtualKey.P -> 'P'.code
-        VirtualKey.Q -> 'Q'.code
-        VirtualKey.R -> 'R'.code
-        VirtualKey.S -> 'S'.code
-        VirtualKey.T -> 'T'.code
-        VirtualKey.U -> 'U'.code
-        VirtualKey.V -> 'V'.code
-        VirtualKey.W -> 'W'.code
-        VirtualKey.X -> 'X'.code
-        VirtualKey.Y -> 'Y'.code
-        VirtualKey.Z -> 'Z'.code
-        VirtualKey.Space -> ' '.code
-        else -> 0
-    }
+}

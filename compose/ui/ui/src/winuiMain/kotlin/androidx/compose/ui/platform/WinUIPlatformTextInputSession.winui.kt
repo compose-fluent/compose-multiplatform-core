@@ -16,10 +16,16 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.SessionMutex
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 
+@OptIn(ExperimentalComposeUiApi::class)
 internal class WinUIPlatformTextInputSession(
     coroutineScope: CoroutineScope,
 ) : PlatformTextInputSessionScope, CoroutineScope by coroutineScope {
@@ -29,11 +35,25 @@ internal class WinUIPlatformTextInputSession(
         inputMethodSessionMutex.withSessionCancellingPrevious(
             sessionInitializer = { request },
         ) { activeRequest ->
-            @Suppress("RemoveExplicitTypeArguments")
-            suspendCancellableCoroutine<Nothing> { continuation ->
-                WinUIPlatformTextInputService.startInputMethod(activeRequest)
-                continuation.invokeOnCancellation {
-                    WinUIPlatformTextInputService.stopInputMethod(activeRequest)
+            coroutineScope {
+                launch {
+                    snapshotFlow { activeRequest.value() }.collect { value ->
+                        WinUIPlatformTextInputService.updateInputMethodState(activeRequest, value)
+                    }
+                }
+                launch {
+                    snapshotFlow {
+                        WinUIPlatformTextInputService.requestTextLayoutBoundsInRoot(activeRequest)
+                    }.collect { bounds ->
+                        WinUIPlatformTextInputService.updateInputMethodLayout(activeRequest, bounds)
+                    }
+                }
+                @Suppress("RemoveExplicitTypeArguments")
+                suspendCancellableCoroutine<Nothing> { continuation ->
+                    WinUIPlatformTextInputService.startInputMethod(activeRequest)
+                    continuation.invokeOnCancellation {
+                        WinUIPlatformTextInputService.stopInputMethod(activeRequest)
+                    }
                 }
             }
         }

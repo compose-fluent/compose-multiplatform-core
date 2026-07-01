@@ -9,8 +9,9 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/plugin:** `KWINRT-041`.
-- **Open compose-side workarounds:** `KWINRT-041`.
+- **Open upstream/plugin:** `KWINRT-041`, `KWINRT-048`, `KWINRT-050`.
+- **Open compose-side workarounds:** `KWINRT-041`, `KWINRT-048`,
+  `KWINRT-050`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
@@ -23,6 +24,70 @@ baseline, not every retest attempt.
   `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, `KWINRT-038`, `KWINRT-040`,
   `KWINRT-043`, `KWINRT-044`, `KWINRT-045`, `KWINRT-046`, and
   `KWINRT-047`.
+
+## KWINRT-049: WinRT async cancellation upcall can crash clipboard text retrieval
+
+- **Status:** Open.
+- **Observed in:** compose-winui text input and context menu flows that end up
+  reading clipboard text through `DataPackageView.getTextAsync()`.
+- **Symptom:** the JVM crashes in
+  `io.github.composefluent.winrt.runtime.WinRtAsyncAwaitState.installCancellation$lambda$0`
+  from a native COM vtable upcall while the clipboard read coroutine is being
+  cancelled.
+- **Expected behavior:** cancelling a clipboard read should be a normal
+  coroutine cancellation, not a native access violation.
+- **compose-winui workaround:** `PlatformClipboard.winui.kt` wraps
+  `getTextAsync().await()` in `NonCancellable` so the WinRT await path is not
+  torn down by menu/input cancellation.
+- **Validation:** with JDK 25, `:compose:ui:ui:compileKotlinWinuiJvm`,
+  focused WinUI input tests, and
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` pass after the workaround.
+
+## KWINRT-050: Generated struct property setters and method parameters pass a pointer instead of struct by value
+
+- **Status:** Open.
+- **Observed in:** compose-winui CoreText integration for
+  `CoreTextSelectionRequest.Selection`,
+  `CoreTextLayoutBounds.TextBounds` / `ControlBounds`, and
+  `CoreTextEditContext.NotifyTextChanged(...)` /
+  `NotifySelectionChanged(...)`.
+- **Symptom:** after assigning `CoreTextRange(1991, 1991)` to a selection
+  request, reading it back returned pointer-like values such as
+  `CoreTextRange(start=465861664, end=529)`. The MPP `BasicTextField2` sample
+  then failfasted inside
+  `Windows.UI.Core.TextInput.dll!Windows::UI::Text::Core::CLayoutRequest::GetTranslatedLayoutBounds`
+  while TSF queried layout after `NotifySelectionChanged`.
+- **Expected behavior:** WinRT property setters and methods whose ABI parameter
+  is a struct should pass the struct by value, matching the generated FFM
+  `Struct<size>_<alignment>` descriptor, not pass the address of a temporary
+  native buffer as an `Object` argument.
+- **compose-winui workaround:** `WinUICoreTextStructInterop.winuiJvm.kt`
+  bypasses the generated CoreText struct setters and affected notification
+  methods narrowly for the affected CoreText APIs. It QIs to the correct
+  CoreText default interface and invokes the slot with `Struct8_4` or
+  `Struct16_4` FFM descriptors for `CoreTextRange` and
+  `Windows.Foundation.Rect`.
+- **Validation:** focused CoreText struct interop tests pass. The MPP
+  `BasicTextField2` window-switch repro is validated through the default
+  non-CoreText input path; CoreText remains explicitly opt-in because the WinUI
+  desktop HWND path still failfasts in TSF/CoreText layout after focus changes.
+
+## KWINRT-048: Generator/runtime snapshots disagree on built-in EventRegistrationToken and XAML notifier facade names
+
+- **Status:** Open.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` while validating
+  compose-winui text input against the current `0.1.0-SNAPSHOT` kotlin-winrt
+  Maven artifacts.
+- **Symptom:** generated WinUI sources still import
+  `io.github.composefluent.winrt.runtime.EventRegistrationToken` and
+  `WinRTPropertyChangedNotifierProjection`, while newer runtime snapshots expose
+  `windows.foundation.EventRegistrationToken` and
+  `INotifyPropertyChangedProjection`.
+- **Expected behavior:** kotlin-winrt generator output and runtime API should
+  agree on the same built-in projection ownership and facade names.
+- **compose-winui workaround:** `WinRTCompatibilityAliases.winui.kt` provides a
+  narrow source-set-local alias/facade so generated WinUI sources compile until
+  the snapshot mismatch is resolved.
 
 ## KWINRT-046: Dependency authored activatable classes are omitted from app manifest
 
@@ -810,15 +875,17 @@ baseline, not every retest attempt.
   `compose-fluent-skiko\samples\SkiaWinUISample`, loaded Windows App SDK
   `Microsoft.UI.Xaml.dll` `3.1.8.2604`, and is evidence that this native
   text-input fail-fast is not specific to compose-winui's full smoke sample.
-- **Resolution:** compose-winui now creates a CoreText edit context/session only
-  when `compose.winui.textInput.coreText.enabled=true`; when enabled, the
-  automatic attach path calls `CoreTextEditContext.notifyFocusEnter()` so the
-  native focus registration path is exercised instead of merely creating an
-  inert edit context.
+- **Resolution:** compose-winui does not attach CoreText by default. Normal text
+  input is maintained through Compose's key event and edit-command model, while
+  the experimental CoreText bridge is kept behind
+  `compose.winui.textInput.coreText.enabled=true` for deliberate debugging only.
+  The native TextInputFramework fail-fast remains an upstream/runtime bucket to
+  revisit only with a deliberately scoped desktop IME integration.
 - **Validation:** with JDK 25 and current Maven snapshots,
-  `:compose:ui:ui:winui-samples:runWinUITextInputSample` and
-  `:compose:mpp:demo-winui:runWinUIMppSample` pass without reproducing this
-  fail-fast. Reopen only with fresh native crash evidence from the current
+  `:compose:ui:ui:compileKotlinWinuiJvm`,
+  focused WinUI input tests, and
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` pass with CoreText not
+  enabled. Reopen only with fresh native crash evidence from the current
   snapshots.
 
 ## KWINRT-027: Maven compiler plugin snapshot requires Kotlin 2.4 compiler APIs
@@ -1166,9 +1233,9 @@ baseline, not every retest attempt.
   generated output, `:compose:ui:ui:compileKotlinWinuiJvm` completes with
   compose-ui's explicit projection surface and no generated-interface
   exclusions.
-- **compose-winui workaround:** none. Compose-winui keeps the real
-  CoreText/input functionality and does not exclude generated interfaces to hide
-  the generator namespace mapping issue.
+- **compose-winui workaround:** none. Compose-winui keeps the real input
+  projection surface and does not exclude generated interfaces to hide the
+  generator namespace mapping issue.
 
 ## KWINRT-037: Authored override parameters using Windows.Foundation.Size have no metadata
 

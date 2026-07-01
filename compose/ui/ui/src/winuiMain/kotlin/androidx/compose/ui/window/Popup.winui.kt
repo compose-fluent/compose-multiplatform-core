@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.asWinRT
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.CornerRadius
@@ -430,7 +430,7 @@ private class WinUIFlyoutPopupHost(
     private fun registerParentRootLoadedHandler() {
         if (parentRootLoadedToken != null) return
         val root = parentRoot ?: return
-        val handler = RoutedEventHandler { _, _ ->
+        val handler: RoutedEventHandler = { _, _ ->
             updateFlyout()
         }
         parentRootLoadedHandler = handler

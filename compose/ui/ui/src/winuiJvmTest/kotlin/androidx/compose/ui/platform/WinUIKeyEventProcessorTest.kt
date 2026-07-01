@@ -22,6 +22,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import windows.system.VirtualKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,6 +30,66 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WinUIKeyEventProcessorTest {
+    @Test
+    fun matchesKeyEventsFromComposeRenderHostDescendants() {
+        val renderHost = FakeKeyEventSource(parent = null)
+        val swapChainPanel = FakeKeyEventSource(parent = renderHost)
+
+        val matches = isComposeKeyEventSubtreeSource(
+            source = swapChainPanel,
+            subtreeSources = listOf(renderHost),
+            parentOf = { source -> source.parent },
+            sameIdentity = { first, second -> first === second },
+        )
+
+        assertEquals(true, matches)
+    }
+
+    @Test
+    fun doesNotMatchKeyEventsOutsideComposeRenderHostSubtree() {
+        val renderHost = FakeKeyEventSource(parent = null)
+        val nativeChild = FakeKeyEventSource(parent = null)
+
+        val matches = isComposeKeyEventSubtreeSource(
+            source = nativeChild,
+            subtreeSources = listOf(renderHost),
+            parentOf = { source -> source.parent },
+            sameIdentity = { first, second -> first === second },
+        )
+
+        assertEquals(false, matches)
+    }
+
+    @Test
+    fun returnsFalseWhenKeyEventSourceParentLookupFails() {
+        val renderHost = FakeKeyEventSource(parent = null)
+        val source = FakeKeyEventSource(parent = renderHost)
+
+        val matches = isComposeKeyEventSubtreeSource(
+            source = source,
+            subtreeSources = listOf(renderHost),
+            parentOf = { error("parent lookup failed") },
+            sameIdentity = { first, second -> first === second },
+        )
+
+        assertEquals(false, matches)
+    }
+
+    @Test
+    fun returnsFalseWhenKeyEventSourceIdentityCheckFails() {
+        val renderHost = FakeKeyEventSource(parent = null)
+        val source = FakeKeyEventSource(parent = renderHost)
+
+        val matches = isComposeKeyEventSubtreeSource(
+            source = source,
+            subtreeSources = listOf(renderHost),
+            parentOf = { it.parent },
+            sameIdentity = { _, _ -> error("identity check failed") },
+        )
+
+        assertEquals(false, matches)
+    }
+
     @Test
     fun skipsAlreadyHandledNativeEvents() {
         val processor = WinUIKeyEventProcessor()
@@ -66,6 +127,30 @@ class WinUIKeyEventProcessorTest {
         assertEquals(true, handled)
         assertEquals(Key.A, events.single().key)
         assertEquals(KeyEventType.KeyDown, events.single().type)
+    }
+
+    @Test
+    fun keyDownDoesNotSynthesizeTextCodePointsFromVirtualKeys() {
+        val processor = WinUIKeyEventProcessor()
+        val events = mutableListOf<KeyEvent>()
+
+        listOf(
+            VirtualKey.A,
+            VirtualKey.Number1,
+            VirtualKey.Space,
+        ).forEach { key ->
+            processor.process(
+                eventType = KeyEventType.KeyDown,
+                key = key,
+                isHandled = false,
+                nativeEvent = null,
+            ) {
+                events += it
+                false
+            }
+        }
+
+        assertEquals(listOf(0, 0, 0), events.map { it.utf16CodePoint })
     }
 
     @Test
@@ -150,4 +235,9 @@ class WinUIKeyEventProcessorTest {
         assertEquals(Key.B, events[3].key)
         assertEquals(false, events[3].isCtrlPressed)
     }
+
 }
+
+private class FakeKeyEventSource(
+    val parent: FakeKeyEventSource?,
+)

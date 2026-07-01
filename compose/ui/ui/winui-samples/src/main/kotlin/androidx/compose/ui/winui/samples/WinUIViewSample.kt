@@ -133,7 +133,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowBackdrop
 import androidx.compose.foundation.text.BasicText
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.asWinRT
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
@@ -1337,9 +1337,9 @@ private object ComposeWinUiSmokeApp {
                 factory = { Button() },
                 update = { button ->
                     if (!registered) {
-                        token = button.click.add(RoutedEventHandler { _, _ ->
+                        token = button.click.add { _, _ ->
                             clickCount += 1
-                        })
+                        }
                         registered = true
                     }
                 },
@@ -1389,7 +1389,7 @@ private object ComposeWinUiSmokeApp {
                         factory = { Button() },
                         update = { button ->
                             if (!eventRegistered) {
-                                token = button.click.add(RoutedEventHandler { _, _ -> })
+                                token = button.click.add { _, _ -> }
                                 eventRegistered = true
                             }
                         },

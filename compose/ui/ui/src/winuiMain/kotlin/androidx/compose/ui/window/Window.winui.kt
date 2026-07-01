@@ -23,7 +23,7 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.platform.WinUIComposeView
 import androidx.compose.ui.platform.debugRender
 import androidx.compose.ui.unit.IntSize
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
+import windows.foundation.EventRegistrationToken
 import microsoft.ui.composition.Compositor
 import microsoft.ui.dispatching.DispatcherQueue
 import microsoft.ui.windowing.AppWindow
@@ -114,17 +114,17 @@ private class WinUIWindowNode(
     private var isReleased = false
     private var isClosingFromRelease = false
     private var activatedHandler: TypedEventHandler<Any?, WindowActivatedEventArgs>? =
-        TypedEventHandler { _, args -> handleActivated(args.windowActivationState) }
+        { _, args -> handleActivated(args.windowActivationState) }
     private var activatedToken: EventRegistrationToken? =
         window.activated.add(requireNotNull(activatedHandler))
     private var closedHandler: TypedEventHandler<Any?, microsoft.ui.xaml.WindowEventArgs>? =
-        TypedEventHandler { _, _ -> handleClosed() }
+        { _, _ -> handleClosed() }
     private var closedToken: EventRegistrationToken? = window.closed.add(requireNotNull(closedHandler))
     private var appWindowChangedHandler: TypedEventHandler<AppWindow, AppWindowChangedEventArgs>? =
-        TypedEventHandler { _, _ -> updateWindowInfo() }
+        { _, _ -> updateWindowInfo() }
     private var appWindowChangedToken: EventRegistrationToken? = null
     private var appWindowClosingHandler: TypedEventHandler<AppWindow, AppWindowClosingEventArgs>? =
-        TypedEventHandler { _, args -> handleClosing(args) }
+        { _, args -> handleClosing(args) }
     private var appWindowClosingToken: EventRegistrationToken? = null
     private var isCaptureProtected = false
     override val composeViewForTest: WinUIComposeView?

@@ -17,6 +17,7 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.text.TextLayoutResult
@@ -39,6 +40,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputSession: WinUITextInputSessionState? = null
     private var activeInputMethodSession: WinUITextInputMethodSessionState? = null
+    private var rootToScreenMapperOwner: Any? = null
+    private var rootToScreenMapper: (Offset) -> Offset = { it }
+    private var rootToViewportMapper: (Offset) -> Offset = { it }
+    private var rootViewportBoundsInRoot: () -> Rect? = { null }
     internal val nativeBridge: WinUINativeTextInputBridge = WinUINativeTextInputBridge(this)
 
     internal val isInputActive: Boolean
@@ -55,21 +60,35 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         get() = activeInputSession?.isNativeTextInputFocused == true ||
             activeInputMethodSession?.isNativeTextInputFocused == true
 
+    internal val isCoreTextInputActive: Boolean
+        get() = nativeBridge.isCoreTextSessionActive
+
+    internal val isCoreTextCompositionActive: Boolean
+        get() = nativeBridge.isCoreTextCompositionActive
+
     internal val currentValue: TextFieldValue?
         get() = activeInputSession?.value ?: activeInputMethodSession?.request?.value?.invoke()
+            ?: activeInputMethodSession?.value
 
     internal val currentImeOptions: ImeOptions?
         get() = activeInputSession?.imeOptions ?: activeInputMethodSession?.request?.imeOptions
 
     internal val previousValue: TextFieldValue?
-        get() = activeInputSession?.oldValue
+        get() = activeInputSession?.oldValue ?: activeInputMethodSession?.oldValue
 
     internal val currentInputMethodRequest: PlatformTextInputMethodRequest?
         get() = activeInputMethodSession?.request
 
     internal val currentTextLayoutBoundsInRoot: WinUITextLayoutBounds?
         get() = activeInputSession?.textLayoutBoundsInRoot
-            ?: activeInputMethodSession?.request?.textLayoutBoundsInRoot()
+            ?: activeInputMethodSession?.textLayoutBoundsInRoot
+
+    internal val currentTextLayoutBoundsOnScreen: WinUITextLayoutBounds?
+        get() = currentCoreTextLayoutSnapshot?.layoutBounds
+
+    internal val currentCoreTextLayoutSnapshot: WinUICoreTextLayoutSnapshot?
+        get() = activeInputSession?.coreTextLayoutSnapshot
+            ?: activeInputMethodSession?.coreTextLayoutSnapshot
 
     override fun startInput(
         value: TextFieldValue,
@@ -77,6 +96,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         onEditCommand: (List<EditCommand>) -> Unit,
         onImeActionPerformed: (ImeAction) -> Unit,
     ) {
+        debugTextInput {
+            "startInput legacy value=${value.debugString()} imeOptions=${imeOptions.debugString()}"
+        }
         nativeBridge.disposeCoreTextSession()
         activeInputSession = WinUITextInputSessionState(
             value = value,
@@ -84,10 +106,11 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             onEditCommand = onEditCommand,
             onImeActionPerformed = onImeActionPerformed,
         )
-        nativeBridge.attachCoreTextForCurrentInputIfAvailable()
+        nativeBridge.attachCoreTextForCurrentInput()
     }
 
     override fun stopInput() {
+        debugTextInput { "stopInput legacy active=${activeInputSession != null}" }
         nativeBridge.disposeCoreTextSession()
         activeInputSession = null
     }
@@ -105,6 +128,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
+        debugTextInput {
+            "updateState legacy old=${oldValue?.debugString()} new=${newValue.debugString()}"
+        }
         activeInputSession = activeInputSession?.copy(
             oldValue = oldValue,
             value = newValue,
@@ -126,6 +152,10 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             innerTextFieldBounds = textFieldToRootMatrix.map(innerTextFieldBounds),
             decorationBoxBounds = textFieldToRootMatrix.map(decorationBoxBounds),
         )
+        debugTextInput {
+            "updateTextLayoutResult legacy value=${textFieldValue.debugString()} " +
+                "boundsInRoot=${textLayoutBoundsInRoot.debugString()}"
+        }
         activeInputSession = activeInputSession?.copy(
             textFieldValue = textFieldValue,
             offsetMapping = offsetMapping,
@@ -133,6 +163,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             innerTextFieldBounds = innerTextFieldBounds,
             decorationBoxBounds = decorationBoxBounds,
             textLayoutBoundsInRoot = textLayoutBoundsInRoot,
+            coreTextLayoutSnapshot = textLayoutBoundsInRoot.toCoreTextLayoutSnapshot(),
         )
         nativeBridge.notifyCoreTextLayoutChanged()
     }
@@ -172,16 +203,29 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     }
 
     internal fun sendEditCommands(commands: List<EditCommand>): Boolean {
+        debugTextInput {
+            "sendEditCommands commands=${commands.debugString()} " +
+                "legacyActive=${activeInputSession != null} " +
+                "inputMethodActive=${activeInputMethodSession != null}"
+        }
         activeInputSession?.let { session ->
             session.onEditCommand(commands)
+            debugTextInput { "sendEditCommands delivered=legacy" }
             return true
         }
         activeInputMethodSession?.request?.onEditCommand?.invoke(commands)
-        return activeInputMethodSession != null
+        val delivered = activeInputMethodSession != null
+        debugTextInput { "sendEditCommands delivered=inputMethod result=$delivered" }
+        return delivered
     }
 
     internal fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
-        sendEditCommands(listOf(CommitTextCommand(text, newCursorPosition)))
+        sendEditCommands(listOf(CommitTextCommand(text, newCursorPosition))).also { result ->
+            debugTextInput {
+                "commitText text=${text.debugForLog()} newCursorPosition=$newCursorPosition " +
+                    "result=$result coreTextActive=$isCoreTextInputActive"
+            }
+        }
 
     internal fun setComposingText(text: String, newCursorPosition: Int = 1): Boolean =
         sendEditCommands(listOf(SetComposingTextCommand(text, newCursorPosition)))
@@ -217,19 +261,118 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         nativeBridge.disposeCoreTextSession()
         activeInputSession = null
         activeInputMethodSession = null
+        unregisterRootToScreenMapper(rootToScreenMapperOwner)
     }
+
+    internal fun registerRootToScreenMapper(
+        owner: Any,
+        mapper: (Offset) -> Offset,
+        viewportMapper: (Offset) -> Offset = { it },
+        viewportBoundsInRoot: () -> Rect? = { null },
+    ) {
+        rootToScreenMapperOwner = owner
+        rootToScreenMapper = mapper
+        rootToViewportMapper = viewportMapper
+        rootViewportBoundsInRoot = viewportBoundsInRoot
+    }
+
+    internal fun unregisterRootToScreenMapper(owner: Any?) {
+        if (owner != null && rootToScreenMapperOwner !== owner) {
+            return
+        }
+        rootToScreenMapperOwner = null
+        rootToScreenMapper = { it }
+        rootToViewportMapper = { it }
+        rootViewportBoundsInRoot = { null }
+    }
+
+    internal fun mapRootOffsetToScreen(offset: Offset): Offset =
+        rootToScreenMapper(offset)
+
+    internal fun mapRootOffsetToViewport(offset: Offset): Offset =
+        rootToViewportMapper(offset)
+
+    internal val hasRootToScreenMapper: Boolean
+        get() = rootToScreenMapperOwner != null
+
+    internal val currentRootViewportBoundsOnScreen: Rect?
+        get() = rootViewportBoundsInRoot()?.toScreenRect()
 
     internal fun startInputMethod(request: PlatformTextInputMethodRequest) {
         nativeBridge.disposeCoreTextSession()
+        val textLayoutBoundsInRoot = request.textLayoutBoundsInRoot()
+        val value = request.value()
+        debugTextInput {
+            "startInputMethod request=${request.debugIdentity()} value=${value.debugString()} " +
+                "imeOptions=${request.imeOptions.debugString()} " +
+                "boundsInRoot=${textLayoutBoundsInRoot?.debugString()} " +
+                "hasRootToScreenMapper=$hasRootToScreenMapper"
+        }
         activeInputMethodSession = WinUITextInputMethodSessionState(
             request = request,
+            value = value,
             isSoftwareKeyboardVisible = true,
+            textLayoutBoundsInRoot = textLayoutBoundsInRoot,
+            coreTextLayoutSnapshot = textLayoutBoundsInRoot?.toCoreTextLayoutSnapshot(),
         )
-        nativeBridge.attachCoreTextForCurrentInputIfAvailable()
+        nativeBridge.attachCoreTextForCurrentInput()
+    }
+
+    internal fun requestTextLayoutBoundsInRoot(
+        request: PlatformTextInputMethodRequest,
+    ): WinUITextLayoutBounds? = request.textLayoutBoundsInRoot()
+
+    internal fun updateInputMethodState(
+        request: PlatformTextInputMethodRequest,
+        newValue: TextFieldValue,
+    ) {
+        val session = activeInputMethodSession ?: return
+        if (session.request !== request || session.value == newValue) return
+        val textLayoutBoundsInRoot = request.textLayoutBoundsInRoot()
+        val coreTextLayoutSnapshot = textLayoutBoundsInRoot?.toCoreTextLayoutSnapshot()
+        debugTextInput {
+            "updateInputMethodState request=${request.debugIdentity()} " +
+                "old=${session.value.debugString()} new=${newValue.debugString()} " +
+                "boundsInRoot=${textLayoutBoundsInRoot?.debugString()} " +
+                "coreTextBounds=${coreTextLayoutSnapshot?.debugString()}"
+        }
+        activeInputMethodSession = session.copy(
+            oldValue = session.value,
+            value = newValue,
+            textLayoutBoundsInRoot = textLayoutBoundsInRoot,
+            coreTextLayoutSnapshot = coreTextLayoutSnapshot,
+        )
+        nativeBridge.updateCoreTextState(session.value, newValue)
+    }
+
+    internal fun updateInputMethodLayout(
+        request: PlatformTextInputMethodRequest,
+        textLayoutBoundsInRoot: WinUITextLayoutBounds?,
+    ) {
+        val session = activeInputMethodSession ?: return
+        if (session.request !== request) return
+        val coreTextLayoutSnapshot = textLayoutBoundsInRoot?.toCoreTextLayoutSnapshot()
+        if (
+            session.textLayoutBoundsInRoot == textLayoutBoundsInRoot &&
+            session.coreTextLayoutSnapshot == coreTextLayoutSnapshot
+        ) {
+            return
+        }
+        debugTextInput {
+            "updateInputMethodLayout request=${request.debugIdentity()} " +
+                "boundsInRoot=${textLayoutBoundsInRoot?.debugString()} " +
+                "coreTextBounds=${coreTextLayoutSnapshot?.debugString()}"
+        }
+        activeInputMethodSession = session.copy(
+            textLayoutBoundsInRoot = textLayoutBoundsInRoot,
+            coreTextLayoutSnapshot = coreTextLayoutSnapshot,
+        )
+        nativeBridge.notifyCoreTextLayoutChanged()
     }
 
     internal fun stopInputMethod(request: PlatformTextInputMethodRequest) {
         if (activeInputMethodSession?.request === request) {
+            debugTextInput { "stopInputMethod request=${request.debugIdentity()}" }
             nativeBridge.disposeCoreTextSession()
             activeInputMethodSession = null
         }
@@ -251,6 +394,46 @@ private fun PlatformTextInputMethodRequest.textLayoutBoundsInRoot(): WinUITextLa
     }
 }
 
+private fun WinUITextLayoutBounds.toScreenBounds(): WinUITextLayoutBounds =
+    WinUITextLayoutBounds(
+        innerTextFieldBounds = innerTextFieldBounds.toScreenRect(),
+        decorationBoxBounds = decorationBoxBounds.toScreenRect(),
+    )
+
+private fun WinUITextLayoutBounds.toViewportBounds(): WinUITextLayoutBounds =
+    WinUITextLayoutBounds(
+        innerTextFieldBounds = innerTextFieldBounds.toViewportRect(),
+        decorationBoxBounds = decorationBoxBounds.toViewportRect(),
+    )
+
+private fun WinUITextLayoutBounds.toCoreTextLayoutSnapshot(): WinUICoreTextLayoutSnapshot =
+    WinUICoreTextLayoutSnapshot(
+        layoutBounds = toScreenBounds(),
+        visualBounds = toViewportBounds(),
+    )
+
+private fun Rect.toScreenRect(): Rect {
+    val topLeft = WinUIPlatformTextInputService.mapRootOffsetToScreen(topLeft)
+    val bottomRight = WinUIPlatformTextInputService.mapRootOffsetToScreen(bottomRight)
+    return Rect(
+        left = minOf(topLeft.x, bottomRight.x),
+        top = minOf(topLeft.y, bottomRight.y),
+        right = maxOf(topLeft.x, bottomRight.x),
+        bottom = maxOf(topLeft.y, bottomRight.y),
+    )
+}
+
+private fun Rect.toViewportRect(): Rect {
+    val topLeft = WinUIPlatformTextInputService.mapRootOffsetToViewport(topLeft)
+    val bottomRight = WinUIPlatformTextInputService.mapRootOffsetToViewport(bottomRight)
+    return Rect(
+        left = minOf(topLeft.x, bottomRight.x),
+        top = minOf(topLeft.y, bottomRight.y),
+        right = maxOf(topLeft.x, bottomRight.x),
+        bottom = maxOf(topLeft.y, bottomRight.y),
+    )
+}
+
 internal class WinUINativeTextInputBridge(
     private val textInputService: WinUIPlatformTextInputService,
 ) {
@@ -261,6 +444,9 @@ internal class WinUINativeTextInputBridge(
 
     val isCoreTextSessionActive: Boolean
         get() = coreTextSession != null
+
+    val isCoreTextCompositionActive: Boolean
+        get() = coreTextSession?.isCompositionActive == true
 
     fun enterFocus(): Boolean =
         textInputService.enterNativeTextInputFocus()
@@ -273,10 +459,25 @@ internal class WinUINativeTextInputBridge(
         }
 
     fun attachCoreTextForCurrentInput(
-        notifyNativeFocus: Boolean = false,
+        notifyNativeFocus: Boolean = true,
     ): Boolean {
-        val value = textInputService.currentValue ?: return false
-        val imeOptions = textInputService.currentImeOptions ?: return false
+        if (!textInputService.hasRootToScreenMapper) {
+            debugTextInput { "CoreText attach skipped: no root-to-screen mapper" }
+            return false
+        }
+        if (!isCoreTextExplicitlyEnabled()) {
+            return false
+        }
+        val value = textInputService.currentValue
+        if (value == null) {
+            debugTextInput { "CoreText attach skipped: no current TextFieldValue" }
+            return false
+        }
+        val imeOptions = textInputService.currentImeOptions
+        if (imeOptions == null) {
+            debugTextInput { "CoreText attach skipped: no current ImeOptions" }
+            return false
+        }
         return attachCoreTextForCurrentInput(
             editContext = null,
             initialValue = value,
@@ -287,10 +488,21 @@ internal class WinUINativeTextInputBridge(
 
     internal fun attachCoreTextForCurrentInput(
         editContext: WinUICoreTextEditContext,
-        notifyNativeFocus: Boolean = false,
+        notifyNativeFocus: Boolean = true,
     ): Boolean {
-        val value = textInputService.currentValue ?: return false
-        val imeOptions = textInputService.currentImeOptions ?: return false
+        if (!isCoreTextExplicitlyEnabled()) {
+            return false
+        }
+        val value = textInputService.currentValue
+        if (value == null) {
+            debugTextInput { "CoreText fake attach skipped: no current TextFieldValue" }
+            return false
+        }
+        val imeOptions = textInputService.currentImeOptions
+        if (imeOptions == null) {
+            debugTextInput { "CoreText fake attach skipped: no current ImeOptions" }
+            return false
+        }
         return attachCoreTextForCurrentInput(
             editContext = editContext,
             initialValue = value,
@@ -299,47 +511,54 @@ internal class WinUINativeTextInputBridge(
         )
     }
 
-    internal fun attachCoreTextForCurrentInputIfAvailable(): Boolean =
-        if (!winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
-            false
-        } else {
-            runCatching {
-                attachCoreTextForCurrentInput(notifyNativeFocus = true)
-            }.getOrDefault(false)
-        }
-
     private fun attachCoreTextForCurrentInput(
         editContext: WinUICoreTextEditContext?,
         initialValue: TextFieldValue,
         imeOptions: ImeOptions,
         notifyNativeFocus: Boolean,
     ): Boolean {
-        disposeCoreTextSession()
-        coreTextSession = if (editContext != null) {
-            WinUICoreTextInputSession.create(
-                initialValue = initialValue,
-                imeOptions = imeOptions,
-                editContext = editContext,
-                currentLayoutBounds = { textInputService.currentTextLayoutBoundsInRoot },
-                dispatchEditCommands = textInputService::sendEditCommands,
-            )
-        } else {
-            WinUICoreTextInputSession.create(
-                initialValue = initialValue,
-                imeOptions = imeOptions,
-                currentLayoutBounds = { textInputService.currentTextLayoutBoundsInRoot },
-                dispatchEditCommands = textInputService::sendEditCommands,
-            )
+        debugTextInput {
+            "CoreText attach begin fake=${editContext != null} " +
+                "initial=${initialValue.debugString()} " +
+                "imeOptions=${imeOptions.debugString()} " +
+                "layout=${textInputService.currentCoreTextLayoutSnapshot?.debugString()}"
         }
+        disposeCoreTextSession()
+        val session = runCatching {
+            if (editContext != null) {
+                WinUICoreTextInputSession.create(
+                    initialValue = initialValue,
+                    imeOptions = imeOptions,
+                    editContext = editContext,
+                    currentValue = { textInputService.currentValue },
+                    currentLayoutBounds = { textInputService.currentCoreTextLayoutSnapshot },
+                    dispatchEditCommands = textInputService::sendEditCommands,
+                )
+            } else {
+                WinUICoreTextInputSession.create(
+                    initialValue = initialValue,
+                    imeOptions = imeOptions,
+                    currentValue = { textInputService.currentValue },
+                    currentLayoutBounds = { textInputService.currentCoreTextLayoutSnapshot },
+                    dispatchEditCommands = textInputService::sendEditCommands,
+                )
+            }
+        }.onFailure { throwable ->
+            debugTextInput {
+                "CoreText attach failed: ${throwable.stackTraceToString()}"
+            }
+        }.getOrNull() ?: return false
+
+        coreTextSession = session
         textInputService.enterNativeTextInputFocus()
         if (notifyNativeFocus) {
-            coreTextSession?.notifyFocusEnter()
+            session.notifyFocusEnter()
+        }
+        debugTextInput {
+            "CoreText attach success focused=${textInputService.isNativeTextInputFocused} " +
+                "notifyNativeFocus=$notifyNativeFocus"
         }
         return true
-    }
-
-    private companion object {
-        const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
     }
 
     internal fun updateCoreTextState(oldValue: TextFieldValue?, newValue: TextFieldValue) {
@@ -347,12 +566,17 @@ internal class WinUINativeTextInputBridge(
     }
 
     internal fun notifyCoreTextLayoutChanged() {
+        debugTextInput { "CoreText notifyLayoutChanged active=${coreTextSession != null}" }
         coreTextSession?.notifyLayoutChanged()
     }
 
     internal fun disposeCoreTextSession() {
-        coreTextSession?.dispose()
+        val session = coreTextSession ?: return
+        debugTextInput { "CoreText dispose" }
         coreTextSession = null
+        session.notifyFocusLeave()
+        session.dispose()
+        textInputService.exitNativeTextInputFocus()
     }
 
     fun commitText(text: String, newCursorPosition: Int = 1): Boolean =
@@ -378,6 +602,26 @@ internal class WinUINativeTextInputBridge(
 
     fun performImeAction(action: ImeAction): Boolean =
         textInputService.performImeAction(action)
+
+    private fun isCoreTextExplicitlyEnabled(): Boolean {
+        if (winUISystemBooleanProperty(CoreTextInputDisabledProperty)) {
+            debugTextInput { "CoreText attach skipped: disabled by system property" }
+            return false
+        }
+        if (!winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
+            debugTextInput {
+                "CoreText attach skipped: not enabled by system property " +
+                    CoreTextInputEnabledProperty
+            }
+            return false
+        }
+        return true
+    }
+
+    private companion object {
+        const val CoreTextInputDisabledProperty = "compose.winui.textInput.coreText.disabled"
+        const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
+    }
 }
 
 private data class WinUITextInputSessionState(
@@ -394,12 +638,17 @@ private data class WinUITextInputSessionState(
     val innerTextFieldBounds: Rect? = null,
     val decorationBoxBounds: Rect? = null,
     val textLayoutBoundsInRoot: WinUITextLayoutBounds? = null,
+    val coreTextLayoutSnapshot: WinUICoreTextLayoutSnapshot? = null,
 )
 
 private data class WinUITextInputMethodSessionState(
     val request: PlatformTextInputMethodRequest,
+    val value: TextFieldValue,
     val isSoftwareKeyboardVisible: Boolean,
     val isNativeTextInputFocused: Boolean = false,
+    val oldValue: TextFieldValue? = null,
+    val textLayoutBoundsInRoot: WinUITextLayoutBounds? = null,
+    val coreTextLayoutSnapshot: WinUICoreTextLayoutSnapshot? = null,
 )
 
 internal data class WinUITextLayoutBounds(
@@ -408,7 +657,64 @@ internal data class WinUITextLayoutBounds(
 )
 
 internal val WinUITextLayoutBounds.hasUsableBounds: Boolean
-    get() = innerTextFieldBounds.width > 0f &&
+    get() = innerTextFieldBounds.width >= 0f &&
         innerTextFieldBounds.height > 0f &&
         decorationBoxBounds.width > 0f &&
         decorationBoxBounds.height > 0f
+
+private inline fun debugTextInput(message: () -> String) {
+    if (winUISystemBooleanProperty("compose.winui.textInput.debug")) {
+        println("[compose-winui:text-input] ${message()}")
+    }
+}
+
+private fun PlatformTextInputMethodRequest.debugIdentity(): String =
+    "${this::class.simpleName}@${hashCode().toString(16)}"
+
+internal fun ImeOptions.debugString(): String =
+    "ImeOptions(keyboardType=$keyboardType, imeAction=$imeAction, singleLine=$singleLine)"
+
+internal fun TextFieldValue.debugString(): String =
+    "TextFieldValue(text=${text.debugForLog()}, selection=$selection, composition=$composition)"
+
+internal fun WinUITextLayoutBounds.debugString(): String =
+    "WinUITextLayoutBounds(inner=$innerTextFieldBounds, decoration=$decorationBoxBounds)"
+
+private fun WinUICoreTextLayoutSnapshot.debugString(): String =
+    "WinUICoreTextLayoutSnapshot(layout=${layoutBounds?.debugString()}, " +
+        "visual=${visualBounds?.debugString()})"
+
+private fun List<EditCommand>.debugString(): String =
+    joinToString(prefix = "[", postfix = "]") { command -> command.debugString() }
+
+private fun EditCommand.debugString(): String =
+    when (this) {
+        is CommitTextCommand -> "CommitText(text=${text.debugForLog()}, cursor=$newCursorPosition)"
+        is SetComposingTextCommand ->
+            "SetComposingText(text=${text.debugForLog()}, cursor=$newCursorPosition)"
+        is SetComposingRegionCommand -> "SetComposingRegion(start=$start, end=$end)"
+        is SetSelectionCommand -> "SetSelection(start=$start, end=$end)"
+        is DeleteSurroundingTextCommand ->
+            "DeleteSurroundingText(before=$lengthBeforeCursor, after=$lengthAfterCursor)"
+        is FinishComposingTextCommand -> "FinishComposingText"
+        is BackspaceCommand -> "Backspace"
+        else -> this::class.simpleName ?: toString()
+    }
+
+internal fun String.debugForLog(maxLength: Int = 80): String {
+    val escaped = buildString {
+        this@debugForLog.take(maxLength).forEach { char ->
+            when (char) {
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(char)
+            }
+        }
+        if (this@debugForLog.length > maxLength) {
+            append("...")
+        }
+    }
+    return "\"$escaped\""
+}
