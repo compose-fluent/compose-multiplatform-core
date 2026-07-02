@@ -27,6 +27,103 @@ import kotlin.test.assertTrue
 
 class WinUIWindowsImeInputProcessorTest {
     @Test
+    fun eventDispatcherDeliversImeEventsOnlyWhenQueuedTaskRuns() {
+        val events = mutableListOf<String>()
+        val queuedTasks = ArrayDeque<() -> Unit>()
+        val dispatcher = WinUIWindowsImeEventDispatcher(
+            dispatchAsync = { task ->
+                queuedTasks += task
+                true
+            },
+            onStartComposition = { events += "start" },
+            onComposition = { composingText, resultText ->
+                events += "composition:$composingText:$resultText"
+                true
+            },
+            onEndComposition = {
+                events += "end"
+                true
+            },
+        )
+
+        assertTrue(dispatcher.enqueueStartComposition())
+        assertTrue(dispatcher.enqueueComposition(composingText = "zhong", resultText = "中"))
+        assertTrue(dispatcher.enqueueEndComposition())
+
+        assertEquals(emptyList(), events)
+
+        while (queuedTasks.isNotEmpty()) {
+            queuedTasks.removeFirst()()
+        }
+
+        assertEquals(
+            listOf(
+                "start",
+                "composition:zhong:中",
+                "end",
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun eventDispatcherDropsQueuedImeEventsAfterDispose() {
+        val events = mutableListOf<String>()
+        val queuedTasks = ArrayDeque<() -> Unit>()
+        val dispatcher = WinUIWindowsImeEventDispatcher(
+            dispatchAsync = { task ->
+                queuedTasks += task
+                true
+            },
+            onStartComposition = { events += "start" },
+            onComposition = { _, _ ->
+                events += "composition"
+                true
+            },
+            onEndComposition = {
+                events += "end"
+                true
+            },
+        )
+
+        assertTrue(dispatcher.enqueueStartComposition())
+        assertTrue(dispatcher.enqueueComposition(composingText = "", resultText = "中"))
+        dispatcher.dispose()
+
+        while (queuedTasks.isNotEmpty()) {
+            queuedTasks.removeFirst()()
+        }
+
+        assertEquals(emptyList(), events)
+        assertFalse(dispatcher.enqueueEndComposition())
+    }
+
+    @Test
+    fun eventDispatcherReturnsFalseWhenAsyncDispatchFails() {
+        var didCallBridge = false
+        var loggedFailure: Throwable? = null
+        val failure = IllegalStateException("dispatcher closed")
+        val dispatcher = WinUIWindowsImeEventDispatcher(
+            dispatchAsync = { throw failure },
+            onStartComposition = { didCallBridge = true },
+            onComposition = { _, _ ->
+                didCallBridge = true
+                true
+            },
+            onEndComposition = {
+                didCallBridge = true
+                true
+            },
+            logFailure = { loggedFailure = it },
+        )
+
+        assertFalse(dispatcher.enqueueStartComposition())
+
+        assertFalse(didCallBridge)
+        assertEquals(failure, loggedFailure)
+    }
+
+    @Test
     fun compositionStringUpdatesComposeComposition() {
         val commands = mutableListOf<List<EditCommand>>()
         val processor = WinUIWindowsImeInputProcessor { batch ->

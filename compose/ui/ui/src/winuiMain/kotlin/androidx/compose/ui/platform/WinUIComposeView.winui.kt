@@ -304,6 +304,7 @@ class WinUIComposeView internal constructor(
     private val windowsImeTextInputBackend = createWinUIWindowsImeTextInputBackend(
         window = window,
         bridge = WinUIPlatformTextInputService.nativeBridge,
+        dispatchAsync = { task -> dispatchQueue.dispatch(task) },
     )
     private val pointerInputAdapter = WinUIPointerInputAdapter(renderHost.component, owner)
     private val dragAndDropAdapter = WinUIDragAndDropAdapter(root, owner)

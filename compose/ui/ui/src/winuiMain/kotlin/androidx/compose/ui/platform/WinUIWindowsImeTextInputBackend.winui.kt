@@ -29,4 +29,53 @@ internal object WinUINoOpWindowsImeTextInputBackend : WinUIWindowsImeTextInputBa
 internal expect fun createWinUIWindowsImeTextInputBackend(
     window: Window?,
     bridge: WinUINativeTextInputBridge,
+    dispatchAsync: (() -> Unit) -> Boolean,
 ): WinUIWindowsImeTextInputBackend
+
+internal class WinUIWindowsImeEventDispatcher(
+    private val dispatchAsync: (() -> Unit) -> Boolean,
+    private val onStartComposition: () -> Unit,
+    private val onComposition: (composingText: String, resultText: String) -> Boolean,
+    private val onEndComposition: () -> Boolean,
+    private val logFailure: (Throwable) -> Unit = {},
+) {
+    @Volatile
+    private var isDisposed = false
+
+    fun enqueueStartComposition(): Boolean =
+        enqueue {
+            onStartComposition()
+        }
+
+    fun enqueueComposition(
+        composingText: String,
+        resultText: String,
+    ): Boolean =
+        enqueue {
+            onComposition(composingText, resultText)
+        }
+
+    fun enqueueEndComposition(): Boolean =
+        enqueue {
+            onEndComposition()
+        }
+
+    fun dispose() {
+        isDisposed = true
+    }
+
+    private fun enqueue(block: () -> Unit): Boolean {
+        if (isDisposed) return false
+        return runCatching {
+            dispatchAsync {
+                if (isDisposed) return@dispatchAsync
+                runCatching {
+                    block()
+                }.onFailure(logFailure)
+            }
+        }.getOrElse { throwable ->
+            logFailure(throwable)
+            false
+        }
+    }
+}

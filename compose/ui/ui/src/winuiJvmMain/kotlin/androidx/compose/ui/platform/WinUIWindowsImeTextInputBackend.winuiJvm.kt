@@ -98,6 +98,7 @@ private val wndProcDescriptor = FunctionDescriptor.of(
 internal actual fun createWinUIWindowsImeTextInputBackend(
     window: Window?,
     bridge: WinUINativeTextInputBridge,
+    dispatchAsync: (() -> Unit) -> Boolean,
 ): WinUIWindowsImeTextInputBackend {
     if (!winUISystemBooleanProperty(WindowsImeBackendEnabledProperty)) {
         debugWindowsImeInput {
@@ -119,15 +120,29 @@ internal actual fun createWinUIWindowsImeTextInputBackend(
     return WinUIJvmWindowsImeTextInputBackend.create(
         hwnd = hwnd,
         bridge = bridge,
+        dispatchAsync = dispatchAsync,
     )
 }
 
 private class WinUIJvmWindowsImeTextInputBackend private constructor(
     private val hwnd: Long,
-    private val bridge: WinUINativeTextInputBridge,
+    bridge: WinUINativeTextInputBridge,
+    dispatchAsync: (() -> Unit) -> Boolean,
     private val arena: Arena,
 ) : WinUIWindowsImeTextInputBackend {
     private val hwndSegment = MemorySegment.ofAddress(hwnd)
+    private val eventDispatcher = WinUIWindowsImeEventDispatcher(
+        dispatchAsync = dispatchAsync,
+        onStartComposition = bridge::onWindowsImeStartComposition,
+        onComposition = bridge::onWindowsImeComposition,
+        onEndComposition = bridge::onWindowsImeEndComposition,
+        logFailure = { throwable ->
+            debugWindowsImeInput {
+                "dispatched IME handling failed hwnd=0x${hwnd.toString(16)}: " +
+                    throwable.stackTraceToString()
+            }
+        },
+    )
     private var oldWndProc: MemorySegment = MemorySegment.NULL
     private var wndProcStub: MemorySegment = MemorySegment.NULL
     private var isDisposed = false
@@ -135,6 +150,7 @@ private class WinUIJvmWindowsImeTextInputBackend private constructor(
     override fun dispose() {
         if (isDisposed) return
         isDisposed = true
+        eventDispatcher.dispose()
         if (oldWndProc != MemorySegment.NULL) {
             runCatching {
                 setWindowLongPtrW.invokeWithArguments(
@@ -160,26 +176,31 @@ private class WinUIJvmWindowsImeTextInputBackend private constructor(
         wParam: Long,
         lParam: Long,
     ): Long {
-        runCatching {
+        val event = runCatching {
             when (message) {
-                WM_IME_STARTCOMPOSITION -> bridge.onWindowsImeStartComposition()
-                WM_IME_COMPOSITION -> handleImeComposition(messageHwnd, lParam)
-                WM_IME_ENDCOMPOSITION -> bridge.onWindowsImeEndComposition()
+                WM_IME_STARTCOMPOSITION -> WinUIWindowsImeEvent.StartComposition
+                WM_IME_COMPOSITION -> captureImeComposition(messageHwnd, lParam)
+                WM_IME_ENDCOMPOSITION -> WinUIWindowsImeEvent.EndComposition
+                else -> null
             }
         }.onFailure { throwable ->
             debugWindowsImeInput {
-                "WndProc IME handling failed message=0x${message.toString(16)} " +
+                "WndProc IME capture failed message=0x${message.toString(16)} " +
                     "hwnd=0x${hwnd.toString(16)}: ${throwable.stackTraceToString()}"
             }
-        }
+        }.getOrNull()
 
-        return callOldWindowProc(messageHwnd, message, wParam, lParam)
+        val result = callOldWindowProc(messageHwnd, message, wParam, lParam)
+        if (event != null) {
+            dispatchImeEvent(event)
+        }
+        return result
     }
 
-    private fun handleImeComposition(
+    private fun captureImeComposition(
         messageHwnd: MemorySegment,
         lParam: Long,
-    ) {
+    ): WinUIWindowsImeEvent.Composition? {
         val flags = lParam.toInt()
         val resultText = if ((flags and GCS_RESULTSTR) != 0) {
             readImeCompositionString(messageHwnd, GCS_RESULTSTR)
@@ -191,11 +212,33 @@ private class WinUIJvmWindowsImeTextInputBackend private constructor(
         } else {
             ""
         }
-        if (resultText.isNotEmpty() || composingText.isNotEmpty()) {
-            bridge.onWindowsImeComposition(
+        return if (resultText.isNotEmpty() || composingText.isNotEmpty()) {
+            WinUIWindowsImeEvent.Composition(
                 composingText = composingText,
                 resultText = resultText,
             )
+        } else {
+            null
+        }
+    }
+
+    private fun dispatchImeEvent(event: WinUIWindowsImeEvent) {
+        val delivered = when (event) {
+            WinUIWindowsImeEvent.StartComposition ->
+                eventDispatcher.enqueueStartComposition()
+            is WinUIWindowsImeEvent.Composition ->
+                eventDispatcher.enqueueComposition(
+                    composingText = event.composingText,
+                    resultText = event.resultText,
+                )
+            WinUIWindowsImeEvent.EndComposition ->
+                eventDispatcher.enqueueEndComposition()
+        }
+        if (!delivered) {
+            debugWindowsImeInput {
+                "WndProc IME event dropped after capture event=$event " +
+                    "hwnd=0x${hwnd.toString(16)}"
+            }
         }
     }
 
@@ -289,10 +332,12 @@ private class WinUIJvmWindowsImeTextInputBackend private constructor(
         fun create(
             hwnd: Long,
             bridge: WinUINativeTextInputBridge,
+            dispatchAsync: (() -> Unit) -> Boolean,
         ): WinUIWindowsImeTextInputBackend {
             val backend = WinUIJvmWindowsImeTextInputBackend(
                 hwnd = hwnd,
                 bridge = bridge,
+                dispatchAsync = dispatchAsync,
                 arena = Arena.ofShared(),
             )
             return if (runCatching { backend.install() }.getOrDefault(false)) {
@@ -316,6 +361,15 @@ private class WinUIJvmWindowsImeTextInputBackend private constructor(
                 }
             )
     }
+}
+
+private sealed interface WinUIWindowsImeEvent {
+    data object StartComposition : WinUIWindowsImeEvent
+    data class Composition(
+        val composingText: String,
+        val resultText: String,
+    ) : WinUIWindowsImeEvent
+    data object EndComposition : WinUIWindowsImeEvent
 }
 
 private inline fun debugWindowsImeInput(message: () -> String) {
