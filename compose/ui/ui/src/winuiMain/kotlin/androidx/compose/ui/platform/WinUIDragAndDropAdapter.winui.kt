@@ -117,7 +117,7 @@ internal class WinUIDragAndDropAdapter(
         val position = getPosition(root)
         return DragAndDropEvent(
             nativeEvent = this,
-            positionInRootImpl = winUIPositionToComposeOffset(position.x, position.y),
+            positionInRootImpl = winUIPositionToComposeOffset(position.x, position.y, owner.density),
         )
     }
 }

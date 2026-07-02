@@ -152,7 +152,7 @@ internal class WinUIPointerInputAdapter(
         val buttons = properties.toComposeButtons()
         return WinUIPointerEvent(
             eventType = eventType,
-            position = winUIPositionToComposeOffset(position.x, position.y),
+            position = winUIPositionToComposeOffset(position.x, position.y, owner.density),
             uptimeMillis = point.timestamp.toLong() / MicrosecondsPerMillisecond,
             pointerId = point.pointerId.toLong(),
             down = point.isComposePointerDown(eventType, buttons),
@@ -284,8 +284,10 @@ internal data class WinUIPointerEvent(
 internal fun winUIPositionToComposeOffset(
     x: Float,
     y: Float,
+    density: Density = Density(1f),
 ): Offset {
-    return Offset(x, y)
+    val scale = density.density.takeIf { it.isFinite() && it > 0f } ?: 1f
+    return Offset(x * scale, y * scale)
 }
 
 private data class WinUIPointerEventRegistration(
