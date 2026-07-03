@@ -287,14 +287,8 @@ tasks.named("processWinuiJvmMainResources") {
 
 tasks.named<BuildWinRTApplicationHostTask>("buildWinRTApplicationHost") {
     val winuiJvmJar = tasks.named("winuiJvmJar", Jar::class)
-    val localWinUiJars = localWinUiJarProjects.map { projectPath ->
-        project(projectPath).tasks.named("winuiJvmJar", Jar::class).flatMap { it.archiveFile }
-    }
-    // KWINRT-041: keep compose-owned WinRT projections before skiko-winui projections.
-    runtimeClasspath.from(localWinUiJars)
     runtimeClasspath.from(configurations.named("winuiJvmRuntimeClasspath"))
     runtimeClasspath.from(winuiJvmJar.flatMap { it.archiveFile })
-    dependsOn(localWinUiJars)
     dependsOn(winuiJvmJar)
 }
 

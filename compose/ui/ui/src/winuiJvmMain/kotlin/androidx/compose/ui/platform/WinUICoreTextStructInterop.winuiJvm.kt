@@ -88,9 +88,8 @@ internal actual fun CoreTextLayoutBounds.setControlBoundsByValueForWinUI(bounds:
 internal actual fun CoreTextEditContext.notifySelectionChangedByValueForWinUI(
     selection: CoreTextRange,
 ) {
-    // TODO(KWINRT-050): Generated CoreText methods with struct-by-value
-    // parameters pass native buffer pointers. Use a narrow ABI workaround until
-    // kotlin-winrt lowers struct method parameters by value.
+    // Match the CoreText struct-by-value ABI directly for the current
+    // skiko-winui-owned CoreText projection.
     nativeObject.queryInterface(CoreTextEditContextIid).getOrThrow().use { defaultInterface ->
         Arena.ofConfined().use { arena ->
             val selectionSegment = arena.allocate(

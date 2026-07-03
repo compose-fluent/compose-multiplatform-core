@@ -9,9 +9,8 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/plugin:** `KWINRT-041`, `KWINRT-048`, `KWINRT-050`.
-- **Open compose-side workarounds:** `KWINRT-041`, `KWINRT-048`,
-  `KWINRT-050`.
+- **Open upstream/plugin/runtime:** `KWINRT-040`, `KWINRT-049`.
+- **Open compose-side workarounds:** `KWINRT-040`, `KWINRT-049`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
@@ -21,9 +20,9 @@ baseline, not every retest attempt.
   `KWINRT-022`, `KWINRT-023`, `KWINRT-026`, `KWINRT-004`, `KWINRT-008`,
   `KWINRT-028`, `KWINRT-029`, `KWINRT-034`, `KWINRT-035`, `KWINRT-036`,
   `KWINRT-037`, `KWINRT-025`, `KWINRT-033`, `KWINRT-039`, `KWINRT-042`,
-  `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, `KWINRT-038`, `KWINRT-040`,
-  `KWINRT-043`, `KWINRT-044`, `KWINRT-045`, `KWINRT-046`, and
-  `KWINRT-047`.
+  `KWINRT-030`, `KWINRT-031`, `KWINRT-032`, `KWINRT-038`, `KWINRT-043`,
+  `KWINRT-044`, `KWINRT-045`, `KWINRT-046`, `KWINRT-047`, `KWINRT-041`,
+  `KWINRT-048`, and `KWINRT-050`.
 
 ## KWINRT-049: WinRT async cancellation upcall can crash clipboard text retrieval
 
@@ -43,51 +42,48 @@ baseline, not every retest attempt.
   focused WinUI input tests, and
   `:compose:ui:ui:winui-samples:runWinUIViewSample` pass after the workaround.
 
-## KWINRT-050: Generated struct property setters and method parameters pass a pointer instead of struct by value
+## KWINRT-050: CoreText struct ABI workaround was misattributed to kotlin-winrt
 
-- **Status:** Open.
-- **Observed in:** compose-winui CoreText integration for
-  `CoreTextSelectionRequest.Selection`,
-  `CoreTextLayoutBounds.TextBounds` / `ControlBounds`, and
-  `CoreTextEditContext.NotifyTextChanged(...)` /
-  `NotifySelectionChanged(...)`.
-- **Symptom:** after assigning `CoreTextRange(1991, 1991)` to a selection
-  request, reading it back returned pointer-like values such as
+- **Status:** Closed as not a current kotlin-winrt upstream issue.
+- **Finding:** compose-ui declares the CoreText `type(...)` surface, but the
+  current generated compose-ui sources do not own the `windows.ui.text.core`
+  runtime classes. Those CoreText runtime classes are currently resolved from
+  the `skiko-winui-jvm` dependency, while compose-ui only generates support
+  helpers that reference them.
+- **Historical symptom:** after assigning `CoreTextRange(1991, 1991)` to a
+  selection request, reading it back returned pointer-like values such as
   `CoreTextRange(start=465861664, end=529)`. The MPP `BasicTextField2` sample
   then failfasted inside
   `Windows.UI.Core.TextInput.dll!Windows::UI::Text::Core::CLayoutRequest::GetTranslatedLayoutBounds`
-  while TSF queried layout after `NotifySelectionChanged`.
-- **Expected behavior:** WinRT property setters and methods whose ABI parameter
-  is a struct should pass the struct by value, matching the generated FFM
-  `Struct<size>_<alignment>` descriptor, not pass the address of a temporary
-  native buffer as an `Object` argument.
-- **compose-winui workaround:** `WinUICoreTextStructInterop.winuiJvm.kt`
-  bypasses the generated CoreText struct setters and affected notification
-  methods narrowly for the affected CoreText APIs. It QIs to the correct
-  CoreText default interface and invokes the slot with `Struct8_4` or
-  `Struct16_4` FFM descriptors for `CoreTextRange` and
-  `Windows.Foundation.Rect`.
-- **Validation:** focused CoreText struct interop tests pass. The MPP
-  `BasicTextField2` window-switch repro is validated through the default
-  non-CoreText input path; CoreText remains explicitly opt-in because the WinUI
-  desktop HWND path still failfasts in TSF/CoreText layout after focus changes.
+  while TSF queried layout.
+- **Current compose-winui state:** `WinUICoreTextStructInterop.winuiJvm.kt`
+  still uses narrow ABI calls for the affected CoreText APIs because that is
+  the path validated for the current CoreText input implementation. The code no
+  longer references `KWINRT-050`; remove the ABI helper only after CoreText
+  runtime-class ownership and struct setters are generated and runtime-verified
+  in this repository.
+- **Validation:** fresh compose-ui WinUI projection generation and
+  `:compose:ui:ui:compileKotlinWinuiJvm` pass without treating this as an open
+  kotlin-winrt generator issue.
 
-## KWINRT-048: Generator/runtime snapshots disagree on built-in EventRegistrationToken and XAML notifier facade names
+## KWINRT-048: Generated XAML notifier override used the event handler projection type
 
-- **Status:** Open.
-- **Observed in:** `:compose:ui:ui:compileKotlinWinuiJvm` while validating
-  compose-winui text input against the current `0.1.0-SNAPSHOT` kotlin-winrt
-  Maven artifacts.
-- **Symptom:** generated WinUI sources still import
-  `io.github.composefluent.winrt.runtime.EventRegistrationToken` and
-  `WinRTPropertyChangedNotifierProjection`, while newer runtime snapshots expose
-  `windows.foundation.EventRegistrationToken` and
-  `INotifyPropertyChangedProjection`.
-- **Expected behavior:** kotlin-winrt generator output and runtime API should
-  agree on the same built-in projection ownership and facade names.
-- **compose-winui workaround:** `WinRTCompatibilityAliases.winui.kt` provides a
-  narrow source-set-local alias/facade so generated WinUI sources compile until
-  the snapshot mismatch is resolved.
+- **Status:** Closed/stale; not reproducible with the current projection
+  output.
+- **Historical symptom:** generated WinUI sources used
+  `override fun addPropertyChanged(handler: PropertyChangedEventHandler)` and
+  `removePropertyChanged(handler: PropertyChangedEventHandler)` for
+  `microsoft.ui.xaml.controls.ItemsControl`, while the projected
+  `INotifyPropertyChanged` contract expected
+  `(Any?, microsoft.ui.xaml.data.PropertyChangedEventArgs?) -> Unit`.
+- **Resolution:** compose-winui removed `patchWinRtGeneratedKwinrt048` and the
+  obsolete `WinRTCompatibilityAliases.winui.kt` facade. Current generated
+  sources use `windows.foundation.EventRegistrationToken` and
+  `INotifyPropertyChangedProjection` directly.
+- **Validation:** after deleting
+  `out/compose-multiplatform-core/compose/ui/ui/build/generated/kotlin-winrt`,
+  fresh `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `:compose:foundation:foundation:compileKotlinWinuiJvm` pass without the patch.
 
 ## KWINRT-046: Dependency authored activatable classes are omitted from app manifest
 
@@ -145,10 +141,9 @@ baseline, not every retest attempt.
 - **Resolution:** no compose-side workaround was needed.
 - **Validation:** `:compose:ui:ui:winui-samples:runWinRtApplicationHost`
   enters `WinUIXamlApplication.onLaunched` and logs the first sample smoke
-  checkpoints. The remaining failure in that run is a separate dependency
-  projection ownership issue tracked as `KWINRT-041`, where `skiko-winui`
-  still contributes `microsoft.ui.xaml.UIElement` without the Compose `$stable`
-  field expected by compose-ui.
+  checkpoints. The later dependency projection ownership failure formerly
+  tracked as `KWINRT-041` is no longer reproducible with the current dependency
+  graph.
 
 ## KWINRT-001: Generated event source registry ABI mismatch
 
@@ -1325,49 +1320,23 @@ baseline, not every retest attempt.
   `winuiJvmJar.archiveFileName`. Remove this once kotlin-winrt derives the
   target artifact name correctly for KMP JVM targets.
 
-## KWINRT-041: Dependency-owned WinRT types can link with incompatible generated shape
+## KWINRT-041: Dependency-owned WinRT types could link with incompatible generated shape
 
-- **Status:** Open.
-- **Observed in:** `:compose:ui:ui:winui-samples:buildWinRtApplicationHost`
-  after `Microsoft.UI.Xaml.Application` and `XamlControlsResources` were needed
-  for the authored WinUI application path.
-- **Symptom:** the runtime classpath can load shared WinRT type identities from
-  different projection jars with incompatible generated shapes. Two observed
-  failures are `microsoft.ui.xaml.ResourceDictionary` from `skiko-winui` with
-  `microsoft.ui.xaml.controls.XamlControlsResources` from `ui-winuijvm`, and
-  `microsoft.ui.input.InputCursor` from `skiko-winui` with
-  `microsoft.ui.input.InputSystemCursor` from `ui-winuijvm`. In both cases the
-  upstream dependency owns a final RCW base class while the downstream generated
-  type expects an inheritable/composable base shape, causing
-  `IncompatibleClassChangeError`.
-- **Expected behavior:** kotlin-winrt dependency identity and support merging
-  should prevent one WinRT type identity from being loaded with incompatible
-  generated class shapes across dependency jars. If a downstream module must
-  generate a subclass that depends on an upstream-owned runtime class, the
-  generated shape and classpath ownership need to remain coherent.
-- **2026-06-23 skiko-winui metadata retest:** after clearing the targeted
-  Gradle cache for `io.github.compose-fluent:skiko-winui*`, Gradle resolves
-  `skiko-winui` to `0.0.0-SNAPSHOT:20260622.160801-18`. The
-  `kotlinWinRtLibraryDependencyIdentity` configuration now selects the
-  `kotlinWinRtIdentityElements` variant, and `winuiJvmRuntimeClasspath` selects
-  the published WinUI JVM variant through `skiko-winui-jvm`. The earlier
-  missing-identity-variant half of this issue is fixed in the `skiko-winui`
-  snapshot.
-- **Remaining 2026-06-23 failure:** `:compose:ui:ui:compileKotlinWinuiJvm`
-  now reaches Kotlin compilation, but generated downstream projections such as
-  `Canvas : Panel` call dependency-owned wrapper constructors like
-  `Panel(_inner, kotlin.Unit)`. Those constructors are intentionally `internal`
-  in Kotlin metadata even though their JVM bytecode is public, so a normal
-  downstream module cannot call them. Do not work around this by making the
-  pointer constructor public or by granting blanket friend access from Compose;
-  the kotlin-winrt projection model needs a controlled cross-module subclassing
-  or wrapping path for dependency-owned base classes.
-- **compose-winui workaround:** `Application.winui.kt` catches the narrow
-  `XamlControlsResources` linkage failure while installing default WinUI XAML
-  resources. The repository-local WinUI sample also stages `ui-winuijvm` in the
-  application-host root so the generated host scans the current module's
-  projection jar before `lib/skiko-winui`. Remove both workarounds once
-  dependency-owned projection shapes are merged or deduplicated correctly.
+- **Status:** Closed/stale for the current compose-winui dependency graph.
+- **Historical symptom:** older `skiko-winui` snapshots published overlapping
+  `microsoft/**` and `windows/**` projection classes that could shadow
+  compose-ui generated classes at application-host runtime, producing
+  `IncompatibleClassChangeError` failures such as `InputSystemCursor` extending
+  a final `InputCursor`.
+- **Resolution:** compose-winui no longer needs to force compose-owned WinRT
+  projection jars before `skiko-winui` in the repository-local WinUI sample
+  hosts. The `KWINRT-041` classpath-order comments and runtime classpath
+  front-loading were removed from `compose/ui/ui/winui-samples` and
+  `compose/mpp/demo-winui`.
+- **Validation:** with JDK 25 and `--no-configuration-cache`, both
+  `:compose:ui:ui:winui-samples:buildWinRTApplicationHost` and
+  `:compose:mpp:demo-winui:buildWinRTApplicationHost` pass without the
+  classpath-order workaround.
 
 ## KWINRT-042: Authored SystemBackdrop override bridge wraps interface arguments as IInspectable
 

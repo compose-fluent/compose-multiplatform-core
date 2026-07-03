@@ -94,11 +94,6 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-tasks.withType(BuildWinRTApplicationHostTask).configureEach {
-    // KWINRT-041: keep compose-owned WinRT projections before skiko-winui projections.
-    runtimeClasspath.from(project(":compose:ui:ui").tasks.named("winuiJvmJar"))
-}
-
 def registerWinUISampleTask = { String taskName, String descriptionText, String mode = null, Closure extraConfig = null ->
     tasks.register(taskName, Exec) {
         group = "verification"

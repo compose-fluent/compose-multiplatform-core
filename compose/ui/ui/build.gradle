@@ -632,38 +632,6 @@ if (composeWinUiGradlePluginAvailable) {
         authoringScannerClasspath.from(configurations.winRtAuthoringScannerClasspath)
     }
 
-    def patchWinRtGeneratedKwinrt048 = tasks.register("patchWinRtGeneratedKwinrt048") {
-        dependsOn("generateWinRTProjections")
-        def controlsFile = layout.buildDirectory.file(
-                "generated/kotlin-winrt/src/commonMain/kotlin/microsoft/ui/xaml/controls/microsoft_ui_xaml_controls.kt"
-        )
-        inputs.file(controlsFile)
-        outputs.file(controlsFile)
-        doLast {
-            def file = controlsFile.get().asFile
-            if (!file.exists()) {
-                return
-            }
-            def source = file.getText("UTF-8")
-            def patched = source
-                    .replace(
-                            "override fun addPropertyChanged(handler: PropertyChangedEventHandler)",
-                            "override fun addPropertyChanged(handler: (Any?, microsoft.ui.xaml.`data`.PropertyChangedEventArgs?) -> Unit)"
-                    )
-                    .replace(
-                            "override fun removePropertyChanged(handler: PropertyChangedEventHandler)",
-                            "override fun removePropertyChanged(handler: (Any?, microsoft.ui.xaml.`data`.PropertyChangedEventArgs?) -> Unit)"
-                    )
-            if (patched != source) {
-                file.setText(patched, "UTF-8")
-            }
-        }
-    }
-
-    tasks.named("compileKotlinWinuiJvm").configure {
-        dependsOn(patchWinRtGeneratedKwinrt048)
-    }
-
 }
 
 // This task updates the translations of the localizable strings for the desktopMain target.

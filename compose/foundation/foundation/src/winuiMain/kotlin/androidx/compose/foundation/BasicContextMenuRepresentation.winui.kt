@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWinUIRoot
 import androidx.compose.ui.unit.IntOffset
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
-import io.github.composefluent.winrt.runtime.EventRegistrationToken
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.controls.FontIcon
@@ -38,6 +37,7 @@ import microsoft.ui.xaml.controls.MenuFlyout
 import microsoft.ui.xaml.controls.MenuFlyoutItem
 import microsoft.ui.xaml.controls.MenuFlyoutSeparator
 import microsoft.ui.xaml.input.KeyboardAccelerator
+import windows.foundation.EventRegistrationToken
 import windows.foundation.Point
 import windows.system.VirtualKey
 import windows.system.VirtualKeyModifiers

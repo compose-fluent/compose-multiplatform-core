@@ -327,8 +327,9 @@ private class WinUIRealCoreTextFormatUpdatingEvent(
 }
 
 private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
-    // TODO(KWINRT-050): Generated struct setters pass a pointer instead of the
-    // struct by value. Use a narrow CoreText workaround until kotlin-winrt fixes it.
+    // The current CoreText projection comes from skiko-winui and routes struct
+    // setters through the generic object downcall path. Keep this narrow ABI
+    // call until the CoreText projection path is generated and verified here.
     setTextBoundsByValueForWinUI(bounds.innerTextFieldBounds.toWinRTRect())
     setControlBoundsByValueForWinUI(bounds.decorationBoxBounds.toWinRTRect())
 }
