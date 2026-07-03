@@ -50,13 +50,6 @@ class WinUICoreTextInputSessionTest {
         assertEquals("Compose WinUI text input", editContext.name)
         assertEquals(CoreTextInputScope.Text, editContext.inputScope)
         assertEquals(CoreTextInputPaneDisplayPolicy.Automatic, editContext.inputPaneDisplayPolicy)
-        assertEquals(emptyList(), editContext.textChangesByValue)
-        assertEquals(emptyList(), editContext.textChangesFromGeneratedProjection)
-    }
-
-    @Test
-    fun coreTextNotificationSlotsUseRawInspectableVtableOffsets() {
-        assertEquals(35, CoreTextNotifySelectionChangedSlotForWinUI)
     }
 
     @Test
@@ -79,10 +72,10 @@ class WinUICoreTextInputSessionTest {
             newValue = TextFieldValue("heLlo", selection = TextRange(0, 2)),
         )
 
-        assertEquals(emptyList(), editContext.textChangesByValue)
-        assertEquals(emptyList(), editContext.textChangesFromGeneratedProjection)
-        assertCoreTextRangeEquals(CoreTextRange(0, 2), editContext.selectionChangesByValue.single())
-        assertEquals(emptyList(), editContext.selectionChangesFromGeneratedProjection)
+        assertCoreTextRangeEquals(
+            CoreTextRange(0, 2),
+            editContext.selectionChanges.single(),
+        )
     }
 
     @Test
@@ -306,8 +299,7 @@ class WinUICoreTextInputSessionTest {
         editContext.dispatchTextUpdating(update)
 
         assertEquals(CoreTextTextUpdatingResult.Succeeded, update.result)
-        assertEquals(emptyList(), editContext.textChangesByValue)
-        assertEquals(emptyList(), editContext.selectionChangesByValue)
+        assertEquals(emptyList(), editContext.selectionChanges)
     }
 
     @Test
@@ -334,8 +326,7 @@ class WinUICoreTextInputSessionTest {
         editContext.dispatchSelectionUpdating(update)
 
         assertEquals(CoreTextSelectionUpdatingResult.Succeeded, update.result)
-        assertEquals(emptyList(), editContext.textChangesByValue)
-        assertEquals(emptyList(), editContext.selectionChangesByValue)
+        assertEquals(emptyList(), editContext.selectionChanges)
     }
 
     @Test
@@ -385,27 +376,24 @@ class WinUICoreTextInputSessionTest {
             },
             dispatchEditCommands = { true },
         )
-        editContext.textChangesByValue.clear()
-
         session.updateState(
             oldValue = TextFieldValue("hello", selection = TextRange(1)),
             newValue = TextFieldValue("heLlo", selection = TextRange(3)),
         )
-        assertEquals(emptyList(), editContext.textChangesByValue)
-        assertEquals(emptyList(), editContext.textChangesFromGeneratedProjection)
 
         session.updateState(
             oldValue = TextFieldValue("heLlo", selection = TextRange(5)),
             newValue = TextFieldValue("heLlo!", selection = TextRange(6)),
         )
-        assertEquals(emptyList(), editContext.textChangesByValue)
 
         session.updateState(
             oldValue = TextFieldValue("heLlo!", selection = TextRange(6)),
             newValue = TextFieldValue("heLlo!", selection = TextRange(0, 2)),
         )
-        assertCoreTextRangeEquals(CoreTextRange(0, 2), editContext.selectionChangesByValue.single())
-        assertEquals(emptyList(), editContext.selectionChangesFromGeneratedProjection)
+        assertCoreTextRangeEquals(
+            CoreTextRange(0, 2),
+            editContext.selectionChanges.single(),
+        )
 
         session.notifyLayoutChanged()
         assertEquals(1, editContext.layoutChangedCount)
@@ -600,10 +588,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
     var focusLeaveCount = 0
     var removedHandlerCount = 0
     var layoutChangedCount = 0
-    val textChangesByValue = mutableListOf<FakeTextChange>()
-    val textChangesFromGeneratedProjection = mutableListOf<FakeTextChange>()
-    val selectionChangesByValue = mutableListOf<CoreTextRange>()
-    val selectionChangesFromGeneratedProjection = mutableListOf<CoreTextRange>()
+    val selectionChanges = mutableListOf<CoreTextRange>()
 
     private var textRequested: ((WinUICoreTextTextRequest) -> Unit)? = null
     private var selectionRequested: ((WinUICoreTextSelectionRequest) -> Unit)? = null
@@ -679,11 +664,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {
-        selectionChangesFromGeneratedProjection += selection
-    }
-
-    override fun notifySelectionChangedByValueForWinUI(selection: CoreTextRange) {
-        selectionChangesByValue += selection
+        selectionChanges += selection
     }
 
     override fun notifyLayoutChanged() {
@@ -726,12 +707,6 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
         WinUICoreTextEventToken { removedHandlerCount++ }
 }
 
-private data class FakeTextChange(
-    val modifiedRange: CoreTextRange,
-    val newLength: Int,
-    val newSelection: CoreTextRange,
-)
-
 private class FakeCoreTextTextRequest(
     override val range: CoreTextRange,
 ) : WinUICoreTextTextRequest {
@@ -740,10 +715,6 @@ private class FakeCoreTextTextRequest(
 
 private class FakeCoreTextSelectionRequest : WinUICoreTextSelectionRequest {
     override var selection: CoreTextRange = CoreTextRange(0, 0)
-
-    override fun setSelectionByValueForWinUI(selection: CoreTextRange) {
-        this.selection = selection
-    }
 }
 
 private class FakeCoreTextLayoutRequest(

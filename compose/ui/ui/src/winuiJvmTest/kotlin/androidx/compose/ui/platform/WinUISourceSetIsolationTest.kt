@@ -158,8 +158,8 @@ class WinUISourceSetIsolationTest {
             "winuiMain should reuse the shared Skiko rendering source set.",
         )
         assertTrue(
-            buildScript.contains("generated/kotlin-winrt/src/main/kotlin") &&
-                buildScript.contains("generated/kotlin-winrt-authoring/src/main/kotlin") &&
+            buildScript.contains("generated/kotlin-winrt/src/commonMain/kotlin") &&
+                buildScript.contains("generated/kotlin-winrt-authoring/src/commonMain/kotlin") &&
                 buildScript.contains("task.dependsOn(\"generateWinRTProjections\")"),
             "Generated WinRT sources should remain wired by the kotlin-winrt plugin and task dependency.",
         )

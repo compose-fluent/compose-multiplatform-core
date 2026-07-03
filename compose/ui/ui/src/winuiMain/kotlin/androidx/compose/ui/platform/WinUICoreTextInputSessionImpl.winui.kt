@@ -78,7 +78,7 @@ internal class WinUICoreTextInputSession private constructor(
                     "new=${newValue.selection}"
             }
             runCoreTextCallback("NotifySelectionChanged") {
-                editContext.notifySelectionChangedByValueForWinUI(newValue.selection.toCoreTextRange())
+                editContext.notifySelectionChanged(newValue.selection.toCoreTextRange())
             }
         }
     }
@@ -136,7 +136,7 @@ internal class WinUICoreTextInputSession private constructor(
         eventTokens += editContext.addSelectionRequested { request ->
             runCoreTextCallback("SelectionRequested") {
                 val selection = latestValue().selection.toCoreTextRange()
-                request.setSelectionByValueForWinUI(selection)
+                request.selection = selection
                 debugCoreTextInput {
                     "SelectionRequested set=${selection.debugString()} " +
                         "readBack=${request.selection.debugString()}"

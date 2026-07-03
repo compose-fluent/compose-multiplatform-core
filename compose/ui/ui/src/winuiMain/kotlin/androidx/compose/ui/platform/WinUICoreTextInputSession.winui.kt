@@ -61,9 +61,6 @@ internal interface WinUICoreTextEditContext {
     fun notifyFocusEnter()
     fun notifyFocusLeave()
     fun notifySelectionChanged(selection: CoreTextRange)
-    fun notifySelectionChangedByValueForWinUI(selection: CoreTextRange) {
-        notifySelectionChanged(selection)
-    }
     fun notifyLayoutChanged()
 }
 
@@ -74,7 +71,6 @@ internal interface WinUICoreTextTextRequest {
 
 internal interface WinUICoreTextSelectionRequest {
     var selection: CoreTextRange
-    fun setSelectionByValueForWinUI(selection: CoreTextRange)
 }
 
 internal interface WinUICoreTextLayoutRequest {
@@ -216,10 +212,6 @@ private class WinUIRealCoreTextEditContext(
         editContext.notifySelectionChanged(selection)
     }
 
-    override fun notifySelectionChangedByValueForWinUI(selection: CoreTextRange) {
-        editContext.notifySelectionChangedByValueForWinUI(selection)
-    }
-
     override fun notifyLayoutChanged() {
         editContext.notifyLayoutChanged()
     }
@@ -256,10 +248,6 @@ private class WinUIRealCoreTextSelectionRequest(
         set(value) {
             request.selection = value
         }
-
-    override fun setSelectionByValueForWinUI(selection: CoreTextRange) {
-        request.setSelectionByValueForWinUI(selection)
-    }
 }
 
 private class WinUIRealCoreTextLayoutRequest(
@@ -327,29 +315,12 @@ private class WinUIRealCoreTextFormatUpdatingEvent(
 }
 
 private fun windows.ui.text.core.CoreTextLayoutBounds.setFrom(bounds: WinUITextLayoutBounds) {
-    // The current CoreText projection comes from skiko-winui and routes struct
-    // setters through the generic object downcall path. Keep this narrow ABI
-    // call until the CoreText projection path is generated and verified here.
-    setTextBoundsByValueForWinUI(bounds.innerTextFieldBounds.toWinRTRect())
-    setControlBoundsByValueForWinUI(bounds.decorationBoxBounds.toWinRTRect())
+    textBounds = bounds.innerTextFieldBounds.toWinRTRect()
+    controlBounds = bounds.decorationBoxBounds.toWinRTRect()
 }
 
 private fun Rect.toWinRTRect(): WinRTRect =
     WinRTRect(left, top, width, height)
-
-internal expect fun CoreTextSelectionRequest.setSelectionByValueForWinUI(range: CoreTextRange)
-
-internal expect fun CoreTextEditContext.notifySelectionChangedByValueForWinUI(
-    selection: CoreTextRange,
-)
-
-internal expect fun windows.ui.text.core.CoreTextLayoutBounds.setTextBoundsByValueForWinUI(
-    bounds: WinRTRect,
-)
-
-internal expect fun windows.ui.text.core.CoreTextLayoutBounds.setControlBoundsByValueForWinUI(
-    bounds: WinRTRect,
-)
 
 private inline fun runRealCoreTextCallback(
     name: String,

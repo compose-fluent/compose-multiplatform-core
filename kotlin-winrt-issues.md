@@ -56,15 +56,20 @@ baseline, not every retest attempt.
   then failfasted inside
   `Windows.UI.Core.TextInput.dll!Windows::UI::Text::Core::CLayoutRequest::GetTranslatedLayoutBounds`
   while TSF queried layout.
-- **Current compose-winui state:** `WinUICoreTextStructInterop.winuiJvm.kt`
-  still uses narrow ABI calls for the affected CoreText APIs because that is
-  the path validated for the current CoreText input implementation. The code no
-  longer references `KWINRT-050`; remove the ABI helper only after CoreText
-  runtime-class ownership and struct setters are generated and runtime-verified
-  in this repository.
-- **Validation:** fresh compose-ui WinUI projection generation and
-  `:compose:ui:ui:compileKotlinWinuiJvm` pass without treating this as an open
-  kotlin-winrt generator issue.
+- **Resolution:** compose-winui removed `WinUICoreTextStructInterop.winuiJvm.kt`
+  and now uses the generated CoreText projection path directly for
+  `CoreTextEditContext.notifySelectionChanged`,
+  `CoreTextSelectionRequest.selection`, and `CoreTextLayoutBounds`
+  `textBounds` / `controlBounds`. The stale source-set isolation test was also
+  updated to the current kotlin-winrt `src/commonMain/kotlin` generated source
+  layout.
+- **Validation:** with current `skiko-winui-jvm`, JDK 25, and
+  `--no-configuration-cache`,
+  `:compose:ui:ui:compileKotlinWinuiJvm` and
+  `:compose:ui:ui:winuiJvmTest` pass without the ABI helper. The repository
+  WinUI smoke path `:compose:ui:ui:winui-samples:runWinUISkikoSample` with
+  `--rerun-tasks` and the MPP demo path
+  `:compose:mpp:demo-winui:runWinUIMppSample` also pass.
 
 ## KWINRT-048: Generated XAML notifier override used the event handler projection type
 
