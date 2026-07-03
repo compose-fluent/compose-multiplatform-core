@@ -80,7 +80,6 @@ class WinUIPlatformTextInputServiceTest {
     fun tearDown() {
         WinUIPlatformTextInputService.resetForTest()
         System.clearProperty(CoreTextInputDisabledProperty)
-        System.clearProperty(CoreTextInputEnabledProperty)
     }
 
     @Test
@@ -581,7 +580,7 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun startInputMethodDoesNotNotifyCoreTextTextChangesFromAppState() = runTest {
+    fun startInputMethodNotifiesCoreTextTextChangesFromAppState() = runTest {
         var textValue by mutableStateOf(TextFieldValue("cat", selection = TextRange(3)))
         val request = TestPlatformTextInputMethodRequest(
             textValue = { textValue },
@@ -593,7 +592,7 @@ class WinUIPlatformTextInputServiceTest {
         }
         runCurrent()
 
-        withCoreTextEnabledForTest {
+        withCoreTextAvailableForTest {
             val editContext = RecordingCoreTextEditContext()
             assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
             editContext.textChanges.clear()
@@ -602,46 +601,47 @@ class WinUIPlatformTextInputServiceTest {
             Snapshot.sendApplyNotifications()
             runCurrent()
 
-            assertEquals(emptyList(), editContext.textChanges)
+            val textChange = editContext.textChanges.single()
+            assertCoreTextRangeEquals(CoreTextRange(2, 2), textChange.modifiedRange)
+            assertEquals(1, textChange.newLength)
+            assertCoreTextRangeEquals(CoreTextRange(4, 4), textChange.newSelection)
         }
 
         job.cancelAndJoin()
     }
 
     @Test
-    fun coreTextAttachRequiresExplicitOptIn() {
+    fun coreTextAttachIsEnabledByDefault() {
         System.clearProperty(CoreTextInputDisabledProperty)
-        System.clearProperty(CoreTextInputEnabledProperty)
-        WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
-
-        val editContext = RecordingCoreTextEditContext()
-
-        assertFalse(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
-        assertFalse(WinUIPlatformTextInputService.isCoreTextInputActive)
-    }
-
-    @Test
-    fun coreTextAttachUsesOptInProperty() {
-        System.clearProperty(CoreTextInputDisabledProperty)
-        System.clearProperty(CoreTextInputEnabledProperty)
-        System.setProperty(CoreTextInputEnabledProperty, "true")
         WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
 
         val editContext = RecordingCoreTextEditContext()
 
         assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
-        assertTrue(WinUIPlatformTextInputService.nativeBridge.isCoreTextSessionActive)
         assertTrue(WinUIPlatformTextInputService.isCoreTextInputActive)
     }
 
     @Test
-    fun coreTextNotifiesSelectionButNotTextOnAppStateChanges() {
+    fun coreTextAttachCanBeDisabledByProperty() {
+        System.clearProperty(CoreTextInputDisabledProperty)
+        System.setProperty(CoreTextInputDisabledProperty, "true")
+        WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
+
+        val editContext = RecordingCoreTextEditContext()
+
+        assertFalse(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+        assertFalse(WinUIPlatformTextInputService.nativeBridge.isCoreTextSessionActive)
+        assertFalse(WinUIPlatformTextInputService.isCoreTextInputActive)
+    }
+
+    @Test
+    fun coreTextNotifiesTextAndSelectionOnAppStateChanges() {
         var textValue = TextFieldValue("cat", selection = TextRange(3))
         val request = TestPlatformTextInputMethodRequest(
             textValue = { textValue },
         )
         WinUIPlatformTextInputService.startInputMethod(request)
-        withCoreTextEnabledForTest {
+        withCoreTextAvailableForTest {
             val editContext = RecordingCoreTextEditContext()
             assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
 
@@ -650,7 +650,10 @@ class WinUIPlatformTextInputServiceTest {
             textValue = TextFieldValue("cart", selection = TextRange(1))
             WinUIPlatformTextInputService.updateInputMethodState(request, textValue)
 
-            assertEquals(emptyList(), editContext.textChanges)
+            val textChange = editContext.textChanges.single()
+            assertCoreTextRangeEquals(CoreTextRange(2, 2), textChange.modifiedRange)
+            assertEquals(1, textChange.newLength)
+            assertCoreTextRangeEquals(CoreTextRange(4, 4), textChange.newSelection)
             assertCoreTextRangeEquals(CoreTextRange(1, 1), editContext.selectionChanges.single())
         }
     }
@@ -658,7 +661,7 @@ class WinUIPlatformTextInputServiceTest {
     @Test
     fun coreTextFollowsWindowFocusWithoutReplacingInputSession() {
         WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
-        withCoreTextEnabledForTest {
+        withCoreTextAvailableForTest {
             val editContext = RecordingCoreTextEditContext()
             assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
             assertTrue(WinUIPlatformTextInputService.isNativeTextInputFocused)
@@ -692,7 +695,7 @@ class WinUIPlatformTextInputServiceTest {
         )
 
         WinUIPlatformTextInputService.startInputMethod(request)
-        withCoreTextEnabledForTest {
+        withCoreTextAvailableForTest {
             val editContext = RecordingCoreTextEditContext()
             assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
 
@@ -727,7 +730,7 @@ class WinUIPlatformTextInputServiceTest {
         }
         runCurrent()
 
-        withCoreTextEnabledForTest {
+        withCoreTextAvailableForTest {
             val editContext = RecordingCoreTextEditContext()
             assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
             editContext.layoutChangedCount = 0
@@ -780,18 +783,13 @@ class WinUIPlatformTextInputServiceTest {
 }
 
 private const val CoreTextInputDisabledProperty = "compose.winui.textInput.coreText.disabled"
-private const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
-
-private inline fun <T> withCoreTextEnabledForTest(block: () -> T): T {
+private inline fun <T> withCoreTextAvailableForTest(block: () -> T): T {
     val previousDisabled = System.getProperty(CoreTextInputDisabledProperty)
-    val previousEnabled = System.getProperty(CoreTextInputEnabledProperty)
     System.clearProperty(CoreTextInputDisabledProperty)
-    System.setProperty(CoreTextInputEnabledProperty, "true")
     return try {
         block()
     } finally {
         restoreSystemProperty(CoreTextInputDisabledProperty, previousDisabled)
-        restoreSystemProperty(CoreTextInputEnabledProperty, previousEnabled)
     }
 }
 
@@ -897,6 +895,18 @@ private class RecordingCoreTextEditContext : WinUICoreTextEditContext {
 
     override fun notifyFocusLeave() {
         focusLeaveCount += 1
+    }
+
+    override fun notifyTextChanged(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        textChanges += RecordingTextChange(
+            modifiedRange = modifiedRange,
+            newLength = newLength,
+            newSelection = newSelection,
+        )
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {

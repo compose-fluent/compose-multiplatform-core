@@ -674,19 +674,11 @@ internal class WinUINativeTextInputBridge(
             debugTextInput { "CoreText attach skipped: disabled by system property" }
             return false
         }
-        if (winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
-            return true
-        }
-        debugTextInput {
-            "CoreText attach skipped: not enabled by system property " +
-                CoreTextInputEnabledProperty
-        }
-        return false
+        return true
     }
 
     private companion object {
         const val CoreTextInputDisabledProperty = "compose.winui.textInput.coreText.disabled"
-        const val CoreTextInputEnabledProperty = "compose.winui.textInput.coreText.enabled"
     }
 }
 

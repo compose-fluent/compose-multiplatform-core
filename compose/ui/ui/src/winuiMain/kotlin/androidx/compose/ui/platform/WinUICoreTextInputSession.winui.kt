@@ -60,6 +60,11 @@ internal interface WinUICoreTextEditContext {
     fun removeEventHandler(token: WinUICoreTextEventToken)
     fun notifyFocusEnter()
     fun notifyFocusLeave()
+    fun notifyTextChanged(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    )
     fun notifySelectionChanged(selection: CoreTextRange)
     fun notifyLayoutChanged()
 }
@@ -206,6 +211,14 @@ private class WinUIRealCoreTextEditContext(
 
     override fun notifyFocusLeave() {
         editContext.notifyFocusLeave()
+    }
+
+    override fun notifyTextChanged(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        editContext.notifyTextChanged(modifiedRange, newLength, newSelection)
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {

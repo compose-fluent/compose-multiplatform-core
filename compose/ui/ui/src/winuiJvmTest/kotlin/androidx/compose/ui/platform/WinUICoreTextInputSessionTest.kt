@@ -299,6 +299,7 @@ class WinUICoreTextInputSessionTest {
         editContext.dispatchTextUpdating(update)
 
         assertEquals(CoreTextTextUpdatingResult.Succeeded, update.result)
+        assertEquals(emptyList(), editContext.textChanges)
         assertEquals(emptyList(), editContext.selectionChanges)
     }
 
@@ -384,6 +385,25 @@ class WinUICoreTextInputSessionTest {
         session.updateState(
             oldValue = TextFieldValue("heLlo", selection = TextRange(5)),
             newValue = TextFieldValue("heLlo!", selection = TextRange(6)),
+        )
+        assertEquals(
+            listOf(
+                RecordingCoreTextTextChange(
+                    modifiedRangeStart = 2,
+                    modifiedRangeEnd = 3,
+                    newLength = 1,
+                    newSelectionStart = 3,
+                    newSelectionEnd = 3,
+                ),
+                RecordingCoreTextTextChange(
+                    modifiedRangeStart = 5,
+                    modifiedRangeEnd = 5,
+                    newLength = 1,
+                    newSelectionStart = 6,
+                    newSelectionEnd = 6,
+                ),
+            ),
+            editContext.textChanges,
         )
 
         session.updateState(
@@ -578,6 +598,14 @@ private fun assertCoreTextRangeEquals(expected: CoreTextRange, actual: CoreTextR
     assertEquals(expected.endCaretPosition, actual.endCaretPosition)
 }
 
+private data class RecordingCoreTextTextChange(
+    val modifiedRangeStart: Int,
+    val modifiedRangeEnd: Int,
+    val newLength: Int,
+    val newSelectionStart: Int,
+    val newSelectionEnd: Int,
+)
+
 private class FakeCoreTextEditContext : WinUICoreTextEditContext {
     override var name: String = ""
     override var inputScope: CoreTextInputScope = CoreTextInputScope.Default
@@ -588,6 +616,7 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
     var focusLeaveCount = 0
     var removedHandlerCount = 0
     var layoutChangedCount = 0
+    val textChanges = mutableListOf<RecordingCoreTextTextChange>()
     val selectionChanges = mutableListOf<CoreTextRange>()
 
     private var textRequested: ((WinUICoreTextTextRequest) -> Unit)? = null
@@ -661,6 +690,20 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     override fun notifyFocusLeave() {
         focusLeaveCount++
+    }
+
+    override fun notifyTextChanged(
+        modifiedRange: CoreTextRange,
+        newLength: Int,
+        newSelection: CoreTextRange,
+    ) {
+        textChanges += RecordingCoreTextTextChange(
+            modifiedRangeStart = modifiedRange.startCaretPosition,
+            modifiedRangeEnd = modifiedRange.endCaretPosition,
+            newLength = newLength,
+            newSelectionStart = newSelection.startCaretPosition,
+            newSelectionEnd = newSelection.endCaretPosition,
+        )
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {

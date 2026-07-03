@@ -59,13 +59,21 @@ internal class WinUIKeyInputAdapter(
         eventType: KeyEventType,
         event: WinRTEvent<KeyEventHandler>,
     ): WinUIInputEventRegistration<KeyEventHandler> {
-        val handler: KeyEventHandler = { _, args ->
+        val handler: KeyEventHandler = { sender, args ->
             if (!isDisposed) {
                 try {
-                    val key = args.key
-                    val handledBefore = args.handled
-                    val nativeKeyLParam = args.keyStatus.toWin32KeyLParam()
-                    val originalSource = args.originalSource
+                    debugKeyInput {
+                        "native event=$eventType callback enter sender=${sender.debugClassNameOrNull()}"
+                    }
+                    val key = readKeyInputProperty(eventType, "key") { args.key }
+                    val handledBefore = readKeyInputProperty(eventType, "handled") { args.handled }
+                    val keyStatus = readKeyInputProperty(eventType, "keyStatus") { args.keyStatus }
+                    val nativeKeyLParam = readKeyInputProperty(eventType, "keyStatus.lParam") {
+                        keyStatus.toWin32KeyLParam()
+                    }
+                    val originalSource = readKeyInputProperty(eventType, "originalSource") {
+                        args.originalSource
+                    }
                     val composeSources = composeEventSources()
                     val composeSubtreeSources = composeEventSubtreeSources()
                     val shouldDispatch = originalSource.isComposeSource(
@@ -108,9 +116,18 @@ internal class WinUIKeyInputAdapter(
                             "handled=${args.handled}"
                     }
                 } catch (throwable: Throwable) {
-                    debugKeyInput {
-                        "native event=$eventType failed before leaving WinRT callback: " +
-                            throwable.stackTraceToString()
+                    if (throwable.isInvalidVirtualKeyProjectionFailure()) {
+                        // KWINRT-051: RDP can surface WM_KEYDOWN as an invalid VirtualKey ABI value.
+                        runCatching { args.handled = true }
+                        debugKeyInput {
+                            "native event=$eventType suppressed invalid VirtualKey projection failure: " +
+                                throwable.stackTraceToString()
+                        }
+                    } else {
+                        debugKeyInput {
+                            "native event=$eventType failed before leaving WinRT callback: " +
+                                throwable.stackTraceToString()
+                        }
                     }
                 }
             }
@@ -319,8 +336,36 @@ private inline fun debugKeyInput(message: () -> String) {
     }
 }
 
+private inline fun <T> readKeyInputProperty(
+    eventType: KeyEventType,
+    name: String,
+    read: () -> T,
+): T {
+    debugKeyInput { "native event=$eventType read $name begin" }
+    return read().also { value ->
+        debugKeyInput { "native event=$eventType read $name end value=${value.debugKeyInputValue()}" }
+    }
+}
+
+private fun Any?.debugKeyInputValue(): String =
+    when (this) {
+        null -> "null"
+        is Boolean,
+        is Number,
+        is CharSequence,
+        is VirtualKey -> toString()
+        else -> debugClassNameOrNull()
+    }
+
 private fun Any?.debugClassNameOrNull(): String =
     this?.let { it::class.qualifiedName ?: it::class.simpleName ?: it.toString() } ?: "null"
+
+internal fun Throwable.isInvalidVirtualKeyProjectionFailure(): Boolean =
+    this is IllegalStateException &&
+        stackTrace.any { frame ->
+            frame.className == "windows.system.VirtualKey\$Metadata" &&
+                frame.methodName == "fromAbi"
+        }
 
 private fun List<Any?>.debugClassNames(): String =
     joinToString(prefix = "[", postfix = "]") { it.debugClassNameOrNull() }

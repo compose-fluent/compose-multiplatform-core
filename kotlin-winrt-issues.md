@@ -9,8 +9,8 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
-- **Open upstream/plugin/runtime:** `KWINRT-040`, `KWINRT-049`.
-- **Open compose-side workarounds:** `KWINRT-040`, `KWINRT-049`.
+- **Open upstream/plugin/runtime:** `KWINRT-040`, `KWINRT-049`, `KWINRT-051`.
+- **Open compose-side workarounds:** `KWINRT-040`, `KWINRT-049`, `KWINRT-051`.
 - **Compose/application policy, not kotlin-winrt helpers:** `KWINRT-012`
   clipboard synchronization and `KWINRT-019` focus timing.
 - **Closed/fixed or superseded:** `KWINRT-001`, `KWINRT-002`, `KWINRT-003`,
@@ -41,6 +41,27 @@ baseline, not every retest attempt.
 - **Validation:** with JDK 25, `:compose:ui:ui:compileKotlinWinuiJvm`,
   focused WinUI input tests, and
   `:compose:ui:ui:winui-samples:runWinUIViewSample` pass after the workaround.
+
+## KWINRT-051: VirtualKey projection throws for invalid RDP key values
+
+- **Status:** Open.
+- **Observed in:** RDP input routed through WinUI XAML `KeyDown` callbacks while
+  compose-winui has a focused text input.
+- **Symptom:** `KeyRoutedEventArgs.key` can surface an invalid ABI value such
+  as `0x100` (`WM_KEYDOWN`, not a `Windows.System.VirtualKey`) and the generated
+  `windows.system.VirtualKey.Metadata.fromAbi` path throws
+  `IllegalStateException: Unknown Windows.System.VirtualKey ABI value` through
+  the WinRT callback.
+- **Expected behavior:** invalid enum ABI values coming from native input
+  should not escape a generated event callback as an uncaught exception. The
+  projection should either provide a recoverable unknown-value shape or let the
+  caller detect the failure without tearing down the callback.
+- **compose-winui workaround:** `WinUIKeyInputAdapter` detects this exact
+  generated projection failure, marks the native key event handled, and keeps
+  other key-input exceptions on the normal diagnostic path.
+- **Validation:** focused `WinUIKeyEventProcessorTest` coverage classifies this
+  failure separately from other key failures, and
+  `:compose:ui:ui:compileKotlinWinuiJvm` passes with the workaround.
 
 ## KWINRT-050: CoreText struct ABI workaround was misattributed to kotlin-winrt
 

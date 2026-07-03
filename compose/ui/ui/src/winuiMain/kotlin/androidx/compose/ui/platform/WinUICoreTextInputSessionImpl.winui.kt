@@ -69,16 +69,29 @@ internal class WinUICoreTextInputSession private constructor(
             "updateState observeOnly coreTextUpdateDepth=$coreTextUpdateDepth " +
                 "old=${oldValue?.debugString()} new=${newValue.debugString()}"
         }
-        if (coreTextUpdateDepth == 0 &&
-            previousValue.text == newValue.text &&
-            previousValue.selection != newValue.selection
-        ) {
-            debugCoreTextInput {
-                "updateState notifySelectionChanged previous=${previousValue.selection} " +
-                    "new=${newValue.selection}"
-            }
-            runCoreTextCallback("NotifySelectionChanged") {
-                editContext.notifySelectionChanged(newValue.selection.toCoreTextRange())
+        if (coreTextUpdateDepth == 0) {
+            if (previousValue.text != newValue.text) {
+                val change = previousValue.text.calculateCoreTextChange(newValue.text)
+                val newSelection = newValue.selection.toCoreTextRange()
+                debugCoreTextInput {
+                    "updateState notifyTextChanged modifiedRange=${change.modifiedRange.debugString()} " +
+                        "newLength=${change.newLength} newSelection=${newSelection.debugString()}"
+                }
+                runCoreTextCallback("NotifyTextChanged") {
+                    editContext.notifyTextChanged(
+                        modifiedRange = change.modifiedRange,
+                        newLength = change.newLength,
+                        newSelection = newSelection,
+                    )
+                }
+            } else if (previousValue.selection != newValue.selection) {
+                debugCoreTextInput {
+                    "updateState notifySelectionChanged previous=${previousValue.selection} " +
+                        "new=${newValue.selection}"
+                }
+                runCoreTextCallback("NotifySelectionChanged") {
+                    editContext.notifySelectionChanged(newValue.selection.toCoreTextRange())
+                }
             }
         }
     }
@@ -350,6 +363,35 @@ internal class WinUICoreTextInputSession private constructor(
 
 private fun TextRange.toCoreTextRange(): CoreTextRange =
     CoreTextRange(start, end)
+
+private data class CoreTextTextChange(
+    val modifiedRange: CoreTextRange,
+    val newLength: Int,
+)
+
+private fun String.calculateCoreTextChange(newText: String): CoreTextTextChange {
+    var prefixLength = 0
+    val maxPrefixLength = minOf(length, newText.length)
+    while (prefixLength < maxPrefixLength && this[prefixLength] == newText[prefixLength]) {
+        prefixLength++
+    }
+
+    var oldSuffixStart = length
+    var newSuffixStart = newText.length
+    while (
+        oldSuffixStart > prefixLength &&
+        newSuffixStart > prefixLength &&
+        this[oldSuffixStart - 1] == newText[newSuffixStart - 1]
+    ) {
+        oldSuffixStart--
+        newSuffixStart--
+    }
+
+    return CoreTextTextChange(
+        modifiedRange = CoreTextRange(prefixLength, oldSuffixStart),
+        newLength = newSuffixStart - prefixLength,
+    )
+}
 
 private val CoreTextRange.isCollapsed: Boolean
     get() = startCaretPosition == endCaretPosition
