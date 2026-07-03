@@ -64,6 +64,7 @@ internal class WinUIKeyInputAdapter(
                 try {
                     val key = args.key
                     val handledBefore = args.handled
+                    val nativeKeyLParam = args.keyStatus.toWin32KeyLParam()
                     val originalSource = args.originalSource
                     val composeSources = composeEventSources()
                     val composeSubtreeSources = composeEventSubtreeSources()
@@ -73,6 +74,7 @@ internal class WinUIKeyInputAdapter(
                     )
                     debugKeyInput {
                         "native event=$eventType key=$key handledBefore=$handledBefore " +
+                            "lParam=0x${nativeKeyLParam.toString(16)} " +
                             "source=${originalSource.debugClassNameOrNull()} " +
                             "composeSources=${composeSources.debugClassNames()} " +
                             "composeSubtreeSources=${composeSubtreeSources.debugClassNames()} " +
@@ -240,6 +242,16 @@ internal class WinUICharacterInputProcessor {
         }
         return commitText(text)
     }
+}
+
+private fun windows.ui.core.CorePhysicalKeyStatus.toWin32KeyLParam(): Long {
+    var value = repeatCount.toLong() and 0xFFFFL
+    value = value or ((scanCode.toLong() and 0xFFL) shl 16)
+    if (isExtendedKey) value = value or (1L shl 24)
+    if (isMenuKeyDown) value = value or (1L shl 29)
+    if (wasKeyDown) value = value or (1L shl 30)
+    if (isKeyReleased) value = value or (1L shl 31)
+    return value
 }
 
 private fun Any?.isComposeSource(

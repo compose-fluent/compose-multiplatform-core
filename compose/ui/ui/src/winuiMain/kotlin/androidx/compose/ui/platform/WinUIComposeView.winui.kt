@@ -271,6 +271,7 @@ class WinUIComposeView internal constructor(
         WinUIPlatformTextInputService.registerRootToScreenMapper(
             owner = this,
             mapper = ::rootPixelOffsetToScreen,
+            screenMapperReady = { isScreenCoordinateConversionReady },
             viewportMapper = ::rootPixelOffsetToViewport,
             viewportBoundsInRoot = ::rootViewportBoundsInRoot,
         )
@@ -388,6 +389,7 @@ class WinUIComposeView internal constructor(
 
     internal fun setWindowFocused(isWindowFocused: Boolean) {
         owner.setWindowFocused(isWindowFocused)
+        WinUIPlatformTextInputService.onWindowFocusChanged(isWindowFocused)
     }
 
     internal fun setWindowContainerSize(size: IntSize) {
@@ -735,8 +737,7 @@ internal fun rootPixelOffsetToCoreTextScreenPixels(
 ): Offset {
     val scale = densityScale.takeIf { it.isFinite() && it > 0f } ?: 1f
     val localDip = Offset(offset.x / scale, offset.y / scale)
-    val screenPixel = localDipToScreenPixel(localDip)
-    return Offset(screenPixel.x / scale, screenPixel.y / scale)
+    return localDipToScreenPixel(localDip)
 }
 
 fun Window.setContent(content: @Composable () -> Unit): WinUIComposeView {

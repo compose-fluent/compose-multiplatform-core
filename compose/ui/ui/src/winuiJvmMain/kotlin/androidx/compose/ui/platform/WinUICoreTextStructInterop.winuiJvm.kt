@@ -40,15 +40,12 @@ private val CoreTextRangeAbiLayout = NativeAbiLayout(byteSize = 8, byteAlignment
 private val WinRTRectAbiLayout = NativeAbiLayout(byteSize = 16, byteAlignment = 4)
 
 // Raw COM vtable slots include the six IInspectable/IUnknown entries.
-internal const val CoreTextNotifyTextChangedSlotForWinUI = 34
 internal const val CoreTextNotifySelectionChangedSlotForWinUI = 35
 
 private val CoreTextRangeSetterHandle: MethodHandle =
     WinRTJvmFfmDowncallHandles.hResult("Struct8_4")
 private val CoreTextNotifySelectionChangedHandle: MethodHandle =
     WinRTJvmFfmDowncallHandles.hResult("Struct8_4")
-private val CoreTextNotifyTextChangedHandle: MethodHandle =
-    WinRTJvmFfmDowncallHandles.hResult("Struct8_4,Int32,Struct8_4")
 private val WinRTRectSetterHandle: MethodHandle =
     WinRTJvmFfmDowncallHandles.hResult("Struct16_4")
 
@@ -85,39 +82,6 @@ internal actual fun CoreTextLayoutBounds.setControlBoundsByValueForWinUI(bounds:
         debugName = "ICoreTextLayoutBounds.ControlBounds",
     ) { segment ->
         segment.writeWinRTRect(bounds)
-    }
-}
-
-internal actual fun CoreTextEditContext.notifyTextChangedByValueForWinUI(
-    modifiedRange: CoreTextRange,
-    newLength: Int,
-    newSelection: CoreTextRange,
-) {
-    // TODO(KWINRT-050): Generated CoreText methods with struct-by-value
-    // parameters pass native buffer pointers. Use a narrow ABI workaround until
-    // kotlin-winrt lowers struct method parameters by value.
-    nativeObject.queryInterface(CoreTextEditContextIid).getOrThrow().use { defaultInterface ->
-        Arena.ofConfined().use { arena ->
-            val modifiedRangeSegment = arena.allocate(
-                CoreTextRangeAbiLayout.byteSize,
-                CoreTextRangeAbiLayout.byteAlignment,
-            )
-            val newSelectionSegment = arena.allocate(
-                CoreTextRangeAbiLayout.byteSize,
-                CoreTextRangeAbiLayout.byteAlignment,
-            )
-            modifiedRangeSegment.writeCoreTextRange(modifiedRange)
-            newSelectionSegment.writeCoreTextRange(newSelection)
-            HResult(
-                CoreTextNotifyTextChangedHandle.invoke(
-                    defaultInterface.vtableEntry(CoreTextNotifyTextChangedSlotForWinUI),
-                    defaultInterface.instanceSegment(),
-                    modifiedRangeSegment,
-                    newLength,
-                    newSelectionSegment,
-                ) as Int
-            ).requireSuccess("ICoreTextEditContext.NotifyTextChanged")
-        }
     }
 }
 

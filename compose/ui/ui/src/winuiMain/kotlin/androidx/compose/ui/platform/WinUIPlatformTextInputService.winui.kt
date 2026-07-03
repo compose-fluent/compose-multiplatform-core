@@ -42,6 +42,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
     private var activeInputMethodSession: WinUITextInputMethodSessionState? = null
     private var rootToScreenMapperOwner: Any? = null
     private var rootToScreenMapper: (Offset) -> Offset = { it }
+    private var rootToScreenMapperReady: () -> Boolean = { false }
     private var rootToViewportMapper: (Offset) -> Offset = { it }
     private var rootViewportBoundsInRoot: () -> Rect? = { null }
     internal val nativeBridge: WinUINativeTextInputBridge = WinUINativeTextInputBridge(this)
@@ -84,11 +85,10 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
             ?: activeInputMethodSession?.textLayoutBoundsInRoot
 
     internal val currentTextLayoutBoundsOnScreen: WinUITextLayoutBounds?
-        get() = currentCoreTextLayoutSnapshot?.layoutBounds
+        get() = currentTextLayoutBoundsInRoot?.toCoreTextLayoutSnapshot()?.layoutBounds
 
     internal val currentCoreTextLayoutSnapshot: WinUICoreTextLayoutSnapshot?
-        get() = activeInputSession?.coreTextLayoutSnapshot
-            ?: activeInputMethodSession?.coreTextLayoutSnapshot
+        get() = currentTextLayoutBoundsInRoot?.toCoreTextLayoutSnapshot()
 
     override fun startInput(
         value: TextFieldValue,
@@ -267,14 +267,20 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         unregisterRootToScreenMapper(rootToScreenMapperOwner)
     }
 
+    internal fun onWindowFocusChanged(isFocused: Boolean) {
+        nativeBridge.onWindowFocusChanged(isFocused)
+    }
+
     internal fun registerRootToScreenMapper(
         owner: Any,
         mapper: (Offset) -> Offset,
+        screenMapperReady: () -> Boolean = { true },
         viewportMapper: (Offset) -> Offset = { it },
         viewportBoundsInRoot: () -> Rect? = { null },
     ) {
         rootToScreenMapperOwner = owner
         rootToScreenMapper = mapper
+        rootToScreenMapperReady = screenMapperReady
         rootToViewportMapper = viewportMapper
         rootViewportBoundsInRoot = viewportBoundsInRoot
     }
@@ -285,6 +291,7 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
         }
         rootToScreenMapperOwner = null
         rootToScreenMapper = { it }
+        rootToScreenMapperReady = { false }
         rootToViewportMapper = { it }
         rootViewportBoundsInRoot = { null }
     }
@@ -297,6 +304,9 @@ internal object WinUIPlatformTextInputService : PlatformTextInputService {
 
     internal val hasRootToScreenMapper: Boolean
         get() = rootToScreenMapperOwner != null
+
+    internal val isRootToScreenMapperReady: Boolean
+        get() = hasRootToScreenMapper && rootToScreenMapperReady()
 
     internal val currentRootViewportBoundsOnScreen: Rect?
         get() = rootViewportBoundsInRoot()?.toScreenRect()
@@ -413,7 +423,11 @@ private fun WinUITextLayoutBounds.toViewportBounds(): WinUITextLayoutBounds =
 
 private fun WinUITextLayoutBounds.toCoreTextLayoutSnapshot(): WinUICoreTextLayoutSnapshot =
     WinUICoreTextLayoutSnapshot(
-        layoutBounds = toScreenBounds(),
+        layoutBounds = if (WinUIPlatformTextInputService.isRootToScreenMapperReady) {
+            toScreenBounds()
+        } else {
+            null
+        },
         visualBounds = toViewportBounds(),
     )
 
@@ -442,7 +456,7 @@ private fun Rect.toViewportRect(): Rect {
 internal class WinUINativeTextInputBridge(
     private val textInputService: WinUIPlatformTextInputService,
 ) {
-    private var coreTextSession: WinUICoreTextInputSession? = null
+    private var coreTextSession: WinUICoreTextInputSessionHandle? = null
     private val windowsImeInputProcessor =
         WinUIWindowsImeInputProcessor(textInputService::sendEditCommands)
 
@@ -472,7 +486,7 @@ internal class WinUINativeTextInputBridge(
             debugTextInput { "CoreText attach skipped: no root-to-screen mapper" }
             return false
         }
-        if (!isCoreTextExplicitlyEnabled()) {
+        if (!isCoreTextEnabled()) {
             return false
         }
         val value = textInputService.currentValue
@@ -497,7 +511,7 @@ internal class WinUINativeTextInputBridge(
         editContext: WinUICoreTextEditContext,
         notifyNativeFocus: Boolean = true,
     ): Boolean {
-        if (!isCoreTextExplicitlyEnabled()) {
+        if (!isCoreTextEnabled()) {
             return false
         }
         val value = textInputService.currentValue
@@ -577,6 +591,20 @@ internal class WinUINativeTextInputBridge(
         coreTextSession?.notifyLayoutChanged()
     }
 
+    internal fun onWindowFocusChanged(isFocused: Boolean) {
+        val session = coreTextSession ?: return
+        debugTextInput { "CoreText windowFocusChanged focused=$isFocused" }
+        if (isFocused) {
+            if (textInputService.enterNativeTextInputFocus()) {
+                session.notifyFocusEnter()
+                session.notifyLayoutChanged()
+            }
+        } else {
+            session.notifyFocusLeave()
+            textInputService.exitNativeTextInputFocus()
+        }
+    }
+
     internal fun disposeCoreTextSession() {
         val session = coreTextSession ?: return
         debugTextInput { "CoreText dispose" }
@@ -641,19 +669,19 @@ internal class WinUINativeTextInputBridge(
         windowsImeInputProcessor.reset()
     }
 
-    private fun isCoreTextExplicitlyEnabled(): Boolean {
+    private fun isCoreTextEnabled(): Boolean {
         if (winUISystemBooleanProperty(CoreTextInputDisabledProperty)) {
             debugTextInput { "CoreText attach skipped: disabled by system property" }
             return false
         }
-        if (!winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
-            debugTextInput {
-                "CoreText attach skipped: not enabled by system property " +
-                    CoreTextInputEnabledProperty
-            }
-            return false
+        if (winUISystemBooleanProperty(CoreTextInputEnabledProperty)) {
+            return true
         }
-        return true
+        debugTextInput {
+            "CoreText attach skipped: not enabled by system property " +
+                CoreTextInputEnabledProperty
+        }
+        return false
     }
 
     private companion object {

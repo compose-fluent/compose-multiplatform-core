@@ -408,6 +408,83 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
+    fun currentScreenBoundsAreRecomputedFromLatestRootMapper() {
+        val mapperOwner = Any()
+        WinUIPlatformTextInputService.registerRootToScreenMapper(
+            owner = mapperOwner,
+            mapper = { offset -> offset + Offset(100f, 200f) },
+        )
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("hello"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+        WinUIPlatformTextInputService.updateTextLayoutResult(
+            textFieldValue = TextFieldValue("hello"),
+            offsetMapping = OffsetMapping.Identity,
+            textLayoutResult = testTextLayoutResult("hello"),
+            textFieldToRootTransform = { it.setTranslate(Offset(5f, 7f)) },
+            innerTextFieldBounds = Rect(10f, 20f, 30f, 40f),
+            decorationBoxBounds = Rect(0f, 10f, 50f, 60f),
+        )
+
+        WinUIPlatformTextInputService.registerRootToScreenMapper(
+            owner = mapperOwner,
+            mapper = { offset -> offset + Offset(300f, 400f) },
+        )
+
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(315f, 427f, 335f, 447f),
+                decorationBoxBounds = Rect(305f, 417f, 355f, 467f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsOnScreen,
+        )
+
+        WinUIPlatformTextInputService.unregisterRootToScreenMapper(mapperOwner)
+    }
+
+    @Test
+    fun currentScreenBoundsAreUnavailableUntilScreenMapperIsReady() {
+        val mapperOwner = Any()
+        var screenMapperReady = false
+        WinUIPlatformTextInputService.registerRootToScreenMapper(
+            owner = mapperOwner,
+            mapper = { offset -> offset + Offset(100f, 200f) },
+            screenMapperReady = { screenMapperReady },
+        )
+        WinUIPlatformTextInputService.startInput(
+            value = TextFieldValue("hello"),
+            imeOptions = ImeOptions.Default,
+            onEditCommand = {},
+            onImeActionPerformed = {},
+        )
+        WinUIPlatformTextInputService.updateTextLayoutResult(
+            textFieldValue = TextFieldValue("hello"),
+            offsetMapping = OffsetMapping.Identity,
+            textLayoutResult = testTextLayoutResult("hello"),
+            textFieldToRootTransform = { it.setTranslate(Offset(5f, 7f)) },
+            innerTextFieldBounds = Rect(10f, 20f, 30f, 40f),
+            decorationBoxBounds = Rect(0f, 10f, 50f, 60f),
+        )
+
+        assertEquals(null, WinUIPlatformTextInputService.currentTextLayoutBoundsOnScreen)
+
+        screenMapperReady = true
+
+        assertEquals(
+            WinUITextLayoutBounds(
+                innerTextFieldBounds = Rect(115f, 227f, 135f, 247f),
+                decorationBoxBounds = Rect(105f, 217f, 155f, 267f),
+            ),
+            WinUIPlatformTextInputService.currentTextLayoutBoundsOnScreen,
+        )
+
+        WinUIPlatformTextInputService.unregisterRootToScreenMapper(mapperOwner)
+    }
+
+    @Test
     fun coreTextViewportVisualPixelsUseDeviceIndependentPixels() {
         assertEquals(
             Offset(1920f, 1032.5f),
@@ -419,9 +496,9 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
-    fun coreTextScreenBoundsUseDeviceIndependentPixels() {
+    fun coreTextScreenBoundsUsePhysicalScreenPixels() {
         assertEquals(
-            Offset(341f, 563.5f),
+            Offset(682f, 1127f),
             rootPixelOffsetToCoreTextScreenPixels(
                 offset = Offset(32f, 432f),
                 densityScale = 2f,
@@ -504,7 +581,7 @@ class WinUIPlatformTextInputServiceTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun startInputMethodNotifiesCoreTextWhenRequestStateChanges() = runTest {
+    fun startInputMethodDoesNotNotifyCoreTextTextChangesFromAppState() = runTest {
         var textValue by mutableStateOf(TextFieldValue("cat", selection = TextRange(3)))
         val request = TestPlatformTextInputMethodRequest(
             textValue = { textValue },
@@ -525,11 +602,7 @@ class WinUIPlatformTextInputServiceTest {
             Snapshot.sendApplyNotifications()
             runCurrent()
 
-            editContext.textChanges.single().let { change ->
-                assertCoreTextRangeEquals(CoreTextRange(2, 2), change.modifiedRange)
-                assertEquals(1, change.newLength)
-                assertCoreTextRangeEquals(CoreTextRange(4, 4), change.newSelection)
-            }
+            assertEquals(emptyList(), editContext.textChanges)
         }
 
         job.cancelAndJoin()
@@ -545,6 +618,62 @@ class WinUIPlatformTextInputServiceTest {
 
         assertFalse(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
         assertFalse(WinUIPlatformTextInputService.isCoreTextInputActive)
+    }
+
+    @Test
+    fun coreTextAttachUsesOptInProperty() {
+        System.clearProperty(CoreTextInputDisabledProperty)
+        System.clearProperty(CoreTextInputEnabledProperty)
+        System.setProperty(CoreTextInputEnabledProperty, "true")
+        WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
+
+        val editContext = RecordingCoreTextEditContext()
+
+        assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+        assertTrue(WinUIPlatformTextInputService.nativeBridge.isCoreTextSessionActive)
+        assertTrue(WinUIPlatformTextInputService.isCoreTextInputActive)
+    }
+
+    @Test
+    fun coreTextNotifiesSelectionButNotTextOnAppStateChanges() {
+        var textValue = TextFieldValue("cat", selection = TextRange(3))
+        val request = TestPlatformTextInputMethodRequest(
+            textValue = { textValue },
+        )
+        WinUIPlatformTextInputService.startInputMethod(request)
+        withCoreTextEnabledForTest {
+            val editContext = RecordingCoreTextEditContext()
+            assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+
+            textValue = TextFieldValue("cart", selection = TextRange(4))
+            WinUIPlatformTextInputService.updateInputMethodState(request, textValue)
+            textValue = TextFieldValue("cart", selection = TextRange(1))
+            WinUIPlatformTextInputService.updateInputMethodState(request, textValue)
+
+            assertEquals(emptyList(), editContext.textChanges)
+            assertCoreTextRangeEquals(CoreTextRange(1, 1), editContext.selectionChanges.single())
+        }
+    }
+
+    @Test
+    fun coreTextFollowsWindowFocusWithoutReplacingInputSession() {
+        WinUIPlatformTextInputService.startInputMethod(TestPlatformTextInputMethodRequest())
+        withCoreTextEnabledForTest {
+            val editContext = RecordingCoreTextEditContext()
+            assertTrue(WinUIPlatformTextInputService.nativeBridge.attachCoreTextForCurrentInput(editContext))
+            assertTrue(WinUIPlatformTextInputService.isNativeTextInputFocused)
+            assertEquals(1, editContext.focusEnterCount)
+
+            WinUIPlatformTextInputService.onWindowFocusChanged(false)
+
+            assertFalse(WinUIPlatformTextInputService.isNativeTextInputFocused)
+            assertEquals(1, editContext.focusLeaveCount)
+
+            WinUIPlatformTextInputService.onWindowFocusChanged(true)
+
+            assertTrue(WinUIPlatformTextInputService.isNativeTextInputFocused)
+            assertEquals(2, editContext.focusEnterCount)
+        }
     }
 
     @Test
@@ -576,7 +705,7 @@ class WinUIPlatformTextInputServiceTest {
                 editContext.layoutRequestsDuringSelectionChange.single().layoutTextBounds,
             )
             assertEquals(
-                Rect(10f, 20f, 11f, 40f),
+                null,
                 editContext.layoutRequestsDuringSelectionChange.single().visualTextBounds,
             )
         }
@@ -720,6 +849,10 @@ private class RecordingCoreTextEditContext : WinUICoreTextEditContext {
     val textChanges = mutableListOf<RecordingTextChange>()
     val selectionChanges = mutableListOf<CoreTextRange>()
     val layoutRequestsDuringSelectionChange = mutableListOf<RecordingCoreTextLayoutRequest>()
+    var focusEnterCount = 0
+        private set
+    var focusLeaveCount = 0
+        private set
 
     private var layoutRequested: ((WinUICoreTextLayoutRequest) -> Unit)? = null
 
@@ -758,16 +891,12 @@ private class RecordingCoreTextEditContext : WinUICoreTextEditContext {
         token.remove()
     }
 
-    override fun notifyFocusEnter() = Unit
+    override fun notifyFocusEnter() {
+        focusEnterCount += 1
+    }
 
-    override fun notifyFocusLeave() = Unit
-
-    override fun notifyTextChanged(
-        modifiedRange: CoreTextRange,
-        newLength: Int,
-        newSelection: CoreTextRange,
-    ) {
-        textChanges += RecordingTextChange(modifiedRange, newLength, newSelection)
+    override fun notifyFocusLeave() {
+        focusLeaveCount += 1
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {

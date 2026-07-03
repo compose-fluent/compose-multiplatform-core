@@ -56,8 +56,129 @@ class WinUICoreTextInputSessionTest {
 
     @Test
     fun coreTextNotificationSlotsUseRawInspectableVtableOffsets() {
-        assertEquals(34, CoreTextNotifyTextChangedSlotForWinUI)
         assertEquals(35, CoreTextNotifySelectionChangedSlotForWinUI)
+    }
+
+    @Test
+    fun coreTextObservesTextAndNotifiesExternalSelectionChanges() {
+        val editContext = FakeCoreTextEditContext()
+        val session = WinUICoreTextInputSession.create(
+            initialValue = TextFieldValue("hello", selection = TextRange(1)),
+            imeOptions = ImeOptions.Default,
+            editContext = editContext,
+            currentLayoutBounds = { null },
+            dispatchEditCommands = { true },
+        )
+
+        session.updateState(
+            oldValue = TextFieldValue("hello", selection = TextRange(1)),
+            newValue = TextFieldValue("heLlo", selection = TextRange(3)),
+        )
+        session.updateState(
+            oldValue = TextFieldValue("heLlo", selection = TextRange(3)),
+            newValue = TextFieldValue("heLlo", selection = TextRange(0, 2)),
+        )
+
+        assertEquals(emptyList(), editContext.textChangesByValue)
+        assertEquals(emptyList(), editContext.textChangesFromGeneratedProjection)
+        assertCoreTextRangeEquals(CoreTextRange(0, 2), editContext.selectionChangesByValue.single())
+        assertEquals(emptyList(), editContext.selectionChangesFromGeneratedProjection)
+    }
+
+    @Test
+    fun coreTextStillHandlesCompositionUpdatingEvents() {
+        val editContext = FakeCoreTextEditContext()
+        val editCommandBatches = mutableListOf<List<EditCommand>>()
+
+        WinUICoreTextInputSession.create(
+            initialValue = TextFieldValue("input", selection = TextRange(2)),
+            imeOptions = ImeOptions.Default,
+            editContext = editContext,
+            currentLayoutBounds = { null },
+            dispatchEditCommands = { commands ->
+                editCommandBatches += commands
+                true
+            },
+        )
+
+        editContext.dispatchCompositionStarted()
+        editContext.dispatchTextUpdating(
+            FakeCoreTextTextUpdatingEvent(
+                range = CoreTextRange(2, 2),
+                text = "draft",
+                newSelection = CoreTextRange(7, 7),
+            )
+        )
+        editContext.dispatchCompositionCompleted()
+
+        assertEquals(
+            listOf(
+                SetSelectionCommand(2, 2),
+                SetComposingTextCommand("draft", 1),
+                SetSelectionCommand(7, 7),
+            ),
+            editCommandBatches.first(),
+        )
+        assertEquals(listOf(FinishComposingTextCommand()), editCommandBatches.last())
+    }
+
+    @Test
+    fun coreTextLayoutRequestUsesScreenLayoutBoundsOnly() {
+        val editContext = FakeCoreTextEditContext()
+        WinUICoreTextInputSession.create(
+            initialValue = TextFieldValue("hello", selection = TextRange(1)),
+            imeOptions = ImeOptions.Default,
+            editContext = editContext,
+            currentLayoutBounds = {
+                WinUICoreTextLayoutSnapshot(
+                    layoutBounds = WinUITextLayoutBounds(
+                        innerTextFieldBounds = Rect(110f, 120f, 110f, 140f),
+                        decorationBoxBounds = Rect(100f, 100f, 200f, 200f),
+                    ),
+                    visualBounds = WinUITextLayoutBounds(
+                        innerTextFieldBounds = Rect(10f, 20f, 10f, 40f),
+                        decorationBoxBounds = Rect(0f, 0f, 100f, 100f),
+                    ),
+                )
+            },
+            dispatchEditCommands = { true },
+        )
+
+        val layoutRequest = FakeCoreTextLayoutRequest()
+        editContext.dispatchLayoutRequested(layoutRequest)
+
+        assertEquals(Rect(110f, 120f, 111f, 140f), layoutRequest.layoutTextBounds)
+        assertEquals(Rect(100f, 100f, 200f, 200f), layoutRequest.layoutControlBounds)
+        assertEquals(null, layoutRequest.visualTextBounds)
+        assertEquals(null, layoutRequest.visualControlBounds)
+    }
+
+    @Test
+    fun coreTextLayoutRequestSkipsVisualOnlyBounds() {
+        val editContext = FakeCoreTextEditContext()
+        WinUICoreTextInputSession.create(
+            initialValue = TextFieldValue("hello", selection = TextRange(1)),
+            imeOptions = ImeOptions.Default,
+            editContext = editContext,
+            currentLayoutBounds = {
+                WinUICoreTextLayoutSnapshot(
+                    layoutBounds = null,
+                    visualBounds = WinUITextLayoutBounds(
+                        innerTextFieldBounds = Rect(10f, 20f, 10f, 40f),
+                        decorationBoxBounds = Rect(0f, 0f, 100f, 100f),
+                    ),
+                )
+            },
+            dispatchEditCommands = { true },
+        )
+
+        val layoutRequest = FakeCoreTextLayoutRequest()
+        editContext.dispatchLayoutRequested(layoutRequest)
+
+        assertEquals(null, layoutRequest.layoutTextBounds)
+        assertEquals(null, layoutRequest.layoutControlBounds)
+        assertEquals(null, layoutRequest.visualTextBounds)
+        assertEquals(null, layoutRequest.visualControlBounds)
     }
 
     @Test
@@ -270,23 +391,14 @@ class WinUICoreTextInputSessionTest {
             oldValue = TextFieldValue("hello", selection = TextRange(1)),
             newValue = TextFieldValue("heLlo", selection = TextRange(3)),
         )
-        editContext.textChangesByValue.single().let { change ->
-            assertCoreTextRangeEquals(CoreTextRange(2, 3), change.modifiedRange)
-            assertEquals(1, change.newLength)
-            assertCoreTextRangeEquals(CoreTextRange(3, 3), change.newSelection)
-        }
+        assertEquals(emptyList(), editContext.textChangesByValue)
         assertEquals(emptyList(), editContext.textChangesFromGeneratedProjection)
 
-        editContext.textChangesByValue.clear()
         session.updateState(
             oldValue = TextFieldValue("heLlo", selection = TextRange(5)),
             newValue = TextFieldValue("heLlo!", selection = TextRange(6)),
         )
-        editContext.textChangesByValue.single().let { change ->
-            assertCoreTextRangeEquals(CoreTextRange(5, 5), change.modifiedRange)
-            assertEquals(1, change.newLength)
-            assertCoreTextRangeEquals(CoreTextRange(6, 6), change.newSelection)
-        }
+        assertEquals(emptyList(), editContext.textChangesByValue)
 
         session.updateState(
             oldValue = TextFieldValue("heLlo!", selection = TextRange(6)),
@@ -300,10 +412,10 @@ class WinUICoreTextInputSessionTest {
 
         val layoutRequest = FakeCoreTextLayoutRequest()
         editContext.dispatchLayoutRequested(layoutRequest)
-        assertEquals(null, layoutRequest.layoutTextBounds)
-        assertEquals(null, layoutRequest.layoutControlBounds)
-        assertEquals(Rect(1f, 2f, 11f, 12f), layoutRequest.visualTextBounds)
-        assertEquals(Rect(0f, 1f, 12f, 13f), layoutRequest.visualControlBounds)
+        assertEquals(Rect(101f, 202f, 111f, 212f), layoutRequest.layoutTextBounds)
+        assertEquals(Rect(100f, 201f, 112f, 213f), layoutRequest.layoutControlBounds)
+        assertEquals(null, layoutRequest.visualTextBounds)
+        assertEquals(null, layoutRequest.visualControlBounds)
     }
 
     @Test
@@ -331,14 +443,14 @@ class WinUICoreTextInputSessionTest {
         val layoutRequest = FakeCoreTextLayoutRequest()
         editContext.dispatchLayoutRequested(layoutRequest)
 
-        assertEquals(null, layoutRequest.layoutTextBounds)
-        assertEquals(null, layoutRequest.layoutControlBounds)
-        assertEquals(Rect(10f, 20f, 11f, 40f), layoutRequest.visualTextBounds)
-        assertEquals(Rect(0f, 0f, 100f, 100f), layoutRequest.visualControlBounds)
+        assertEquals(Rect(110f, 120f, 111f, 140f), layoutRequest.layoutTextBounds)
+        assertEquals(Rect(100f, 100f, 200f, 200f), layoutRequest.layoutControlBounds)
+        assertEquals(null, layoutRequest.visualTextBounds)
+        assertEquals(null, layoutRequest.visualControlBounds)
     }
 
     @Test
-    fun layoutRequestPrefersViewportVisualBoundsOverScreenBounds() {
+    fun layoutRequestUsesScreenBoundsWhenVisualBoundsAreAlsoAvailable() {
         val editContext = FakeCoreTextEditContext()
         WinUICoreTextInputSession.create(
             initialValue = TextFieldValue("hello", selection = TextRange(1)),
@@ -362,10 +474,10 @@ class WinUICoreTextInputSessionTest {
         val layoutRequest = FakeCoreTextLayoutRequest()
         editContext.dispatchLayoutRequested(layoutRequest)
 
-        assertEquals(null, layoutRequest.layoutTextBounds)
-        assertEquals(null, layoutRequest.layoutControlBounds)
-        assertEquals(Rect(1f, 2f, 2f, 22f), layoutRequest.visualTextBounds)
-        assertEquals(Rect(0f, 0f, 200f, 60f), layoutRequest.visualControlBounds)
+        assertEquals(Rect(101f, 202f, 102f, 222f), layoutRequest.layoutTextBounds)
+        assertEquals(Rect(100f, 200f, 300f, 260f), layoutRequest.layoutControlBounds)
+        assertEquals(null, layoutRequest.visualTextBounds)
+        assertEquals(null, layoutRequest.visualControlBounds)
     }
 
     @Test
@@ -564,22 +676,6 @@ private class FakeCoreTextEditContext : WinUICoreTextEditContext {
 
     override fun notifyFocusLeave() {
         focusLeaveCount++
-    }
-
-    override fun notifyTextChanged(
-        modifiedRange: CoreTextRange,
-        newLength: Int,
-        newSelection: CoreTextRange,
-    ) {
-        textChangesFromGeneratedProjection += FakeTextChange(modifiedRange, newLength, newSelection)
-    }
-
-    override fun notifyTextChangedByValueForWinUI(
-        modifiedRange: CoreTextRange,
-        newLength: Int,
-        newSelection: CoreTextRange,
-    ) {
-        textChangesByValue += FakeTextChange(modifiedRange, newLength, newSelection)
     }
 
     override fun notifySelectionChanged(selection: CoreTextRange) {
