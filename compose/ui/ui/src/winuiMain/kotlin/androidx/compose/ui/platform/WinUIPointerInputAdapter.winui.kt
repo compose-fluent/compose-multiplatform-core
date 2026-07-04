@@ -304,6 +304,7 @@ private fun PointerPoint.toComposePointerType(): PointerType =
         PointerDeviceType.Pen -> PointerType.Stylus
         PointerDeviceType.Touch,
         PointerDeviceType.Touchpad -> PointerType.Touch
+        else -> PointerType.Mouse
     }
 
 private fun PointerPoint.isComposePointerDown(
@@ -341,6 +342,7 @@ private fun PointerUpdateKind.toComposeButton(): PointerButton? =
         PointerUpdateKind.XButton2Pressed,
         PointerUpdateKind.XButton2Released -> PointerButton.Forward
         PointerUpdateKind.Other -> null
+        else -> null
     }
 
 private fun microsoft.ui.input.PointerPointProperties.toComposeScrollDelta(): Offset {

@@ -587,6 +587,13 @@ if (composeWinUiGradlePluginAvailable) {
                     details.because("compose-winui consumes the skiko-winui snapshot built against this Skiko snapshot.")
                 }
             }
+            if (lowerName.contains("winuijvm")) {
+                configuration.resolutionStrategy.dependencySubstitution {
+                    substitute(module("org.jetbrains.skiko:skiko"))
+                            .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
+                            .because("compose-winui JVM uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
+                }
+            }
         }
     }
 

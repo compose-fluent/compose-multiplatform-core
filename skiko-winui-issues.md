@@ -10,16 +10,16 @@ baseline, not every retest attempt.
 ## Current upstream triage
 
 - **Open upstream/publication coordinates:** none.
-- **Open upstream/publication/API:** `SKIKO-006`, `SKIKO-008`, `SKIKO-009`,
-  and `SKIKO-010`.
+- **Open upstream/publication/API:** none.
 - **Open compose-side integration:** none.
-- **Open compose-side workarounds:** `SKIKO-008` and `SKIKO-010`.
+- **Open compose-side workarounds:** none.
 - **Closed/fixed or superseded:** `SKIKO-001`, `SKIKO-002`, `SKIKO-003`,
-  `SKIKO-004`, `SKIKO-005`, and `SKIKO-007`.
+  `SKIKO-004`, `SKIKO-005`, `SKIKO-006`, `SKIKO-007`, `SKIKO-008`,
+  `SKIKO-009`, and `SKIKO-010`.
 
 ## SKIKO-010: WinUI popup window surface resize can native-crash
 
-- **Status:** Open upstream/API or surface lifecycle.
+- **Status:** Closed as no longer reproduced with current snapshots.
 - **Observed in:** `:compose:ui:ui:winui-samples:runWinUIWindowPopupSample`
   while adding `compose.layers.type=WINDOW` popup support on 2026-06-10, with
   current `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
@@ -33,18 +33,18 @@ baseline, not every retest attempt.
   to `64 x 32` and before the smoke could dispose the popup. Keeping the popup
   Compose root sized to the parent window while moving/resizing only the native
   popup `AppWindow` to the measured content size makes the same smoke pass.
-- **Current compose-winui action:** WinUI window-backed popups keep their
-  Compose/Skiko root sized to the parent window as a stable layout coordinate
-  space, and use the measured popup content size only for the native popup
-  `AppWindow.moveAndResize(...)`. Remove this workaround once resizing an
-  attached skiko-winui surface during popup placement is proven stable.
-- **Expected behavior:** resizing an attached skiko-winui surface from an
-  initial layout size to the popup content size should not native-crash the
-  process.
+- **Resolution:** the issue no longer reproduces with `skiko-winui`
+  `0.0.0-SNAPSHOT:20260703.142141-28` and `skiko-winui-jvm`
+  `0.0.0-SNAPSHOT:20260703.142141-11`. On 2026-07-04,
+  `:compose:ui:ui:winui-samples:runWinUIWindowPopupSample` reached
+  `compose-winui-sample: window popup` and completed successfully after a
+  transient `buildWinRTAuthoringHost` failure was cleared by rerunning that
+  task. No fresh related WER dump was found. Keep this entry closed unless the
+  popup smoke or a smaller reproducer hits the native crash again.
 
 ## SKIKO-009: WinUI JVM tests resolve incompatible Skiko/Skia API shape
 
-- **Status:** Open upstream/API or dependency alignment.
+- **Status:** Closed as fixed by current dependency alignment.
 - **Observed in:** `:compose:ui:ui:winuiJvmTest` on 2026-06-10 after aligning
   WinUI rendering to the upstream `FrameRecomposer` pipeline, with current
   `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT` and Skiko snapshot
@@ -59,14 +59,16 @@ baseline, not every retest attempt.
   runtime classpath still loads Skiko classes from snapshot artifacts such as
   `skiko-awt-0.0.0-SNAPSHOT.jar` for JVM API classes, while WinUI rendering
   consumes `skiko-winui`.
-- **Expected behavior:** the Skiko JVM API artifact used by compose-winui tests
-  and the Skiko/Skia implementation on the runtime classpath should expose the
-  same public methods. Once the snapshots are aligned, re-enable the full
-  `winuiJvmTest` validation as a passing gate for these draw/text diagnostics.
+- **Resolution:** the issue no longer reproduces with `skiko-winui`
+  `0.0.0-SNAPSHOT:20260703.142141-28`, `skiko-winui-jvm`
+  `0.0.0-SNAPSHOT:20260703.142141-11`, and Skiko snapshot
+  `0.0.0-SNAPSHOT:20260630.121153-*`. On 2026-07-04,
+  `:compose:ui:ui:winuiJvmTest` completed successfully, including the
+  draw/text diagnostics that previously failed with `NoSuchMethodError`.
 
 ## SKIKO-008: MPP sample render diagnostics getters can native-crash after upstream sync
 
-- **Status:** Open upstream/API.
+- **Status:** Closed as no longer reproduced with current render diagnostics.
 - **Observed in:** `:compose:mpp:demo-winui:smokeWinUIMppSampleRenderOutput`
   after syncing upstream `origin/jb-main` into `winui_dev` on 2026-06-10,
   with current `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`.
@@ -82,17 +84,13 @@ baseline, not every retest attempt.
   `render-direct3d`, then after avoiding that getter stopped at
   `render-state-size-matched`, which isolated the crash to validation-side
   diagnostics reads rather than normal sample composition.
-- **Current compose-winui action:** the WinUI MPP sample smoke now validates
-  Direct3D surface creation and positive `AppWindow` size, and records the
-  legacy render-output events without reading the unstable Skiko diagnostic
-  fields. The auto runner uses a UI-thread `DispatcherQueueTimer` instead of
-  coroutine `withFrameNanos` / `delay` loops so the validation does not add
-  extra dispatcher callbacks while exercising the sample.
-- **Expected behavior:** reading public render diagnostics from an attached
-  WinUI Skiko surface should be side-effect free and should not be able to
-  native-crash the process. Once fixed upstream, restore the MPP smoke to
-  assert the actual Skiko platform render size, rendered state size, failure
-  field, and Compose draw bounds instead of the current degraded events.
+- **Resolution:** the MPP smoke now reads the attached `WinUIComposeView`
+  render diagnostics again and no longer native-crashes with `skiko-winui`
+  `0.0.0-SNAPSHOT:20260703.142141-28` and `skiko-winui-jvm`
+  `0.0.0-SNAPSHOT:20260703.142141-11`. On 2026-07-04,
+  `:compose:mpp:demo-winui:smokeWinUIMppSampleRenderOutput` completed
+  successfully and recorded `render-direct3d`, `render-positive-size`,
+  `render-state-size-matched`, `non-empty-draw-bounds`, and `frame-observed`.
 
 ## SKIKO-007: skiko-winui projection publication was misclassified as a Skiko issue
 
@@ -116,11 +114,11 @@ baseline, not every retest attempt.
 
 ## SKIKO-006: WinUI JVM path still needs the skiko-awt API artifact
 
-- **Status:** Open upstream/publication/API.
+- **Status:** Closed.
 - **Observed in:** compose-winui dependency isolation while validating
   `io.github.compose-fluent:skiko-winui:0.0.0-SNAPSHOT`
-  `0.0.0-20260603.150039-4`.
-- **Failure:** excluding `org.jetbrains.skiko:skiko-awt` from WinUI
+  snapshots before `0.0.0-SNAPSHOT:20260704.171250-30`.
+- **Failure:** before the fix, excluding `org.jetbrains.skiko:skiko-awt` from WinUI
   configurations removes the JVM API classes needed by compose-winui and
   `skiko-winui`, including `org.jetbrains.skia.Canvas`,
   `org.jetbrains.skiko.GraphicsApi`, and
@@ -131,16 +129,37 @@ baseline, not every retest attempt.
   runtime behavior. The source code does not use AWT or `SkiaLayer`, but the
   current JVM artifact naming and dependency shape still put core Skia/Skiko
   JVM APIs in an AWT-named artifact.
-- **Current compose-winui action:** keep source isolation checks for AWT,
-  Swing, Desktop, and `SkiaLayer`, and add a runtime classpath guard that
-  rejects `skiko-awt-runtime-*` native runtime artifacts while temporarily
-  allowing the `skiko-awt` API jar. Remove that allowance once skiko-winui or
-  Skiko publishes an AWT-free JVM API artifact for the WinUI path.
+- **Resolution:** `skiko-winui` commit `ee25d210` keeps the internal
+  `skiko-jvm-api` compile dependency as compile-only for `winui-jvm`, so
+  `skiko-winui-jvm` no longer publishes `org.jetbrains.skiko:skiko-jvm-api` as
+  a consumer dependency. compose-winui now treats `skiko-winui` as the WinUI
+  replacement for the regular Skiko distribution by substituting
+  `org.jetbrains.skiko:skiko` to
+  `io.github.compose-fluent:skiko-winui` only for WinUI JVM configurations.
 - **2026-06-03 23:16 +08 snapshot retest:** with `skiko-winui`
   `0.0.0-20260603.150039-4`, Gradle dependency insight for
   `winuiJvmRuntimeClasspath` still resolves `org.jetbrains.skiko:skiko-awt`
   through `org.jetbrains.skiko:skiko:0.0.0-SNAPSHOT`, so `SKIKO-006` remains
   open.
+- **2026-07-04 snapshot retest:** with `skiko-winui`
+  `0.0.0-SNAPSHOT:20260703.142141-28`, `skiko-winui-jvm`
+  `0.0.0-SNAPSHOT:20260703.142141-11`, and Skiko snapshot
+  `0.0.0-SNAPSHOT:20260630.121153-*`, Gradle dependency insight for both
+  `winuiJvmRuntimeClasspath` and `winuiJvmTestRuntimeClasspath` still resolves
+  `org.jetbrains.skiko:skiko-awt` through `org.jetbrains.skiko:skiko` and the
+  `skiko-winui-jvm -> skiko-winui` path, so `SKIKO-006` remains open.
+- **2026-07-05 validation:** GitHub Actions run `28713142890` published
+  `skiko-winui` `0.0.0-SNAPSHOT:20260704.171250-30`,
+  `skiko-winui-jvm` `0.0.0-SNAPSHOT:20260704.171250-13`, and
+  `skiko-winui-windows` `0.0.0-SNAPSHOT:20260704.171250-30`. With JDK 25,
+  `:compose:ui:ui:dependencyInsight --configuration winuiJvmTestRuntimeClasspath
+  --dependency org.jetbrains.skiko:skiko-jvm-api`,
+  `:compose:ui:ui:dependencyInsight --configuration winuiJvmTestRuntimeClasspath
+  --dependency org.jetbrains.skiko:skiko-awt`, and
+  `:compose:ui:ui:winuiJvmTest` all pass with `--refresh-dependencies
+  -PcomposeWinUi.enableJvmTarget=true --no-configuration-cache
+  --no-configure-on-demand`. Both dependency insight commands report no
+  matching dependencies, and `winuiJvmTest` completes successfully.
 
 ## SKIKO-005: published render diagnostics API is still internal
 
