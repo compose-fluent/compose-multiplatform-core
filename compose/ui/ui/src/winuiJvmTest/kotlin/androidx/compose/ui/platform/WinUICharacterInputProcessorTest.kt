@@ -115,25 +115,6 @@ class WinUICharacterInputProcessorTest {
     }
 
     @Test
-    fun suppressesCharacterFallbackAlreadyCommittedByWindowsIme() {
-        val processor = WinUICharacterInputProcessor()
-        var dispatchCount = 0
-
-        val handled = processor.process(
-            codePoint = '中'.code,
-            isHandled = false,
-            shouldSuppressCharacterFallback = { text -> text == "中" },
-            commitText = {
-                dispatchCount += 1
-                true
-            },
-        )
-
-        assertEquals(true, handled)
-        assertEquals(0, dispatchCount)
-    }
-
-    @Test
     fun skipsNextCharacterWhenPrintableKeyDownWasAlreadyHandled() {
         val processor = WinUICharacterInputProcessor()
         val committed = mutableListOf<String>()

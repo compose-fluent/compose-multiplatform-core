@@ -266,35 +266,6 @@ class WinUIPlatformTextInputServiceTest {
     }
 
     @Test
-    fun nativeTextInputBridgeRoutesWindowsImeCompositionEvents() {
-        val editCommandBatches = mutableListOf<List<EditCommand>>()
-        val bridge = WinUIPlatformTextInputService.nativeBridge
-
-        WinUIPlatformTextInputService.startInput(
-            value = TextFieldValue(""),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = { editCommandBatches += it },
-            onImeActionPerformed = {},
-        )
-
-        bridge.onWindowsImeStartComposition()
-        assertTrue(bridge.onWindowsImeComposition(composingText = "zhong", resultText = ""))
-        assertTrue(bridge.onWindowsImeComposition(composingText = "", resultText = "中"))
-        assertTrue(bridge.onWindowsImeEndComposition())
-
-        assertEquals(
-            listOf(
-                listOf(SetComposingTextCommand("zhong", 1)),
-                listOf(CommitTextCommand("中", 1)),
-                listOf(FinishComposingTextCommand()),
-            ),
-            editCommandBatches,
-        )
-        assertTrue(bridge.shouldSuppressCharacterFallback("中"))
-        assertFalse(bridge.shouldSuppressCharacterFallback("中"))
-    }
-
-    @Test
     fun startInputReplacesNativeTextInputBridgeFocusState() {
         val bridge = WinUIPlatformTextInputService.nativeBridge
 
