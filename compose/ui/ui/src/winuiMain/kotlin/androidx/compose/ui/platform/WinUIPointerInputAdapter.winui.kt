@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.areAnyPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.unit.Density
 import io.github.composefluent.winrt.runtime.WinRTEvent
@@ -43,6 +44,10 @@ internal class WinUIPointerInputAdapter(
     private val onSourcePointerPointChanged: (PointerPoint?) -> WinUIOwnedResourceUpdate = {
         WinUIOwnedResourceUpdate(ownsIncoming = false)
     },
+    // Called around each event, so that the host can lay out before hit testing and run the work
+    // that the event handlers scheduled, as the Skiko scenes do.
+    private val beforeEvent: (WinUIPointerEvent) -> Unit = {},
+    private val afterEvent: () -> Unit = {},
 ) {
     private var isDisposed = false
     private var cancellationSent = false
@@ -109,6 +114,7 @@ internal class WinUIPointerInputAdapter(
                                     "native event=$eventType sender=${sender?.debugClassName()} " +
                                         "handledBefore=${args.handled} ${pointerEvent.debugString()}"
                                 }
+                                beforeEvent(pointerEvent)
                                 val handled =
                                     pointerEventProcessor
                                         .process(
@@ -159,6 +165,7 @@ internal class WinUIPointerInputAdapter(
                                                     "inBounds=${pointerEvent.isInBounds} handled=$handled"
                                             }
                                         }
+                                afterEvent()
                                 args.handled = handled
                                 debugPointerInput {
                                     "native handledAfter event=$eventType handled=${args.handled}"
@@ -226,6 +233,8 @@ internal class WinUIPointerInputAdapter(
                 if (nativeKeyboardModifiers != null) {
                     keyboardModifierState.reconcilePressed(nativeKeyboardModifiers)
                 }
+                val keyboardModifiers =
+                    nativeKeyboardModifiers ?: keyboardModifierState.toPointerKeyboardModifiers()
                 WinUIPointerEvent(
                     eventType = eventType,
                     position = winUIPositionToComposeOffset(position.x, position.y, owner.density),
@@ -234,13 +243,13 @@ internal class WinUIPointerInputAdapter(
                     down = point.isComposePointerDown(eventType, buttons),
                     type = point.toComposePointerType(ownedProperties),
                     buttons = buttons,
-                    keyboardModifiers =
-                        nativeKeyboardModifiers
-                            ?: keyboardModifierState.toPointerKeyboardModifiers(),
+                    keyboardModifiers = keyboardModifiers,
                     button = ownedProperties.pointerUpdateKind.toComposeButton(),
                     scrollDelta =
                         if (eventType == PointerEventType.Scroll) {
-                            ownedProperties.toComposeScrollDelta()
+                            ownedProperties.toComposeScrollDelta(
+                                isShiftPressed = keyboardModifiers.isShiftPressed
+                            )
                         } else {
                             Offset.Zero
                         },
@@ -374,7 +383,7 @@ internal data class WinUIPointerEvent(
     val nativeEvent: Any?,
     val sourcePointerPoint: PointerPoint? = null,
     val pressure: Float = 1f,
-    val activeHover: Boolean = type == PointerType.Mouse && !down,
+    val activeHover: Boolean = type == PointerType.Mouse,
     val historical: List<HistoricalChange> = emptyList(),
 )
 
@@ -429,6 +438,9 @@ private fun PointerPoint.toComposePressure(
     ) {
         return 0f
     }
+    // Pens report their pressure. WinUI gives devices without a pressure sensor a fixed 0.5;
+    // the desktop target reports 1 for them.
+    if (pointerDeviceType != PointerDeviceType.Pen) return 1f
     return properties.pressure.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
 }
 
@@ -439,8 +451,10 @@ private fun PointerPoint.toComposeActiveHover(
     if (eventType == PointerEventType.Exit) return false
     return when {
         pointerDeviceType == PointerDeviceType.Pen -> properties.isInRange && !isInContact
+        // As on the Skiko targets, the events of a mouse are hover events also while a button
+        // is pressed (ComposeScenePointer: activeHover = type == Mouse).
         pointerDeviceType == PointerDeviceType.Mouse ||
-            pointerDeviceType == PointerDeviceType.Touchpad -> !isInContact
+            pointerDeviceType == PointerDeviceType.Touchpad -> true
         else -> false
     }
 }
@@ -483,8 +497,9 @@ internal fun winUIIsComposePointerDown(
 ): Boolean =
     when (eventType) {
         PointerEventType.Press -> true
-        PointerEventType.Release,
-        PointerEventType.Scroll -> false
+        PointerEventType.Release -> false
+        // A wheel turn or leaving the surface does not release a pressed button. Reporting the
+        // pointer as up there would end a drag in progress and start it again on the next move.
         else -> isInContact || buttons.areAnyPressed
     }
 
@@ -514,12 +529,15 @@ private fun PointerUpdateKind.toComposeButton(): PointerButton? =
         else -> null
     }
 
-private fun microsoft.ui.input.PointerPointProperties.toComposeScrollDelta(): Offset {
+private fun microsoft.ui.input.PointerPointProperties.toComposeScrollDelta(
+    isShiftPressed: Boolean,
+): Offset {
     val wheelTicks = mouseWheelDelta.toFloat() / MouseWheelDeltaPerTick
-    return if (isHorizontalMouseWheel) {
-        Offset(wheelTicks, 0f)
-    } else {
-        Offset(0f, -wheelTicks)
+    return when {
+        isHorizontalMouseWheel -> Offset(wheelTicks, 0f)
+        // As on the desktop target, Shift turns the vertical wheel into a horizontal one.
+        isShiftPressed -> Offset(-wheelTicks, 0f)
+        else -> Offset(0f, -wheelTicks)
     }
 }
 

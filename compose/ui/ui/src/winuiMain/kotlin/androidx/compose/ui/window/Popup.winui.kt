@@ -20,9 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.ComposeFeatureFlags
-import androidx.compose.ui.LayerType
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,17 +29,23 @@ import androidx.compose.runtime.rememberCompositionContext
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ComposeFeatureFlags
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.LayerType
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWinUIRoot
 import androidx.compose.ui.platform.LocalWinUIWindow
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -56,15 +61,16 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.round
-import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.asWinRT
-import microsoft.ui.xaml.FrameworkElement
+import microsoft.ui.xaml.Application as XamlApplication
 import microsoft.ui.xaml.CornerRadius
+import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.RoutedEventHandler
 import microsoft.ui.xaml.Setter
 import microsoft.ui.xaml.Style
 import microsoft.ui.xaml.Thickness
 import microsoft.ui.xaml.UIElement
+import microsoft.ui.xaml.Window as XamlWindow
 import microsoft.ui.xaml.controls.Control
 import microsoft.ui.xaml.controls.Flyout
 import microsoft.ui.xaml.controls.FlyoutPresenter
@@ -75,11 +81,19 @@ import microsoft.ui.xaml.controls.primitives.FlyoutShowOptions
 import microsoft.ui.xaml.input.KeyEventHandler
 import microsoft.ui.xaml.input.PointerEventHandler
 import microsoft.ui.xaml.media.SolidColorBrush
-import microsoft.ui.xaml.Application as XamlApplication
+import windows.foundation.EventRegistrationToken
+import windows.foundation.Point
 import windows.system.VirtualKey
 import windows.ui.Color
-import microsoft.ui.xaml.Window as XamlWindow
 
+/**
+ * Properties used to customize the behavior of a [Popup], the same as on the Skiko targets.
+ *
+ * @property usePlatformInsets Whether the size of the popup's content should be limited by
+ * platform insets.
+ * @property consumePointerInputOutside Whether the content below the popup gets no pointer input
+ * while the popup is shown. The default is [focusable].
+ */
 @Immutable
 actual class PopupProperties private constructor(
     actual val focusable: Boolean,
@@ -87,8 +101,49 @@ actual class PopupProperties private constructor(
     actual val dismissOnClickOutside: Boolean,
     actual val clippingEnabled: Boolean,
     actual val usePlatformDefaultWidth: Boolean,
+    val usePlatformInsets: Boolean,
+    @property:ExperimentalComposeUiApi
+    val consumePointerInputOutside: Boolean,
     internal val layerType: LayerType,
 ) {
+    @ExperimentalComposeUiApi
+    constructor(
+        focusable: Boolean = false,
+        dismissOnBackPress: Boolean = true,
+        dismissOnClickOutside: Boolean = true,
+        clippingEnabled: Boolean = true,
+        usePlatformDefaultWidth: Boolean = false,
+        usePlatformInsets: Boolean = true,
+        consumePointerInputOutside: Boolean = focusable,
+    ) : this(
+        focusable = focusable,
+        dismissOnBackPress = dismissOnBackPress,
+        dismissOnClickOutside = dismissOnClickOutside,
+        clippingEnabled = clippingEnabled,
+        usePlatformDefaultWidth = usePlatformDefaultWidth,
+        usePlatformInsets = usePlatformInsets,
+        consumePointerInputOutside = consumePointerInputOutside,
+        layerType = ComposeFeatureFlags.layerType.value,
+    )
+
+    constructor(
+        focusable: Boolean = false,
+        dismissOnBackPress: Boolean = true,
+        dismissOnClickOutside: Boolean = true,
+        clippingEnabled: Boolean = true,
+        usePlatformDefaultWidth: Boolean = false,
+        usePlatformInsets: Boolean = true,
+    ) : this(
+        focusable = focusable,
+        dismissOnBackPress = dismissOnBackPress,
+        dismissOnClickOutside = dismissOnClickOutside,
+        clippingEnabled = clippingEnabled,
+        usePlatformDefaultWidth = usePlatformDefaultWidth,
+        usePlatformInsets = usePlatformInsets,
+        consumePointerInputOutside = focusable,
+        layerType = ComposeFeatureFlags.layerType.value,
+    )
+
     actual constructor(
         focusable: Boolean,
         dismissOnBackPress: Boolean,
@@ -101,6 +156,8 @@ actual class PopupProperties private constructor(
         dismissOnClickOutside = dismissOnClickOutside,
         clippingEnabled = clippingEnabled,
         usePlatformDefaultWidth = usePlatformDefaultWidth,
+        usePlatformInsets = true,
+        consumePointerInputOutside = focusable,
         layerType = ComposeFeatureFlags.layerType.value,
     )
 
@@ -116,6 +173,8 @@ actual class PopupProperties private constructor(
         dismissOnClickOutside = dismissOnClickOutside,
         clippingEnabled = clippingEnabled,
         usePlatformDefaultWidth = false,
+        usePlatformInsets = true,
+        consumePointerInputOutside = focusable,
         layerType = ComposeFeatureFlags.layerType.value,
     )
 
@@ -128,6 +187,8 @@ actual class PopupProperties private constructor(
         if (dismissOnClickOutside != other.dismissOnClickOutside) return false
         if (clippingEnabled != other.clippingEnabled) return false
         if (usePlatformDefaultWidth != other.usePlatformDefaultWidth) return false
+        if (usePlatformInsets != other.usePlatformInsets) return false
+        if (consumePointerInputOutside != other.consumePointerInputOutside) return false
         if (layerType != other.layerType) return false
 
         return true
@@ -139,6 +200,8 @@ actual class PopupProperties private constructor(
         result = 31 * result + dismissOnClickOutside.hashCode()
         result = 31 * result + clippingEnabled.hashCode()
         result = 31 * result + usePlatformDefaultWidth.hashCode()
+        result = 31 * result + usePlatformInsets.hashCode()
+        result = 31 * result + consumePointerInputOutside.hashCode()
         result = 31 * result + layerType.hashCode()
         return result
     }
@@ -151,19 +214,15 @@ actual fun Popup(
     onDismissRequest: (() -> Unit)?,
     properties: PopupProperties,
     content: @Composable () -> Unit,
-) {
-    val popupPositionProvider = remember(alignment, offset) {
-        AlignmentOffsetPositionProvider(alignment, offset)
-    }
-    Popup(
-        popupPositionProvider = popupPositionProvider,
-        onDismissRequest = onDismissRequest,
-        properties = properties,
-        onPreviewKeyEvent = null,
-        onKeyEvent = null,
-        content = content,
-    )
-}
+): Unit = Popup(
+    alignment = alignment,
+    offset = offset,
+    onDismissRequest = onDismissRequest,
+    properties = properties,
+    onPreviewKeyEvent = null,
+    onKeyEvent = null,
+    content = content,
+)
 
 @Composable
 actual fun Popup(
@@ -180,6 +239,15 @@ actual fun Popup(
     content = content,
 )
 
+/**
+ * Opens a popup with the given content, as on the Skiko targets.
+ *
+ * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
+ * keyboard while the popup has focus. It gives ancestors of a focused component the chance to
+ * intercept a [KeyEvent]. Return true to stop propagation of this event.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard
+ * while the popup has focus and no focused component consumed the event.
+ */
 @Composable
 fun Popup(
     alignment: Alignment = Alignment.TopStart,
@@ -203,6 +271,15 @@ fun Popup(
     )
 }
 
+/**
+ * Opens a popup with the given content, as on the Skiko targets.
+ *
+ * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
+ * keyboard while the popup has focus. It gives ancestors of a focused component the chance to
+ * intercept a [KeyEvent]. Return true to stop propagation of this event.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard
+ * while the popup has focus and no focused component consumed the event.
+ */
 @Composable
 fun Popup(
     popupPositionProvider: PopupPositionProvider,
@@ -212,15 +289,13 @@ fun Popup(
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     content: @Composable () -> Unit,
 ) {
-    val currentOnPreviewKeyEvent by rememberUpdatedState(onPreviewKeyEvent)
-    val currentOnKeyEvent by rememberUpdatedState(onKeyEvent)
     if (properties.layerType == LayerType.OnWindow) {
         WinUIWindowPopupLayout(
             popupPositionProvider = popupPositionProvider,
             onDismissRequest = onDismissRequest,
             properties = properties,
-            onPreviewKeyEvent = currentOnPreviewKeyEvent,
-            onKeyEvent = currentOnKeyEvent,
+            onPreviewKeyEvent = onPreviewKeyEvent,
+            onKeyEvent = onKeyEvent,
             content = content,
         )
     } else {
@@ -228,13 +303,17 @@ fun Popup(
             popupPositionProvider = popupPositionProvider,
             onDismissRequest = onDismissRequest,
             properties = properties,
-            onPreviewKeyEvent = currentOnPreviewKeyEvent,
-            onKeyEvent = currentOnKeyEvent,
+            onPreviewKeyEvent = onPreviewKeyEvent,
+            onKeyEvent = onKeyEvent,
             content = content,
         )
     }
 }
 
+/**
+ * The popup of the Skiko targets (`PopupLayout`): a layer above the content of the window,
+ * positioned against the window, dismissed by a press outside of it and, when focusable, by Esc.
+ */
 @Composable
 private fun WinUICanvasPopupLayout(
     popupPositionProvider: PopupPositionProvider,
@@ -244,25 +323,123 @@ private fun WinUICanvasPopupLayout(
     onKeyEvent: ((KeyEvent) -> Boolean)?,
     content: @Composable () -> Unit,
 ) {
-    var parentBoundsInWindow by remember { mutableStateOf(IntRect.Zero) }
-    var popupBoundsInRoot by remember { mutableStateOf(IntRect.Zero) }
-    val root = LocalWinUIRoot.current?.let { it as? UIElement }
-    val density = LocalDensity.current
+    @OptIn(ExperimentalComposeUiApi::class)
+    val layer = rememberWinUIComposeLayer(
+        focusable = properties.focusable,
+        consumePointerInputOutside = properties.consumePointerInputOutside,
+    )
+    if (layer == null) {
+        // Not hosted by a WinUIComposeView, which provides the layers.
+        WinUIInlinePopupLayout(popupPositionProvider, properties, content)
+        return
+    }
     val currentOnDismissRequest by rememberUpdatedState(onDismissRequest)
-    val dismissalHost = remember(root) { WinUICanvasPopupDismissHost(root) }
+    // Any focusable popup consumes back events.
+    if (properties.focusable) {
+        WinUIBackHandler(enabled = properties.dismissOnBackPress) {
+            currentOnDismissRequest?.invoke()
+        }
+    }
+    layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
+    layer.onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
+        { eventType: PointerEventType, _: PointerButton? ->
+            // React to the press, once per click, for any mouse button, as dropdowns do.
+            if (eventType == PointerEventType.Press) {
+                currentOnDismissRequest?.invoke()
+            }
+        }
+    } else {
+        null
+    }
 
-    SideEffect {
-        dismissalHost.update(
-            properties = properties,
-            popupBoundsInRoot = popupBoundsInRoot,
-            density = density,
-            onDismissRequest = currentOnDismissRequest,
+    // Use a MutableState directly to avoid recomposing when the value changes
+    val parentBoundsInWindow: MutableState<IntRect?> = remember { mutableStateOf(null) }
+    var canCalculatePosition by remember { mutableStateOf(false) }
+    Layout(
+        content = {},
+        modifier = Modifier.onPlaced { childCoordinates ->
+            childCoordinates.parentCoordinates?.let {
+                parentBoundsInWindow.value = IntRect(
+                    offset = it.positionInWindow().round(),
+                    size = it.size,
+                )
+                canCalculatePosition = true
+            }
+        },
+    ) { _, _ ->
+        layout(0, 0) {}
+    }
+
+    val currentContent by rememberUpdatedState(content)
+    val currentPositionProvider by rememberUpdatedState(popupPositionProvider)
+    val currentProperties by rememberUpdatedState(properties)
+    layer.Content {
+        val containerSize = LocalWindowInfo.current.containerSize
+        val layoutDirection = LocalLayoutDirection.current
+        val positionProvider = currentPositionProvider
+        val popupProperties = currentProperties
+        val measurePolicy = remember(
+            layer,
+            positionProvider,
+            popupProperties,
+            containerSize,
+            layoutDirection,
+        ) {
+            WinUIComposeLayerMeasurePolicy(
+                usePlatformDefaultWidth = popupProperties.usePlatformDefaultWidth,
+            ) { contentSize ->
+                val parentRectInWindow = parentBoundsInWindow.value
+                if (parentRectInWindow == null) {
+                    // Keep an unanchored popup out of the way until its anchor is placed.
+                    layer.boundsInWindow = IntRect.Zero
+                    return@WinUIComposeLayerMeasurePolicy IntOffset.Zero
+                }
+                val windowSize = containerSize.takeIf { it != IntSize.Zero } ?: contentSize
+                val position = positionProvider.calculatePosition(
+                    anchorBounds = parentRectInWindow,
+                    windowSize = windowSize,
+                    layoutDirection = layoutDirection,
+                    popupContentSize = contentSize,
+                ).let { position ->
+                    if (popupProperties.clippingEnabled) {
+                        clipPositionToWindow(position, contentSize, windowSize)
+                    } else {
+                        position
+                    }
+                }
+                layer.boundsInWindow = IntRect(position, contentSize)
+                position
+            }
+        }
+        Layout(
+            content = currentContent,
+            // Compose and measure the popup before it can be positioned, but do not show it
+            // until its anchor bounds are available.
+            modifier = Modifier
+                .semantics { popup() }
+                .alpha(if (canCalculatePosition) 1f else 0f),
+            measurePolicy = measurePolicy,
         )
     }
-    DisposableEffect(dismissalHost) {
-        dismissalHost.start()
-        onDispose { dismissalHost.dispose() }
+
+    DisposableEffect(layer) {
+        onDispose {
+            layer.close()
+        }
     }
+}
+
+/**
+ * The popup as it was before layers: laid out in place, for content that is not hosted by a
+ * WinUIComposeView.
+ */
+@Composable
+private fun WinUIInlinePopupLayout(
+    popupPositionProvider: PopupPositionProvider,
+    properties: PopupProperties,
+    content: @Composable () -> Unit,
+) {
+    var parentBoundsInWindow by remember { mutableStateOf(IntRect.Zero) }
 
     Layout(
         content = {},
@@ -282,27 +459,14 @@ private fun WinUICanvasPopupLayout(
     val layoutDirection = LocalLayoutDirection.current
     Layout(
         content = currentContent,
-        modifier = Modifier
-            .onPlaced { coordinates ->
-                popupBoundsInRoot = IntRect(
-                    offset = coordinates.positionInRoot().round(),
-                    size = coordinates.size,
-                )
-            }
-            .semantics { popup() }
-            .popupKeyEventHandlers(onPreviewKeyEvent, onKeyEvent),
+        modifier = Modifier.semantics { popup() },
     ) { measurables, constraints ->
         val windowSize = containerSize.takeIf { it != IntSize.Zero }
             ?: constraints.finiteMaxSizeOr(IntSize.Zero)
-        val availableWidth = constraints.finiteMaxWidthOr(windowSize.width)
         val looseConstraints = constraints.copy(
             minWidth = 0,
             minHeight = 0,
-            maxWidth = winUIPopupMaxWidth(
-                windowWidth = windowSize.width,
-                availableWidth = availableWidth,
-                usePlatformDefaultWidth = properties.usePlatformDefaultWidth,
-            ),
+            maxWidth = constraints.finiteMaxWidthOr(windowSize.width),
             maxHeight = constraints.finiteMaxHeightOr(windowSize.height),
         )
         val placeables = measurables.map { measurable ->
@@ -739,83 +903,6 @@ internal fun winUIPopupMaxWidth(
         availableWidth = availableWidth,
         usePlatformDefaultWidth = usePlatformDefaultWidth,
     )
-
-private class WinUICanvasPopupDismissHost(
-    private val root: UIElement?,
-) {
-    private var properties = PopupProperties()
-    private var popupBoundsInRoot = IntRect.Zero
-    private var density = Density(1f)
-    private val dismissalState = WinUIPopupDismissState(
-        dismissOnBackPress = true,
-        dismissOnClickOutside = true,
-        onDismissRequest = null,
-    )
-    private var keyDownToken: EventRegistrationToken? = null
-    private var pointerPressedToken: EventRegistrationToken? = null
-
-    fun update(
-        properties: PopupProperties,
-        popupBoundsInRoot: IntRect,
-        density: Density,
-        onDismissRequest: (() -> Unit)?,
-    ) {
-        this.properties = properties
-        this.popupBoundsInRoot = popupBoundsInRoot
-        this.density = density
-        dismissalState.update(
-            dismissOnBackPress = properties.dismissOnBackPress,
-            dismissOnClickOutside = properties.dismissOnClickOutside,
-            onDismissRequest = onDismissRequest,
-        )
-    }
-
-    fun start() {
-        val root = root ?: return
-        if (keyDownToken == null) {
-            keyDownToken = root.keyDown.add(KeyEventHandler { _, args ->
-                if (!args.handled && properties.focusable && args.key.isPopupBackKey()) {
-                    if (dismissalState.onBackPress()) args.handled = true
-                }
-            })
-        }
-        if (pointerPressedToken == null) {
-            pointerPressedToken = root.pointerPressed.add(PointerEventHandler { _, args ->
-                if (!args.handled) {
-                    val point = args.getCurrentPoint(root).position
-                    val dismissed = dismissalState.onOutsidePointer(
-                        winUICanvasPopupPointerPositionInRoot(
-                            Offset(point.x, point.y),
-                            density,
-                        ),
-                        popupBoundsInRoot,
-                    )
-                    if (dismissed && properties.focusable) args.handled = true
-                }
-            })
-        }
-    }
-
-    fun dispose() {
-        root?.let { root ->
-            keyDownToken?.let { token -> runCatching { root.keyDown.remove(token) } }
-            pointerPressedToken?.let { token ->
-                runCatching { root.pointerPressed.remove(token) }
-            }
-        }
-        keyDownToken = null
-        pointerPressedToken = null
-    }
-}
-
-internal fun winUICanvasPopupPointerPositionInRoot(
-    pointInXamlDips: Offset,
-    density: Density,
-): Offset = winUIPositionToComposeOffset(
-    pointInXamlDips.x,
-    pointInXamlDips.y,
-    density,
-)
 
 private fun VirtualKey.isPopupBackKey(): Boolean =
     this == VirtualKey.Escape || this == VirtualKey.GoBack || this == VirtualKey.NavigationCancel

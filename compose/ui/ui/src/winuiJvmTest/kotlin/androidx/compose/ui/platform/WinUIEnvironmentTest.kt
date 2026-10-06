@@ -146,6 +146,15 @@ class WinUIEnvironmentTest {
     }
 
     @Test
+    fun layoutDirectionIsRtlForAnRtlTreeOrAnRtlLocale() {
+        assertEquals(LayoutDirection.Ltr, winUILayoutDirection(FlowDirection.LeftToRight, false))
+        assertEquals(LayoutDirection.Rtl, winUILayoutDirection(FlowDirection.RightToLeft, false))
+        // XAML does not flow right to left for an RTL locale by itself; the desktop target does.
+        assertEquals(LayoutDirection.Rtl, winUILayoutDirection(FlowDirection.LeftToRight, true))
+        assertEquals(LayoutDirection.Ltr, winUILayoutDirection(null, false))
+    }
+
+    @Test
     fun systemColorsMapToComposeSystemTheme() {
         val black = Color(a = 255u, r = 0u, g = 0u, b = 0u)
         val white = Color(a = 255u, r = 255u, g = 255u, b = 255u)

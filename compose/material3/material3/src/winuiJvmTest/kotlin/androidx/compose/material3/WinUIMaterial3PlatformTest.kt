@@ -16,6 +16,7 @@
 
 package androidx.compose.material3
 
+import androidx.compose.material3.internal.PlatformDateFormat
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
@@ -111,12 +112,28 @@ class WinUIMaterial3PlatformTest {
     }
 
     @Test
-    fun winuiDropdownMenuPopupsForwardKeyEvents() {
-        val source = material3ModuleRoot()
-            .resolve("src/winuiJvmMain/kotlin/androidx/compose/material3/SkikoMenu.winui.kt")
+    fun winuiDropdownMenuPopupForwardsKeyEvents() {
+        // The WinUI target compiles the Skiko menu; it has no copy of its own.
+        val moduleRoot = material3ModuleRoot()
+        val source = moduleRoot
+            .resolve("src/skikoMain/kotlin/androidx/compose/material3/SkikoMenu.skiko.kt")
             .readText()
 
-        assertEquals(2, Regex("onKeyEvent\\s*=").findAll(source).count())
+        assertTrue(Regex("onKeyEvent\\s*=").containsMatchIn(source))
+        assertFalse(
+            moduleRoot
+                .resolve("src/winuiJvmMain/kotlin/androidx/compose/material3/SkikoMenu.winui.kt")
+                .exists()
+        )
+    }
+
+    @Test
+    @OptIn(ExperimentalMaterial3Api::class)
+    fun datePickerWeekdaysAreNarrowAsOnTheDesktopTarget() {
+        val weekdays = PlatformDateFormat(java.util.Locale.US).weekdayNames
+
+        assertEquals(listOf("M", "T", "W", "T", "F", "S", "S"), weekdays.map { it.second })
+        assertEquals("Monday", weekdays.first().first)
     }
 
     @Test
@@ -133,10 +150,10 @@ class WinUIMaterial3PlatformTest {
     private fun material3ModuleRoot(): Path {
         val start = Paths.get("").toAbsolutePath()
         generateSequence(start) { it.parent }.forEach { candidate ->
-            val direct = candidate.resolve("src/winuiJvmMain/kotlin")
+            val direct = candidate.resolve("src/winuiMain/kotlin")
             if (direct.exists() && candidate.name == "material3") return candidate
 
-            val fromRepoRoot = candidate.resolve("compose/material3/material3/src/winuiJvmMain/kotlin")
+            val fromRepoRoot = candidate.resolve("compose/material3/material3/src/winuiMain/kotlin")
             if (fromRepoRoot.exists()) return candidate.resolve("compose/material3/material3")
         }
         error("Could not find compose/material3/material3 module root from $start.")

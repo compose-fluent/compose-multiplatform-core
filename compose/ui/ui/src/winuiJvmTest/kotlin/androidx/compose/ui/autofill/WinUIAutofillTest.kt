@@ -18,6 +18,7 @@ package androidx.compose.ui.autofill
 
 import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.WinUISkikoTestBase
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Rect
@@ -41,7 +42,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-class WinUIAutofillTest {
+class WinUIAutofillTest : WinUISkikoTestBase() {
     @Test
     fun ownerProvidesAutofillLocals() {
         val owner = createOwner()

@@ -20,6 +20,7 @@ import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.WinUISkikoTestBase
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.PlatformFocusOwner
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +36,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
@@ -85,6 +87,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WinUIComposeLayerHost
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.exists
@@ -108,7 +111,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class WinUIOwnerTest {
+class WinUIOwnerTest : WinUISkikoTestBase() {
     @Test
     fun indirectPointerFocusListenerIsRegisteredOnlyDuringOwnerLifetime() {
         val source = winUIOwnerSource()
@@ -851,6 +854,32 @@ class WinUIOwnerTest {
         assertFalse(remainingListenerCalled)
     }
 
+    // A listener that measures a lazy layout composes its items, which applies changes and ends
+    // them on the same owner: the year list of the Material 3 date picker.
+    @Test
+    fun endApplyChangesInsideAListenerRunsEveryListenerOnce() {
+        val owner = createOwner()
+        val events = mutableListOf<String>()
+        try {
+            owner.registerOnEndApplyChangesListener { events += "first" }
+            owner.registerOnEndApplyChangesListener {
+                events += "nested"
+                owner.registerOnEndApplyChangesListener { events += "added" }
+                owner.onEndApplyChanges()
+            }
+            owner.registerOnEndApplyChangesListener { events += "last" }
+
+            owner.onEndApplyChanges()
+
+            assertEquals(listOf("first", "nested", "last", "added"), events)
+
+            owner.onEndApplyChanges()
+            assertEquals(4, events.size)
+        } finally {
+            owner.dispose()
+        }
+    }
+
     @Test
     fun disposeSuppressesPendingAndFutureOwnerCallbacks() {
         val events = OwnerEvents()
@@ -1240,6 +1269,10 @@ class WinUIOwnerTest {
             )
             owner.measureAndLayout(sendPointerUpdate = true)
 
+            // The synthetic move is sent once layout is over, by the host.
+            assertEquals(emptyList(), events)
+            owner.updatePointerPosition()
+
             assertEquals(listOf(PointerEventType.Enter), events)
 
             pointerNodeX = 50
@@ -1250,6 +1283,7 @@ class WinUIOwnerTest {
                 scheduleMeasureAndLayout = false,
             )
             owner.measureAndLayout(sendPointerUpdate = false)
+            owner.updatePointerPosition()
 
             assertEquals(listOf(PointerEventType.Enter), events)
 
@@ -1281,7 +1315,11 @@ class WinUIOwnerTest {
             assertTrue(owner.inputModeManager.requestInputMode(InputMode.Touch))
             assertEquals(InputMode.Touch, owner.inputModeManager.inputMode)
 
+            // As on desktop, typing does not switch to keyboard mode; moving focus with keys does.
             owner.sendKeyEvent(KeyEvent(key = Key.A, type = KeyEventType.KeyDown))
+            assertEquals(InputMode.Touch, owner.inputModeManager.inputMode)
+
+            owner.sendKeyEvent(KeyEvent(key = Key.Tab, type = KeyEventType.KeyDown))
             assertEquals(InputMode.Keyboard, owner.inputModeManager.inputMode)
 
             owner.sendPointerEventForTest(
@@ -1378,6 +1416,39 @@ class WinUIOwnerTest {
         }
     }
 
+    @Test
+    fun layerAttachedWhileTheRootIsMeasuredIsMeasuredAfterwards() {
+        // A popup in a Scaffold is composed, and its layer attached, while the root measures
+        // its content.
+        var measureRequests = 0
+        val owner = createOwner(onMeasureAndLayoutRequested = { measureRequests += 1 })
+        try {
+            val host = WinUIComposeLayerHost(root = owner.root, focusOwner = { owner.focusOwner })
+            val layer = host.createLayer(focusable = false, consumePointerInputOutside = false)
+            val content = LayoutNode().also {
+                it.measurePolicy = MeasurePolicy { _, constraints ->
+                    host.attach(layer)
+                    layout(constraints.maxWidth, constraints.maxHeight) {}
+                }
+            }
+            owner.root.insertAt(0, content)
+            owner.setWindowContainerSize(IntSize(100, 80))
+            owner.measureAndLayout()
+            assertFalse(layer.node.isPlaced)
+
+            // The host asked for the pass that measures the layer.
+            val requestsBefore = measureRequests
+            owner.measureAndLayout()
+
+            assertTrue(requestsBefore > 0)
+            assertTrue(layer.node.isPlaced)
+            assertEquals(100, layer.node.width)
+            assertEquals(80, layer.node.height)
+        } finally {
+            owner.dispose()
+        }
+    }
+
     private fun createOwner(
         events: OwnerEvents = OwnerEvents(),
         onMeasureAndLayoutRequested: () -> Unit = {},
@@ -1405,6 +1476,87 @@ class WinUIOwnerTest {
             scheduleOutOfFrame = scheduleOutOfFrame,
             coordinateMapper = coordinateMapper,
         )
+    }
+    @Test
+    fun pointerMovesOfAPressedPointerReportLocalDeltas() {
+        // Pointer positions are local pixels. The origin of the window on the screen must not
+        // leak into the previous position of a pressed pointer, or drags jump by that offset.
+        val owner = createOwner(
+            coordinateMapper = WinUICoordinateMapper(
+                localToScreen = { it + Offset(500f, 300f) },
+                screenToLocal = { it - Offset(500f, 300f) },
+            )
+        )
+        val deltas = mutableListOf<Offset>()
+        try {
+            val pointerNode = LayoutNode().also {
+                it.modifier = PointerDeltaRecorderElement(deltas)
+                it.measurePolicy = fillMaxConstraintsMeasurePolicy()
+            }
+            owner.root.insertAt(0, pointerNode)
+            owner.setWindowContainerSize(IntSize(100, 100))
+            owner.measureAndLayout()
+
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(10f, 10f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+            )
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Press,
+                position = Offset(10f, 10f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = true,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(isPrimaryPressed = true),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = PointerButton.Primary,
+            )
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(15f, 18f),
+                uptimeMillis = 2L,
+                pointerId = 1L,
+                down = true,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(isPrimaryPressed = true),
+                keyboardModifiers = PointerKeyboardModifiers(),
+                button = null,
+            )
+
+            assertEquals(listOf(Offset(5f, 8f)), deltas)
+        } finally {
+            owner.dispose()
+        }
+    }
+
+    @Test
+    fun pointerEventsUpdateTheKeyboardModifiersOfTheWindow() {
+        val owner = createOwner()
+        try {
+            owner.sendPointerEventForTest(
+                eventType = PointerEventType.Move,
+                position = Offset(10f, 10f),
+                uptimeMillis = 1L,
+                pointerId = 1L,
+                down = false,
+                type = PointerType.Mouse,
+                buttons = PointerButtons(),
+                keyboardModifiers = PointerKeyboardModifiers(isShiftPressed = true),
+                button = null,
+            )
+
+            assertTrue(owner.windowInfo.keyboardModifiers.isShiftPressed)
+        } finally {
+            owner.dispose()
+        }
     }
 
     private fun findUiModuleRoot(): Path {
@@ -1618,4 +1770,40 @@ private object TestPlatformFocusOwner : PlatformFocusOwner {
     override fun moveFocusInChildren(focusDirection: FocusDirection): Boolean = false
 
     override fun getEmbeddedViewFocusRect(): Rect? = null
+}
+
+private class PointerDeltaRecorderElement(
+    private val deltas: MutableList<Offset>,
+) : ModifierNodeElement<PointerDeltaRecorderNode>() {
+    override fun create(): PointerDeltaRecorderNode = PointerDeltaRecorderNode(deltas)
+
+    override fun update(node: PointerDeltaRecorderNode) {
+        node.deltas = deltas
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is PointerDeltaRecorderElement && other.deltas === deltas
+
+    override fun hashCode(): Int = System.identityHashCode(deltas)
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "pointerDeltaRecorder"
+    }
+}
+
+private class PointerDeltaRecorderNode(
+    var deltas: MutableList<Offset>,
+) : Modifier.Node(), PointerInputModifierNode {
+    override fun onPointerEvent(
+        pointerEvent: PointerEvent,
+        pass: PointerEventPass,
+        bounds: IntSize,
+    ) {
+        if (pass == PointerEventPass.Main && pointerEvent.type == PointerEventType.Move) {
+            val change = pointerEvent.changes.first()
+            deltas += change.position - change.previousPosition
+        }
+    }
+
+    override fun onCancelPointerInput() = Unit
 }

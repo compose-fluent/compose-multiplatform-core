@@ -17,6 +17,7 @@
 package androidx.compose.ui.text.intl
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.InternalComposeUiApi
 import windows.globalization.ApplicationLanguages
 import windows.globalization.Language
 import windows.globalization.LanguageLayoutDirection
@@ -62,7 +63,8 @@ actual class Locale actual constructor(languageTag: String) {
     }
 }
 
-internal actual fun Locale.isRtl(): Boolean =
+@InternalComposeUiApi
+actual fun Locale.isRtl(): Boolean =
     platformLanguage.layoutDirection == LanguageLayoutDirection.Rtl
 
 private const val DefaultLanguageTag = "en-US"

@@ -1,0 +1,241 @@
+/*
+ * Copyright 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+import androidx.build.SoftwareType
+import androidx.build.PlatformIdentifier
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.konan.target.Family
+
+plugins {
+    id("AndroidXPlugin")
+    id("AndroidXComposePlugin")
+    id("JetBrainsAndroidXPlugin")
+    alias(libs.plugins.kotlinSerialization)
+}
+
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
+
+def composeWinUiMingwTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableMingwTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+
+androidXMultiplatform {
+    redirect("androidx.navigation") {
+        androidLibrary {
+            compileSdk = 35
+            namespace = "org.jetbrains.androidx.navigation.compose"
+
+            androidResources.enable = true
+        }
+    }
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
+    mac()
+    ios()
+    js()
+    wasmJs()
+
+    defaultPlatform(PlatformIdentifier.ANDROID)
+
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":navigation:navigation-runtime"))
+            api(project(":navigation:navigation-common"))
+            if (composeWinUiMingwTargetEnabled) {
+                // The navigation projects build mingwX64 from their sources and redirect every
+                // other target to the androidx artifact with an empty leaf. The metadata of
+                // commonMain sees the source sets a project dependency exposes on all the
+                // platforms of commonMain, the JVM one included, where the leaf exposes none,
+                // so the API comes from the redirect artifact here. The MinGW configurations
+                // substitute it by the project (WinUiMingwDependencies.kt).
+                def navigationVersion = project.redirectVersions.get('androidx.navigation')
+                compileOnly("androidx.navigation:navigation-runtime:$navigationVersion")
+                compileOnly("androidx.navigation:navigation-common:$navigationVersion")
+            }
+            implementation("androidx.annotation:annotation:1.8.0")
+            // The WinUI build compiles against the Compose modules of this build: the MinGW
+            // configurations substitute the published ones by the projects anyway, and the
+            // metadata of commonMain needs the project structure of what the platforms resolve.
+            def compose = { String projectPath, String published ->
+                composeWinUiMingwTargetEnabled ? project(projectPath) : published
+            }
+            api(compose(":compose:runtime:runtime", "org.jetbrains.compose.runtime:runtime:1.11.0"))
+            api(compose(":compose:ui:ui", "org.jetbrains.compose.ui:ui:1.11.0"))
+            api(compose(":compose:animation:animation", "org.jetbrains.compose.animation:animation:1.11.0"))
+            api(compose(":compose:runtime:runtime-saveable", "org.jetbrains.compose.runtime:runtime-saveable:1.11.0"))
+            implementation(compose(":compose:animation:animation-core", "org.jetbrains.compose.animation:animation-core:1.11.0"))
+            implementation(compose(":compose:foundation:foundation-layout", "org.jetbrains.compose.foundation:foundation-layout:1.11.0"))
+            implementation("androidx.collection:collection:1.5.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-common:2.11.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.11.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.11.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+            implementation("androidx.savedstate:savedstate:1.4.0")
+            implementation("androidx.savedstate:savedstate-compose:1.4.0")
+            implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
+            implementation(libs.kotlinCoroutinesCore)
+            implementation(libs.kotlinSerializationCore)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotlinTest)
+            implementation(project(":compose:ui:ui-test"))
+        }
+        create("nonAndroidMain").dependsOn(commonMain)
+        create("nonAndroidTest").dependsOn(commonTest)
+
+        nonAndroidTest {
+            dependsOn(commonTest)
+            dependencies {
+                implementation(libs.kotlinCoroutinesTest)
+                implementation(project(":compose:material:material"))
+                implementation(project(":navigation:navigation-testing"))
+                implementation(project(":internal-testutils-navigation"))
+                implementation(project(":kruth:kruth"))
+            }
+        }
+
+        jvmMain.dependsOn(nonAndroidMain)
+        jvmTest.dependsOn(nonAndroidTest)
+        desktopMain.dependsOn(jvmMain)
+        desktopTest.dependsOn(jvmTest)
+
+        desktopMain {
+            dependsOn(nonAndroidMain)
+        }
+
+        desktopTest {
+            dependsOn(nonAndroidTest)
+            dependencies {
+                implementation(libs.skikoAwtRuntime)
+                implementation(libs.kotlinCoroutinesSwing)
+            }
+        }
+
+        nonJvmMain {
+            dependsOn(nonAndroidMain)
+            dependencies {
+                // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
+                implementation("org.jetbrains.androidx.savedstate:savedstate:1.4.0")
+                implementation("org.jetbrains.androidx.savedstate:savedstate-compose:1.4.0")
+            }
+        }
+
+        nonJvmTest {
+            dependsOn(nonAndroidTest)
+        }
+
+        nativeMain {
+            dependsOn(nonJvmMain)
+        }
+
+        nativeTest {
+            dependsOn(nonJvmTest)
+        }
+
+        webMain {
+            dependsOn(nonJvmMain)
+        }
+
+        webTest {
+            dependsOn(nonJvmTest)
+        }
+    }
+}
+
+androidx {
+    name = "Compose Navigation"
+    type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
+    inceptionYear = "2020"
+    description = "Compose integration with Navigation"
+    addGoldenImageAssets()
+}
+
+kotlin {
+    if (composeWinUiGradlePluginAvailable && composeWinUiMingwTargetEnabled) {
+        mingwX64("winuiMingw")
+
+        sourceSets {
+            winuiMingwMain {
+                dependsOn(nativeMain)
+            }
+        }
+    }
+    if (composeWinUiGradlePluginAvailable && composeWinUiJvmTargetEnabled) {
+        jvm("winuiJvm")
+
+        sourceSets {
+            winuiJvmMain {
+                dependsOn(nonAndroidMain)
+                kotlin.srcDir("src/desktopMain/kotlin")
+                dependencies {
+                // Compile against the WinUI Compose UI that the application runs with. The
+                // published one is the desktop variant, whose actuals (Dialog_skikoKt) are not
+                // in the WinUI one.
+                    implementation(project(":compose:ui:ui"))
+                }
+            }
+
+            winuiJvmTest {
+                dependsOn(nonAndroidTest)
+            }
+        }
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
+            freeCompilerArgs.add("-Xjdk-release=25")
+        }
+    }
+}
+
+configurations.configureEach { configuration ->
+    def lowerName = configuration.name.toLowerCase(Locale.ROOT)
+    if (lowerName.contains("winui")) {
+        if (!lowerName.contains("mingw")) {
+            configuration.attributes.attribute(
+                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
+                    25
+            )
+        }
+        configuration.resolutionStrategy.dependencySubstitution {
+            substitute(module("org.jetbrains.skiko:skiko"))
+                    .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
+                    .because("compose-winui JVM uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
+        }
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.enabled = false
+    }
+}

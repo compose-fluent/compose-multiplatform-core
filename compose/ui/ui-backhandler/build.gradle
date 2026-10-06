@@ -35,13 +35,13 @@ androidXMultiplatform {
         namespace = "androidx.compose.ui.backhandler"
     }
     desktop()
-    if (composeWinUiMingwTargetEnabled) {
-        mingwX64()
-    }
     mac()
     ios()
     js()
     wasmJs()
+    if (composeWinUiMingwTargetEnabled) {
+        mingwX64()
+    }
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 
@@ -71,7 +71,7 @@ androidXMultiplatform {
         jbMain {
             dependsOn(commonMain)
             dependencies {
-                implementation(project(":navigationevent:navigationevent-compose"))
+                implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
             }
         }
 

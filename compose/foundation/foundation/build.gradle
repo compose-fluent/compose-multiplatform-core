@@ -23,77 +23,38 @@
 
 import androidx.build.SoftwareType
 import androidx.build.PlatformIdentifier
-import org.jetbrains.androidx.build.UpdateTranslationsTask
-import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.konan.target.Family
 
 plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
-    id("JetBrainsAndroidXPlugin")
-    id("io.github.compose-fluent.winrt") apply false
-    alias(libs.plugins.atomicFu)
-}
-
-def composeWinUiJvmTargetEnabled = providers
-        .gradleProperty("composeWinUi.enableJvmTarget")
-        .map { it.toBoolean() }
-        .orElse(false)
-        .get()
-def composeWinUiMingwTargetEnabled = providers
-        .gradleProperty("composeWinUi.enableMingwTarget")
-        .map { it.toBoolean() }
-        .orElse(false)
-        .get()
-def composeWinUiTargetEnabled = composeWinUiJvmTargetEnabled || composeWinUiMingwTargetEnabled
-def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
-def composeWinUiSkikoWinUiVersion = providers
-        .gradleProperty("composeWinUi.skikoWinUiVersion")
-        .orElse("0.0.0-SNAPSHOT")
-
-if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
-    apply plugin: "io.github.compose-fluent.winrt"
 }
 
 androidXMultiplatform {
     androidLibrary {
-        compileSdk = 37
+        compileSdk { version = release(37) { minorApiLevel = 1 } }
         namespace = "androidx.compose.foundation"
-        optimization {
-            it.consumerKeepRules.publish = true
-            it.consumerKeepRules.files.add(new File("proguard-rules.pro"))
-        }
         androidResources.enable = true
     }
-    if (!composeWinUiTargetEnabled) {
-        desktop()
-    }
-    mac()
-    ios()
-    js()
-    wasmJs()
+    jvmStubs()
+    linuxX64Stubs()
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 
-    configureDarwinFlags()
-
     sourceSets {
         commonMain.dependencies {
-            api("androidx.collection:collection:1.5.0")
+            api("androidx.collection:collection:1.6.0")
             api(project(":compose:animation:animation"))
             api(project(":compose:runtime:runtime"))
-            api(project(":compose:ui:ui"))
-            implementation(project(":compose:ui:ui-text"))
-            implementation(project(":compose:ui:ui-util"))
+            api("androidx.compose.ui:ui:1.10.0")
+            implementation("androidx.compose.ui:ui-text:1.10.0")
+            implementation("androidx.compose.ui:ui-util:1.10.0")
             implementation(project(":compose:foundation:foundation-layout"))
+            implementation("androidx.graphics:graphics-shapes:1.0.1")
         }
 
-        def navigationEventVersion = project.findProperty('artifactRedirection.version.androidx.navigationevent')
         commonTest.dependencies {
             implementation(libs.kotlinTest)
             implementation(libs.kotlinCoroutinesTest)
-            implementation("androidx.navigationevent:navigationevent-testing:$navigationEventVersion")
-            implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
         }
 
         androidMain.dependencies {
@@ -105,6 +66,7 @@ androidXMultiplatform {
 
         androidDeviceTest.dependencies {
             implementation(project(":compose:test-utils"))
+            implementation(project(":appcompat:appcompat"))
             implementation(project(":internal-testutils-fonts"))
             implementation(project(":test:screenshot:screenshot"))
             implementation(project(":internal-testutils-runtime"))
@@ -140,207 +102,6 @@ androidXMultiplatform {
             implementation(libs.byteBuddy)
             implementation(project(":constraintlayout:constraintlayout-compose"))
         }
-
-        // TODO: Align naming: nonAndroidMain
-        skikoMain {
-            dependsOn(commonMain)
-            dependencies {
-                // TODO(https://youtrack.jetbrains.com/issue/CMP-219) Remove API
-                api(libs.skiko)
-                implementation(libs.atomicFu)
-            }
-        }
-
-        skikoTest {
-            dependsOn(commonTest)
-            dependencies {
-                implementation(project(":compose:ui:ui-test"))
-            }
-        }
-
-        skikoNonJvmMain {
-            dependsOn(skikoMain)
-        }
-
-        skikoNativeMain {
-            dependsOn(skikoMain)
-        }
-
-        desktopMain {
-            dependsOn(skikoMain)
-            dependencies {
-                implementation(libs.jbrApi)
-            }
-        }
-
-        desktopTest {
-            dependsOn(skikoTest)
-            dependencies {
-                implementation(project(":compose:ui:ui-test-junit4"))
-                implementation(libs.truth)
-                implementation(libs.junit)
-                implementation(libs.skikoCurrentOs)
-                implementation(libs.kotlinCoroutinesSwing)
-                implementation(libs.mockitoCore4)
-                implementation(libs.mockitoKotlin4)
-                implementation(libs.mockitoCore)
-                implementation(libs.mockitoKotlin)
-            }
-        }
-
-        nonJvmMain {
-            if (!composeWinUiTargetEnabled) {
-                dependsOn(skikoNonJvmMain)
-            }
-        }
-
-        nonJvmTest {
-            dependsOn(skikoTest)
-        }
-
-        nativeMain {
-            dependsOn(nonJvmMain)
-            if (!composeWinUiTargetEnabled) {
-                dependsOn(skikoNativeMain)
-            }
-        }
-
-        nativeTest {
-            dependsOn(nonJvmTest)
-        }
-
-        darwinMain {
-            dependsOn(nativeMain)
-        }
-
-        darwinTest {
-            dependsOn(nativeTest)
-        }
-
-        macosMain {
-            dependsOn(darwinMain)
-        }
-
-        macosTest {
-            dependsOn(darwinTest)
-        }
-
-        iosMain {
-            dependsOn(darwinMain)
-            dependencies {
-                // TODO: We shouldn't use it directly here
-                implementation(project(":compose:ui:ui-uikit"))
-            }
-        }
-
-        iosTest {
-            dependsOn(darwinTest)
-        }
-
-        wasmJsMain {
-            dependencies {
-                implementation(libs.kotlinXw3c)
-            }
-        }
-
-        configureEach {
-            languageSettings.optIn("androidx.compose.foundation.ExperimentalFoundationApi")
-        }
-    }
-}
-
-
-
-
-kotlin {
-    if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
-        if (composeWinUiJvmTargetEnabled) {
-            jvm("winuiJvm")
-        }
-        if (composeWinUiMingwTargetEnabled) {
-            mingwX64("winuiMingw")
-        }
-
-        sourceSets {
-            winuiSkikoMain {
-                dependsOn(commonMain)
-                kotlin.srcDir("src/skikoMain/kotlin")
-                kotlin.exclude(
-                    "**/BasicContextMenuRepresentation.skiko.kt",
-                    "**/DefaultTextContextMenuDropdownProvider.skiko.kt",
-                )
-                dependencies {
-                    api(libs.skiko)
-                    implementation(libs.atomicFu)
-                }
-            }
-
-            nonJvmMain {
-                dependsOn(winuiSkikoMain)
-            }
-
-            winuiMain {
-                dependsOn(winuiSkikoMain)
-                dependencies {
-                    implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
-                }
-            }
-
-            if (composeWinUiJvmTargetEnabled) {
-                winuiJvmMain {
-                    dependsOn(winuiMain)
-                }
-            }
-
-            winuiTest {
-                // :compose:ui:ui-test does not publish a WinUI JVM variant yet, so inheriting
-                // skikoTest would make the WinUI test classpath resolve its desktop target. Keep
-                // WinUI-specific coverage here until that variant exists; the shared skikoTest
-                // suite remains covered by its existing desktop/native targets.
-                dependsOn(commonTest)
-            }
-
-            if (composeWinUiJvmTargetEnabled) {
-                winuiJvmTest {
-                    dependsOn(winuiTest)
-                }
-            }
-
-            if (composeWinUiMingwTargetEnabled) {
-                winuiMingwMain {
-                    dependsOn(winuiMain)
-                }
-                winuiMingwTest {
-                    dependsOn(winuiTest)
-                }
-            }
-        }
-    }
-}
-
-if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
-    configurations.configureEach { configuration ->
-        def lowerName = configuration.name.toLowerCase(Locale.ROOT)
-        if (lowerName.contains("winui")) {
-            configuration.attributes.attribute(
-                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
-                    25
-            )
-            configuration.resolutionStrategy.dependencySubstitution {
-                substitute(module("org.jetbrains.skiko:skiko"))
-                        .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
-                        .because("compose-winui uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
-            }
-        }
-    }
-}
-
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
-    if (task.name.contains("Winui")) {
-        task.compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
-            freeCompilerArgs.add("-Xjdk-release=25")
-        }
     }
 }
 
@@ -354,57 +115,7 @@ androidx {
     type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
     inceptionYear = "2018"
     description = "Higher level abstractions of the Compose UI primitives. This library is design system agnostic, providing the high-level building blocks for both application and design-system developers"
-    legacyDisableKotlinStrictApiMode = true
     samples(project(":compose:foundation:foundation:foundation-samples"))
     addGoldenImageAssets()
     deviceTests.minSdkForFtlOverride = 24 // b/437944630
-}
-
-// This task updates the translations of the localizable strings for the desktopMain target.
-// It obtains them from Android's base repository.
-tasks.register("updateTranslations", UpdateTranslationsTask.class) {
-    group = "localization"
-    gitRepo = "https://android.googlesource.com/platform/frameworks/base"
-    repoResDirectories = ["core/res/res"]
-    targetDirectory = project.file("src/skikoMain/kotlin/androidx/compose/foundation/text/l10n")
-    targetPackageName = "androidx.compose.foundation.text.l10n"
-    kotlinStringsPackageName = "androidx.compose.foundation.text"
-    kotlinStringsClassName = "ContextMenuStrings"
-    stringByResourceName = [
-            "copy": "Copy",
-            "paste": "Paste",
-            "cut": "Cut",
-            "selectAll": "SelectAll",
-            "autofill": "Autofill"
-    ]
-    // This is all the locales translated by Compose on Android in the ui module:
-    // https://github.com/androidx/androidx/tree/androidx-main/compose/ui/ui/src/androidMain/res
-    // with the exception of
-    // - b+sr+Latn which doesn't appear to be supported by Java
-    // - en_XC which has weird invisible LRM characters, and the visible text is the same as for
-    //   en anyway.
-    locales = [
-            "en", "af", "am", "ar", "as", "az", "be", "bg", "bn", "bs", "ca", "cs", "da", "de",
-            "el", "en_AU", "en_CA", "en_GB", "en_IN", "es", "es_US", "et", "eu", "fa",
-            "fi", "fr", "fr_CA", "gl", "gu", "hi", "hr", "hu", "hy", "in", "is", "it", "iw",
-            "ja", "ka", "kk", "km", "kn", "ko", "ky", "lo", "lt", "lv", "mk", "ml", "mn", "mr",
-            "ms", "my", "nb", "ne", "nl", "or", "pa", "pl", "pt", "pt_BR", "pt_PT", "ro", "ru",
-            "si", "sk", "sl", "sq", "sr", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur",
-            "uz", "vi", "zh_CN", "zh_HK", "zh_TW", "zu"
-    ]
-}
-
-configurations.configureEach { configuration ->
-    if (configuration.name.toLowerCase(Locale.ROOT).contains("winui")) {
-        configuration.attributes.attribute(
-                org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
-                25
-        )
-    }
-}
-
-tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
-    if (task.name.contains("Winui")) {
-        task.enabled = false
-    }
 }

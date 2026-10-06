@@ -20,5 +20,5 @@ import androidx.compose.ui.input.key.KeyEvent
 
 internal actual fun KeyEvent.cancelsTextSelection(): Boolean = false
 
-// WinUI does not expose a stable API for opening the system emoji panel.
-internal actual fun showCharacterPalette() {}
+// The character palette is a macOS concept; Windows opens its emoji panel itself (Win + .).
+internal actual fun showCharacterPalette() = Unit

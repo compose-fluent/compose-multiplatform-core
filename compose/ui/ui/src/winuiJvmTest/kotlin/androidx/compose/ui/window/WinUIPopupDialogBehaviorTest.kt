@@ -17,7 +17,6 @@
 package androidx.compose.ui.window
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -129,36 +128,6 @@ class WinUIPopupDialogBehaviorTest {
     }
 
     @Test
-    fun canvasPopupOutsidePressUsesComposePixelsAtXamlScales() {
-        listOf(1f, 1.5f, 2f).forEach { rasterizationScale ->
-            var calls = 0
-            val state = WinUIPopupDismissState(
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-                onDismissRequest = { calls++ },
-            )
-            val pointInXamlDips = Offset(40f, 30f)
-            val popupBoundsInComposePixels = IntRect(
-                left = 0,
-                top = 0,
-                right = (100 * rasterizationScale).toInt(),
-                bottom = (100 * rasterizationScale).toInt(),
-            )
-
-            assertFalse(
-                state.onOutsidePointer(
-                    winUICanvasPopupPointerPositionInRoot(
-                        pointInXamlDips,
-                        Density(rasterizationScale),
-                    ),
-                    popupBoundsInComposePixels,
-                )
-            )
-            assertEquals(0, calls)
-        }
-    }
-
-    @Test
     fun dialogOutsidePointerUsesCenteredContentBounds() {
         var calls = 0
         val state = WinUIPopupDismissState(
@@ -191,8 +160,12 @@ class WinUIPopupDialogBehaviorTest {
         val source = winUISource("Popup.winui.kt")
 
         assertTrue(
-            source.split("winUIPopupMaxWidth(").size - 1 >= 3,
-            "WinUI canvas and window popups must both apply the platform default width policy.",
+            source.split("winUIPopupMaxWidth(").size - 1 >= 2,
+            "The WinUI window popup must apply the platform default width policy.",
+        )
+        assertTrue(
+            source.contains("usePlatformDefaultWidth = popupProperties.usePlatformDefaultWidth"),
+            "The WinUI canvas popup must pass the platform default width policy to its layer.",
         )
     }
 
@@ -203,8 +176,12 @@ class WinUIPopupDialogBehaviorTest {
         assertTrue(source.contains("onPreviewKeyEvent: ((KeyEvent) -> Boolean)?"))
         assertTrue(source.contains("onKeyEvent: ((KeyEvent) -> Boolean)?"))
         assertTrue(
-            source.split("popupKeyEventHandlers(").size - 1 >= 3,
-            "WinUI canvas and window popup content must both install popup key callbacks.",
+            source.split("popupKeyEventHandlers(").size - 1 >= 2,
+            "WinUI window popup content must install popup key callbacks.",
+        )
+        assertTrue(
+            source.contains("layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)"),
+            "The layer of a WinUI canvas popup must receive the popup key callbacks.",
         )
     }
 

@@ -22,6 +22,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.AnnotatedString
 import io.github.composefluent.winrt.runtime.await
 import io.github.composefluent.winrt.runtime.IUnknownReference
+import io.github.composefluent.winrt.runtime.WinRTRuntimeException
+import kotlinx.coroutines.delay
 import windows.applicationmodel.datatransfer.DataPackage
 import windows.applicationmodel.datatransfer.DataPackageView
 import windows.applicationmodel.datatransfer.Clipboard as WinRTClipboardClass
@@ -60,10 +62,10 @@ internal class WinUIClipboardManager(
 
 internal class WinUIClipboard : Clipboard {
     override suspend fun getClipEntry(): ClipEntry? =
-        readClipEntry()
+        retryWhileClipboardIsHeld { readClipEntry() }
 
     override suspend fun setClipEntry(clipEntry: ClipEntry?) {
-        setClipEntryBlocking(clipEntry)
+        retryWhileClipboardIsHeld { setClipEntryBlocking(clipEntry) }
     }
 
     @Suppress("OVERRIDE_DEPRECATION")
@@ -71,7 +73,7 @@ internal class WinUIClipboard : Clipboard {
         get() = NativeClipboard(winUIClipboardStatics)
 
     internal fun hasText(): Boolean =
-        lastPlainText != null || runCatching { getWinUIContent().contains(winUITextFormat) }
+        currentPlainText() != null || runCatching { getWinUIContent().contains(winUITextFormat) }
             .getOrElse {
                 logClipboardReadFailure(it)
                 false
@@ -80,7 +82,7 @@ internal class WinUIClipboard : Clipboard {
     internal fun getTextBlocking(): String? {
         // The deprecated ClipboardManager API is synchronous. Preserve Android-like
         // setText/getText round-trips for in-process writes without blocking WinRT async work.
-        lastPlainText?.let { return it }
+        currentPlainText()?.let { return it }
         val content = runCatching { getWinUIContent() }
             .getOrElse {
                 logClipboardReadFailure(it)
@@ -93,14 +95,14 @@ internal class WinUIClipboard : Clipboard {
     }
 
     internal fun setText(text: String) {
-        lastPlainText = text
         // Windows clipboard ownership can be transiently locked by another process. Keep Compose
         // API state coherent and treat the native clipboard write as best effort.
         runCatching { setWinUIContent(DataPackage().apply { setText(text) }) }
+        rememberPlainText(text)
     }
 
     internal fun getClipEntryBlocking(): ClipEntry? {
-        lastPlainText?.let { return ClipEntry(it) }
+        currentPlainText()?.let { return ClipEntry(it) }
         val content = runCatching { getWinUIContent() }
             .getOrElse {
                 logClipboardReadFailure(it)
@@ -110,10 +112,13 @@ internal class WinUIClipboard : Clipboard {
         return ClipEntry(content)
     }
 
+    // Throws while the clipboard is held, so that the caller can retry; any other failure reads
+    // as an empty clipboard.
     private suspend fun readClipEntry(): ClipEntry? {
-        lastPlainText?.let { return ClipEntry(it) }
+        currentPlainText()?.let { return ClipEntry(it) }
         val content = runCatching { getWinUIContent() }
             .getOrElse {
+                if (it.isClipboardHeld()) throw it
                 logClipboardReadFailure(it)
                 return null
             }
@@ -122,6 +127,7 @@ internal class WinUIClipboard : Clipboard {
             return runCatching {
                 ClipEntry(content.getTextAsync().await())
             }.getOrElse {
+                if (it.isClipboardHeld()) throw it
                 logClipboardReadFailure(it)
                 null
             }
@@ -139,19 +145,21 @@ internal class WinUIClipboard : Clipboard {
             is DataPackage -> nativeClipEntry
             is DataPackageView -> DataPackage().also { dataPackage ->
                 if (nativeClipEntry.contains(winUITextFormat)) {
-                    lastPlainText?.let(dataPackage::setText)
+                    currentPlainText()?.let(dataPackage::setText)
                 }
             }
             is String -> DataPackage().apply {
-                lastPlainText = nativeClipEntry
                 setText(nativeClipEntry)
             }
             else -> return
         }
-        if (clipEntry.nativeClipEntry !is String) {
+        runCatching { setWinUIContent(dataPackage) }.onFailure { if (it.isClipboardHeld()) throw it }
+        val text = clipEntry.nativeClipEntry as? String
+        if (text != null) {
+            rememberPlainText(text)
+        } else {
             lastPlainText = null
         }
-        runCatching { setWinUIContent(dataPackage) }
     }
 
     private fun clearWinUIContent() {
@@ -177,7 +185,29 @@ actual class ClipEntry constructor(val nativeClipEntry: Any?) {
 actual class ClipMetadata internal constructor(private val platformMetadata: PlatformClipMetadata) :
     PlatformClipMetadata by platformMetadata
 
+// The plain text this process put on the clipboard, for the synchronous ClipboardManager API, and
+// the clipboard sequence number right after; another application copying changes the number.
 private var lastPlainText: String? = null
+private var lastPlainTextSequenceNumber = 0L
+
+private fun rememberPlainText(text: String) {
+    lastPlainText = text
+    lastPlainTextSequenceNumber = clipboardSequenceNumber()
+}
+
+private fun currentPlainText(): String? {
+    val text = lastPlainText ?: return null
+    if (clipboardSequenceNumber() != lastPlainTextSequenceNumber) {
+        lastPlainText = null
+        return null
+    }
+    return text
+}
+
+/**
+ * The clipboard sequence number of the window station, which changes with the clipboard content.
+ */
+internal expect fun clipboardSequenceNumber(): Long
 
 private val winUIClipboardStatics: IUnknownReference
     get() = WinRTClipboardClass.StaticInterfaces.iClipboardStatics()
@@ -188,6 +218,31 @@ private val winUITextFormat: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
 
 private fun getWinUIContent(): DataPackageView =
     WinRTClipboardClass.getContent()
+
+// CLIPBRD_E_CANT_OPEN: another process has the clipboard open. Windows holds it only for the
+// moment of a write or a read, and the clipboard history reads it right after every write, so a
+// copy or paste that follows another application's copy by a few milliseconds meets it. The
+// system clipboard of AWT fails the same way, and applications retry.
+internal const val WinUIClipboardCannotOpen = 0x800401D0.toInt()
+
+private fun Throwable.isClipboardHeld(): Boolean =
+    this is WinRTRuntimeException && hResult?.value == WinUIClipboardCannotOpen
+
+internal suspend fun <T> retryWhileClipboardIsHeld(operation: suspend () -> T): T {
+    var attempt = 0
+    while (true) {
+        try {
+            return operation()
+        } catch (failure: WinRTRuntimeException) {
+            if (!failure.isClipboardHeld() || attempt >= WinUIClipboardRetries) throw failure
+            attempt++
+            delay(ClipboardRetryDelayMillis)
+        }
+    }
+}
+
+internal const val WinUIClipboardRetries = 10
+private const val ClipboardRetryDelayMillis = 20L
 
 private fun logClipboardReadFailure(throwable: Throwable) {
     println(

@@ -16,16 +16,12 @@
 
 package androidx.compose.mpp.demo
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.titleBarLeftInset
 import androidx.compose.foundation.layout.titleBarRightInset
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.darkColors
-import androidx.compose.material.lightColors
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -41,10 +37,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Application
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.currentComposeViewForTest
+import androidx.compose.ui.window.rememberWindowState
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import windows.foundation.EventRegistrationToken
@@ -71,6 +69,7 @@ fun main(args: Array<String>) {
         val applicationScope = this
         Window(
             title = "Compose MPP demo",
+            state = rememberWindowState(width = 1024.dp, height = 850.dp),
             onCloseRequest = { exitApplication() },
             extendsContentIntoTitleBar = extendsContentIntoTitleBar,
         ) {
@@ -146,18 +145,16 @@ fun main(args: Array<String>) {
                 }
             }
 
-            MaterialTheme(
-                colors = if (isSystemInDarkTheme()) darkColors() else lightColors()
-            ) {
-                if (fontsLoaded.value) {
-                    SideEffect {
-                        validation.record("app-content-composed")
-                    }
-                    CompositionLocalProvider(
-                        LocalSampleTopAppBarValidationRecorder provides topAppBarValidationRecorder
-                    ) {
-                        app.Content(navController)
-                    }
+            // No theme around the content: the desktop demo has none either, and the two are
+            // compared screen by screen.
+            if (fontsLoaded.value) {
+                SideEffect {
+                    validation.record("app-content-composed")
+                }
+                CompositionLocalProvider(
+                    LocalSampleTopAppBarValidationRecorder provides topAppBarValidationRecorder
+                ) {
+                    app.Content(navController)
                 }
             }
 

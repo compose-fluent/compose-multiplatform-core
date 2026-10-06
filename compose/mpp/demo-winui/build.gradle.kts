@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import io.github.composefluent.winrt.gradle.BuildWinRTApplicationHostTask
-import io.github.composefluent.winrt.gradle.GenerateWinRTMingwApplicationEntryTask
-import io.github.composefluent.winrt.gradle.GenerateWinRTProjectionsTask
-import io.github.composefluent.winrt.gradle.RunWinRTApplicationHostTask
-import io.github.composefluent.winrt.gradle.registerWinRTApplicationHostRunTask
-import org.gradle.api.tasks.Sync
+import io.github.composefluent.windows.toolkit.gradle.GenerateWinAppMingwEntryTask
+import io.github.composefluent.windows.toolkit.gradle.GenerateWinRTProjectionsTask
+import io.github.composefluent.windows.toolkit.gradle.RunWinAppHostTask
+import io.github.composefluent.windows.toolkit.gradle.WindowsPackageType
+import io.github.composefluent.windows.toolkit.gradle.registerWinAppHostRunTask
+import java.util.Date
 import java.util.zip.ZipFile
 import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -28,7 +28,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     id("AndroidXComposePlugin")
     id("kotlin-multiplatform")
-    id("io.github.compose-fluent.winrt")
+    id("io.github.compose-fluent.windows-toolkit")
     alias(libs.plugins.kotlinSerialization)
 }
 
@@ -38,29 +38,35 @@ val composeWinUiWindowsSdkVersion = providers
 val composeWinUiWindowsAppSdkVersion = providers
     .gradleProperty("composeWinUi.windowsAppSdkVersion")
     .orElse(providers.gradleProperty("kotlinWinRt.samples.windowsAppSdkVersion"))
-    .orElse("2.1.3")
+    .orElse("2.2.0")
+// The component packages of the Windows App SDK that the demo references (see packageReferences
+// below); the Runtime package has the version of the metapackage.
+val composeWinUiWindowsAppSdkWinUiVersion = providers
+    .gradleProperty("composeWinUi.windowsAppSdkWinUiVersion")
+    .orElse("2.2.1")
+val composeWinUiWindowsAppSdkDWriteVersion = providers
+    .gradleProperty("composeWinUi.windowsAppSdkDWriteVersion")
+    .orElse("2.1.0")
 val kotlinWinRtVersion = providers
     .gradleProperty("kotlinWinRt.version")
     .orElse("0.1.0-SNAPSHOT")
 val composeWinUiSkikoWinUiVersion = providers
     .gradleProperty("composeWinUi.skikoWinUiVersion")
     .orElse("0.0.0-SNAPSHOT")
-val lifecycleVersion = providers
-    .gradleProperty("artifactRedirection.version.androidx.lifecycle")
-    .orElse("2.11.0-beta01")
-val navigationEventVersion = providers
-    .gradleProperty("artifactRedirection.version.androidx.navigationevent")
-    .orElse("1.1.0-alpha01")
-val composeVersion = providers
-    .gradleProperty("artifactRedirection.version.androidx.compose")
-    .orElse("1.12.0-alpha02")
-val materialIconsCoreSources = configurations.create("materialIconsCoreSources")
-materialIconsCoreSources.isTransitive = false
+// Adds the native application next to the JVM one. It needs the same flag on the libraries.
+val composeWinUiMingwTargetEnabled = providers
+    .gradleProperty("composeWinUi.enableMingwTarget")
+    .map { it.toBoolean() }
+    .orElse(false)
+    .get()
+// The Windows 10 version that the Windows App SDK supports as a minimum.
+val composeWinUiMinWindowsVersion = "10.0.19041.0"
 
 val localWinUiJarProjects = listOf(
     ":compose:ui:ui",
     ":compose:ui:ui-graphics",
     ":compose:ui:ui-text",
+    ":compose:ui:ui-skiko",
 )
 val localWinUiCompileProjects = listOf(
     ":compose:animation:animation-core",
@@ -79,11 +85,11 @@ val navigationWinUiCompileTasks = listOf(
     ":navigation:navigation-compose:compileKotlinWinuiJvm",
     ":navigation3:navigation3-ui:compileKotlinWinuiJvm",
 )
+val winUiMppRuntimeAssetsDir =
+    layout.buildDirectory.dir("kotlin-winrt/application-layout/winuiJvm_main/runtime-assets")
 val winUiMppSampleResourcesDir = layout.buildDirectory.dir("winui-mpp-sample-resources")
-val winUiMppVariableFontResource =
-    project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf")
 val winUiMppSampleResourceFiles = listOf(
-    winUiMppVariableFontResource,
+    project.file("../demo/src/commonMain/resources/RobotoFlex-VariableFont.ttf"),
     project.file("../demo/src/desktopMain/resources/NotoColorEmoji.ttf"),
 )
 val winUiMppPriRoot = project.file("src/winuiPri")
@@ -97,8 +103,6 @@ val winUiMppSampleSourceFiles = listOf(
     project.file("../demo/src/commonMain/kotlin"),
     project.file("../demo/src/winuiJvmMain/kotlin/androidx/compose/mpp/demo/Main.winui.kt"),
 )
-val winUiMppMingwMainSource =
-    project.file("../demo/src/winuiMingwMain/kotlin/androidx/compose/mpp/demo/Main.winuiMingw.kt")
 val winUiMppSampleForbiddenSourceTokens = listOf(
     "androidx.compose.ui.awt",
     "java.awt.",
@@ -137,10 +141,6 @@ val winUiMppSampleApiSurface = linkedMapOf(
         "LocalDensity.current",
         "maxWidth.toPx()",
         "maxHeight.toPx()",
-    ),
-    "theme" to listOf(
-        "colors = if (isSystemInDarkTheme())",
-        "darkColors() else lightColors()",
     ),
 )
 val winUiMppSampleGuardedApiSurface = linkedMapOf(
@@ -185,44 +185,104 @@ fun localWinUiJar(path: String) = rootProject.project(path).provider {
     rootProject.project(path).tasks.named("winuiJvmJar", Jar::class).get().archiveFile.get().asFile
 }
 
+// skiko-winui for MinGW links against its Skia bridge DLLs, and Skia loads its ICU data from the
+// directory of the executable. Both come in runtime jars of skiko-winui and are staged with the
+// native application, as in the samples of skiko-winui.
+val skikoWinuiMingwRuntimeFiles = configurations.create("skikoWinuiMingwRuntimeFiles") {
+    isTransitive = false
+    isCanBeConsumed = false
+}
+val skikoWinuiWindowsRuntimeFiles = configurations.create("skikoWinuiWindowsRuntimeFiles") {
+    isTransitive = false
+    isCanBeConsumed = false
+}
+dependencies {
+    if (composeWinUiMingwTargetEnabled) {
+        add(
+            skikoWinuiMingwRuntimeFiles.name,
+            "io.github.compose-fluent:skiko-winui-mingw-runtime:${composeWinUiSkikoWinUiVersion.get()}",
+        )
+        add(
+            skikoWinuiWindowsRuntimeFiles.name,
+            "io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}",
+        )
+    }
+}
+val skikoWinuiMingwRuntimeDir = layout.buildDirectory.dir("skiko-winui-mingw-runtime")
+val skikoWinuiWindowsRuntimeDir = layout.buildDirectory.dir("skiko-winui-windows-runtime")
+val unpackSkikoWinuiMingwRuntime = tasks.register<Sync>("unpackSkikoWinuiMingwRuntime") {
+    description = "Unpacks the native runtime of skiko-winui for the native application layout."
+    from(skikoWinuiMingwRuntimeFiles.elements.map { jars -> jars.map { zipTree(it) } })
+    into(skikoWinuiMingwRuntimeDir)
+}
+val unpackSkikoWinuiWindowsRuntime = tasks.register<Sync>("unpackSkikoWinuiWindowsRuntime") {
+    description = "Unpacks the ICU data of skiko-winui for the native application layout."
+    from(skikoWinuiWindowsRuntimeFiles.elements.map { jars -> jars.map { zipTree(it) } })
+    include("icudtl.dat")
+    into(skikoWinuiWindowsRuntimeDir)
+}
+// Skia and the ICU data. The runtime jar also has skiko_winui.dll, the bridge of the JVM target,
+// which the native application links statically and never loads.
+val skikoWinuiMingwRuntimeAssets = listOf("skiko_winui_skia.dll").map { name ->
+    skikoWinuiMingwRuntimeDir.map { it.file("winui-mingw/windows-x64/$name").asFile }
+} + skikoWinuiWindowsRuntimeDir.map { it.file("icudtl.dat").asFile }
+
+// The Material icons have no mingwX64 artifact. Their common sources are compiled into the
+// native application instead, as on winui_dev.
+val materialIconsCoreSources = configurations.create("materialIconsCoreSources") {
+    isTransitive = false
+    isCanBeConsumed = false
+}
+dependencies {
+    add(materialIconsCoreSources.name, "org.jetbrains.compose.material:material-icons-core:1.7.3:sources")
+}
+val extractWinUIMaterialIconsSources = tasks.register<Sync>("extractWinUIMaterialIconsSources") {
+    from(materialIconsCoreSources.map { files(it).map(::zipTree) })
+    include("commonMain/**/*.kt")
+    eachFile { path = path.removePrefix("commonMain/") }
+    includeEmptyDirs = false
+    into(layout.buildDirectory.dir("generated/winui-material-icons"))
+}
+
 val stageWinUIMppSampleResources = tasks.register<Copy>("stageWinUIMppSampleResources") {
     from(project.file("../demo/src/commonMain/resources"))
     from(project.file("../demo/src/desktopMain/resources"))
     into(winUiMppSampleResourcesDir)
 }
 
-dependencies {
-    add(materialIconsCoreSources.name, "org.jetbrains.compose.material:material-icons-core:1.7.3:sources")
-}
-
-val extractWinUIMaterialIconsSources = tasks.register<Sync>("extractWinUIMaterialIconsSources") {
-    from(materialIconsCoreSources.map { files(it).map(::zipTree) })
-    include("commonMain/**/*.kt")
-    eachFile { path = path.removePrefix("commonMain/") }
-    into(layout.buildDirectory.dir("generated/winui-material-icons"))
-}
-
 kotlin {
     jvmToolchain(25)
     jvm("winuiJvm")
-    mingwX64("winuiMingw") {
-        binaries.executable()
+    if (composeWinUiMingwTargetEnabled) {
+        mingwX64("winuiMingw") {
+            binaries.executable()
+        }
     }
 
     sourceSets {
-        val commonMain by getting {
+        commonMain {
             kotlin.srcDir("src/commonMain/kotlin")
             kotlin.srcDir("../demo/src/commonMain/kotlin")
-            kotlin.srcDir(extractWinUIMaterialIconsSources)
             kotlin.exclude("androidx/compose/mpp/demo/components/dialog/DialogExample.kt")
             kotlin.exclude("androidx/compose/mpp/demo/components/popup/ConfigurablePopup.kt")
             kotlin.exclude("androidx/compose/mpp/demo/components/text/FontRasterization.kt")
+            // SKIKO-012: Skottie is published separately from Skiko and has no WinUI artifact.
+            kotlin.exclude("androidx/compose/mpp/demo/LottieAnimation.kt")
+            if (composeWinUiMingwTargetEnabled) {
+                // The Material icons and Compose resources have no mingwX64 artifact, and common
+                // sources cannot use what only one target has. So in a build with the native
+                // target both applications compile the icons from their sources, as on
+                // winui_dev, and have a placeholder for the one screen that uses resources.
+                kotlin.srcDir(extractWinUIMaterialIconsSources)
+                kotlin.srcDir("src/commonWithoutResourcesMain/kotlin")
+                kotlin.exclude("androidx/compose/mpp/demo/resources/DemoRes.kt")
+                kotlin.exclude("androidx/compose/mpp/demo/bug/VectorPainterInPainter.kt")
+            }
             resources.srcDir("../demo/src/commonMain/resources")
             dependencies {
                 implementation(kotlin("stdlib"))
                 implementation(libs.kotlinCoroutinesCore)
                 implementation(libs.kotlinSerializationCore)
-                implementation(libs.skiko)
 
                 implementation(project(":compose:animation:animation"))
                 implementation(project(":compose:animation:animation-core"))
@@ -235,62 +295,161 @@ kotlin {
                 implementation(project(":compose:material3:adaptive:adaptive-layout"))
                 implementation(project(":compose:material3:adaptive:adaptive-navigation"))
                 implementation(project(":compose:runtime:runtime"))
-                implementation("androidx.compose.runtime:runtime-retain:${composeVersion.get()}")
                 implementation(project(":compose:ui:ui-backhandler"))
                 implementation(project(":compose:ui:ui-geometry"))
                 implementation(project(":compose:ui:ui"))
                 implementation(project(":compose:ui:ui-graphics"))
                 implementation(project(":compose:ui:ui-text"))
+                implementation(project(":compose:ui:ui-skiko"))
                 implementation(project(":compose:ui:ui-unit"))
                 implementation(project(":compose:ui:ui-util"))
-                implementation(project(":lifecycle:lifecycle-common"))
-                implementation(project(":lifecycle:lifecycle-runtime"))
-                implementation(project(":lifecycle:lifecycle-runtime-compose"))
-                implementation(project(":lifecycle:lifecycle-viewmodel-compose"))
-                implementation(project(":lifecycle:lifecycle-viewmodel-savedstate"))
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-common:2.11.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime:2.11.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.11.0")
                 implementation(project(":navigation:navigation-common"))
                 implementation(project(":navigation:navigation-compose"))
                 implementation(project(":navigation:navigation-runtime"))
-                implementation("androidx.savedstate:savedstate-compose:1.4.0")
-                implementation("androidx.navigationevent:navigationevent-compose:${navigationEventVersion.get()}")
+                if (!composeWinUiMingwTargetEnabled) {
+                    implementation("org.jetbrains.compose.material:material-icons-core:1.7.3") {
+                        exclude(group = "org.jetbrains.compose.runtime")
+                        exclude(group = "org.jetbrains.compose.ui")
+                    }
+                    implementation("org.jetbrains.compose.components:components-resources:1.11.1") {
+                        exclude(group = "org.jetbrains.compose.runtime")
+                        exclude(group = "org.jetbrains.compose.ui")
+                    }
+                    implementation("io.github.compose-fluent:winrt-runtime-jvm:${kotlinWinRtVersion.get()}")
+                }
                 implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
             }
         }
 
-        val winuiMain by getting {
-            kotlin.srcDir("../demo/src/winuiMain/kotlin")
+        // winuiMain of the demo is shared by its WinUI JVM and native applications. With one
+        // target its sources are compiled as part of that target's source set.
+        val sharedWinUiMain = if (composeWinUiMingwTargetEnabled) {
+            maybeCreate("winuiMain").apply {
+                dependsOn(getByName("commonMain"))
+                kotlin.srcDir("../demo/src/winuiMain/kotlin")
+            }
+        } else {
+            null
         }
 
-        val winuiJvmMain by getting {
-            dependsOn(winuiMain)
+        named("winuiJvmMain") {
+            if (sharedWinUiMain != null) {
+                dependsOn(sharedWinUiMain)
+            } else {
+                kotlin.srcDir("../demo/src/winuiMain/kotlin")
+            }
             kotlin.srcDir("../demo/src/winuiJvmMain/kotlin")
             resources.srcDir("../demo/src/desktopMain/resources")
             resources.srcDir(stageWinUIMppSampleResources.map { it.destinationDir })
             dependencies {
+                if (composeWinUiMingwTargetEnabled) {
+                    implementation("io.github.compose-fluent:winrt-runtime-jvm:${kotlinWinRtVersion.get()}")
+                }
                 runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
             }
         }
 
-        val winuiMingwMain by getting {
-            dependsOn(winuiMain)
-            kotlin.srcDir("../demo/src/winuiMingwMain/kotlin")
+        if (composeWinUiMingwTargetEnabled) {
+            named("winuiMingwMain") {
+                dependsOn(sharedWinUiMain!!)
+                kotlin.srcDir("../demo/src/winuiMingwMain/kotlin")
+                dependencies {
+                    implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
+                }
+            }
         }
     }
 }
 
-configurations.configureEach {
-    if (name.contains("winui", ignoreCase = true)) {
-        resolutionStrategy.dependencySubstitution {
-            substitute(module("org.jetbrains.skiko:skiko"))
-                .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
-                .because("The WinUI sample uses the Skiko WinUI variants on JVM and MinGW.")
-        }
+if (composeWinUiMingwTargetEnabled) {
+    tasks.matching { it.name.startsWith("stageWindowsPackageRuntimeAssets") }.configureEach {
+        dependsOn(unpackSkikoWinuiMingwRuntime, unpackSkikoWinuiWindowsRuntime)
+    }
+    // The application options name the JVM main class; the native entry calls the main function.
+    // The toolkit sets the property when it registers the task, so this is a configuration of
+    // the registered task and not of the task type, which would run first.
+    afterEvaluate {
+        tasks.withType<GenerateWinAppMingwEntryTask>().names
+            .filter { name -> name.contains("WinuiMingw") }
+            .forEach { name ->
+                tasks.named<GenerateWinAppMingwEntryTask>(name) {
+                    mainClass.set("androidx.compose.mpp.demo.main")
+                }
+            }
     }
 }
 
-winRT {
+// Same generated BuildInfo and resources as the original MPP demo, whose sources this module compiles.
+val demoBuildInfoDir = layout.buildDirectory.dir("generated/buildInfo/kotlin")
+
+val generateDemoBuildInfo = tasks.register("generateDemoBuildInfo") {
+    val outputDir = demoBuildInfoDir
+    val repoDir = projectDir
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        fun exec(command: List<String>): String = try {
+            val process = ProcessBuilder(command)
+                .directory(repoDir)
+                .start()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            output
+        } catch (e: Exception) {
+            ""
+        }
+
+        fun git(vararg args: String) = exec(listOf("git") + args)
+
+        fun esc(value: String) = value
+            .replace("\\", "\\\\")
+            .replace("$", "\\\$")
+            .replace("\"", "\\\"")
+            .replace("\r", "")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+
+        val branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        val hash = git("rev-parse", "--short", "HEAD")
+        val author = git("log", "-1", "--format=%an")
+        val message = git("log", "-1", "--format=%B")
+        val buildTime = "%1\$tF %1\$tT %1\$tZ (%1\$tz)".format(Date())
+
+        val outFile = outputDir.get()
+            .file("androidx/compose/mpp/demo/BuildInfo.kt").asFile
+        outFile.parentFile.mkdirs()
+        outFile.writeText(
+            """
+            |package androidx.compose.mpp.demo
+            |
+            |internal object BuildInfo {
+            |    const val branch: String = "${esc(branch)}"
+            |    const val commitHash: String = "${esc(hash)}"
+            |    const val author: String = "${esc(author)}"
+            |    const val buildTime: String = "${esc(buildTime)}"
+            |    const val commitMessage: String = "${esc(message)}"
+            |}
+            |""".trimMargin()
+        )
+    }
+}
+
+kotlin.sourceSets.getByName("commonMain").kotlin.srcDir(generateDemoBuildInfo)
+kotlin.sourceSets.getByName("commonMain").resources.srcDir("../demo/src/commonMain/composeResources")
+
+windows {
     application {
         mainClass.set("androidx.compose.mpp.demo.Main_winuiKt")
+        // A loose layout that carries its own Windows App SDK runtime, started through the
+        // generated host.
+        packageType.set(WindowsPackageType.None)
+        selfContained()
+        minWindowsVersion.set(composeWinUiMinWindowsVersion)
         projectPriIndexName.set("ComposeWinUi.MppDemo")
         projectPriInitialPath.set("Appx")
         enableDefaultProjectPriResources.set(false)
@@ -299,20 +458,53 @@ winRT {
         projectPriPage(winUiMppPriPage, "Views/MainPage.xaml")
         projectPriApplicationDefinition(winUiMppPriApplicationDefinition, "App.xaml")
         projectPriContent(winUiMppPriContent, "Assets/Sample.txt")
-        projectPriContent(winUiMppVariableFontResource, "RobotoFlex-VariableFont.ttf")
         projectPriEmbedFile(winUiMppPriEmbed, "Embedded/Payload.bin")
+        if (composeWinUiMingwTargetEnabled) {
+            skikoWinuiMingwRuntimeAssets.forEach { asset -> runtimeAsset(asset.get()) }
+            // The native application has no class path resources: it reads the fonts of the
+            // demo next to its executable.
+            winUiMppSampleResourceFiles.forEach { font -> runtimeAsset(font) }
+        }
     }
-    windowsSdk(composeWinUiWindowsSdkVersion.get(), includeExtensions = false)
-    nugetPackage("Microsoft.WindowsAppSDK", composeWinUiWindowsAppSdkVersion.get())
-    type("Windows.Foundation.Uri")
+    packageReferences {
+        windowsSdk(
+            composeWinUiWindowsSdkVersion.get(),
+            includeExtensions = false,
+            generateProjection = true,
+        )
+        // The metapackage Microsoft.WindowsAppSDK references every component of the SDK, and a
+        // self-contained application carries the runtime of each package that it or its
+        // libraries declare: 196 MB, of which ONNX Runtime, DirectML, the Windows AI libraries
+        // and Widgets are never loaded by this demo. The demo, compose-ui and skiko-winui
+        // reference the components they use instead. WebView2 comes with WinUI.
+        nugetPackage("Microsoft.WindowsAppSDK.WinUI", composeWinUiWindowsAppSdkWinUiVersion.get()) {
+            generateProjection = true
+        }
+        nugetPackage("Microsoft.WindowsAppSDK.Runtime", composeWinUiWindowsAppSdkVersion.get()) {
+            generateProjection = false
+        }
+        nugetPackage("Microsoft.WindowsAppSDK.DWrite", composeWinUiWindowsAppSdkDWriteVersion.get()) {
+            generateProjection = false
+        }
+        type("Windows.Foundation.Uri")
+    }
+}
+
+configurations.configureEach {
+    if (name.lowercase().contains("winui")) {
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.jetbrains.skiko:skiko"))
+                .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
+                .because("compose-winui JVM uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
+        }
+    }
 }
 
 tasks.named<GenerateWinRTProjectionsTask>("generateWinRTProjections") {
-    sourceRoots.setFrom(project.file("../demo/src/winuiJvmMain/kotlin"))
-}
-
-tasks.named<GenerateWinRTMingwApplicationEntryTask>("generateWinRTMingwApplicationEntry") {
-    mainClass.set("androidx.compose.mpp.demo.main")
+    sourceRoots.setFrom(
+        project.file("../demo/src/winuiMain/kotlin"),
+        project.file("../demo/src/winuiJvmMain/kotlin"),
+    )
 }
 
 tasks.named("compileKotlinWinuiJvm") {
@@ -326,17 +518,8 @@ tasks.named("processWinuiJvmMainResources") {
     dependsOn(stageWinUIMppSampleResources)
 }
 
-tasks.named<BuildWinRTApplicationHostTask>("buildWinRTApplicationHost") {
-    val winuiJvmJar = tasks.named("winuiJvmJar", Jar::class)
-    runtimeClasspath.from(configurations.named("winuiJvmRuntimeClasspath"))
-    runtimeClasspath.from(winuiJvmJar.flatMap { it.archiveFile })
-    dependsOn(winuiJvmJar)
-}
-
 tasks.withType<KotlinCompile>().configureEach {
     if (name.contains("Winui")) {
-        dependsOn("generateWinRTProjections")
-        dependsOn("mergeWinRTCompilerSupport")
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_25)
             freeCompilerArgs.add("-Xjdk-release=25")
@@ -344,7 +527,27 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
-fun RunWinRTApplicationHostTask.configureWinUIMppSampleApplicationHost(
+// Bounds the footprint of the sample host: a JVM sized by its defaults reserves several hundred
+// megabytes for a WinUI window (KWINRT-064). KOTLIN_WINRT_JVM_OPTIONS still overrides these.
+// The bounds leave room over what the traversal of the 105 screens of this demo uses: 21 MB of
+// live heap (36 MB before a collection), 63 MB of metaspace and 7 MB of code. The bounds of
+// winui_dev (32 MB heap, 44 MB metaspace, 8 MB code) end this demo with
+// "OutOfMemoryError: Metaspace".
+val winUiMppSampleJvmFootprintOptions = listOf(
+    "-Xms8m",
+    "-Xmx64m",
+    "-Xss128k",
+    "-XX:+UseSerialGC",
+    "-XX:TieredStopAtLevel=1",
+    "-XX:CICompilerCount=1",
+    "-XX:ReservedCodeCacheSize=32m",
+    "-XX:MaxMetaspaceSize=96m",
+    "-XX:CompressedClassSpaceSize=64m",
+    "-XX:-UsePerfData",
+    "-Dfile.encoding=UTF-8",
+)
+
+fun RunWinAppHostTask.configureWinUIMppSampleApplicationHost(
     taskDescription: String,
     reportName: String,
     requiredEvents: List<String>,
@@ -357,37 +560,23 @@ fun RunWinRTApplicationHostTask.configureWinUIMppSampleApplicationHost(
     description = taskDescription
     dependsOn("validateWinUIMppSamplePackaging")
     val reportFile = layout.buildDirectory.file("validation/$reportName-events.txt")
-    val logFile = layout.buildDirectory.file("validation/$reportName.log")
     outputs.file(reportFile)
-    outputLog.set(logFile)
-    jvmArgs.set(providers.provider {
-        // Keep this sample host on the low-footprint SerialGC profile. The
-        // staged host passes the full auto-traverse smoke with these bounds.
-        listOf(
-            // Keep the sample's initial private footprint bounded. The host
-            // can still be overridden through KOTLIN_WINRT_JVM_OPTIONS when
-            // running a larger application workload.
-            "-Xms8m",
-            "-Xmx32m",
-            "-Xss128k",
-            "-XX:+UseSerialGC",
-            "-XX:TieredStopAtLevel=1",
-            "-XX:CICompilerCount=1",
-            "-XX:ReservedCodeCacheSize=8m",
-            "-XX:MaxMetaspaceSize=44m",
-            "-XX:CompressedClassSpaceSize=128m",
-            "-XX:-UsePerfData",
-            "-Dfile.encoding=UTF-8",
-            "-Dcompose.winui.mpp.sample.autoExit=$autoExit",
-            "-Dcompose.winui.mpp.sample.autoTraverse=$autoTraverse",
-            "-Dcompose.winui.mpp.sample.extendsContentIntoTitleBar=$extendsContentIntoTitleBar",
-            "-Dcompose.winui.mpp.sample.validateTitleBarInsets=$validateTitleBarInsets",
-            "-Dcompose.winui.mpp.sample.validationReport=${reportFile.get().asFile.absolutePath}",
-        )
-    })
+    // The sample is observed through its report, so every run has to start the application.
+    outputs.upToDateWhen { false }
+    jvmArgs.addAll(
+        reportFile.map { report ->
+            winUiMppSampleJvmFootprintOptions + listOf(
+                "-Dcompose.winui.mpp.sample.autoExit=$autoExit",
+                "-Dcompose.winui.mpp.sample.autoTraverse=$autoTraverse",
+                "-Dcompose.winui.mpp.sample.extendsContentIntoTitleBar=$extendsContentIntoTitleBar",
+                "-Dcompose.winui.mpp.sample.validateTitleBarInsets=$validateTitleBarInsets",
+                "-Dcompose.winui.mpp.sample.validationReport=${report.asFile.absolutePath}",
+            )
+        }
+    )
     doFirst {
-        val report = reportFile.get().asFile
-        report.delete()
+        reportFile.get().asFile.delete()
+
         val runtimeArtifacts = configurations.named("winuiJvmRuntimeClasspath").get().files
         val runtimeArtifactNames = runtimeArtifacts.map { it.name }
         val localResourceRoots = listOf(winUiMppSampleResourcesDir.get().asFile)
@@ -426,6 +615,23 @@ fun RunWinRTApplicationHostTask.configureWinUIMppSampleApplicationHost(
             "WinUI MPP sample validation report ${report.absolutePath} is missing events: $missing. " +
                 "Observed events: ${events.sorted()}"
         }
+        if (validateTitleBarInsets) {
+            // The caption buttons take a number of pixels that depends on the display scale:
+            // the title bar insets have to be the ones the AppWindow reports
+            // ("titlebar-raw:<height>:<left>:<right>").
+            val rawTitleBar = events.firstOrNull { it.startsWith("titlebar-raw:") }
+                ?.removePrefix("titlebar-raw:")?.split(":")
+            val titleBarInsets = events.firstOrNull { it.startsWith("titlebar-insets-horizontal:") }
+                ?.removePrefix("titlebar-insets-horizontal:")?.split(":")
+            check(
+                rawTitleBar != null && titleBarInsets != null &&
+                    rawTitleBar.drop(1) == titleBarInsets &&
+                    (titleBarInsets.last().toIntOrNull() ?: 0) > 0
+            ) {
+                "WinUI MPP sample title bar insets $titleBarInsets do not match the title bar of " +
+                    "the window $rawTitleBar."
+            }
+        }
     }
 }
 
@@ -433,7 +639,7 @@ tasks.register("validateWinUIMppSamplePackaging") {
     group = "verification"
     description = "Validates WinUI MPP sample resources and Windows App SDK runtime packaging."
     dependsOn(stageWinUIMppSampleResources)
-    dependsOn("stageWinRTRuntimeAssets")
+    dependsOn("stageWindowsPackageRuntimeAssetsWinuiJvmMain")
     inputs.files(
         winUiMppSampleResourceFiles + listOf(
             winUiMppAppxManifest,
@@ -470,7 +676,7 @@ tasks.register("validateWinUIMppSamplePackaging") {
             )
         }
 
-        val runtimeAssets = layout.buildDirectory.dir("kotlin-winrt/runtime-assets").get().asFile
+        val runtimeAssets = winUiMppRuntimeAssetsDir.get().asFile
         requireFile(runtimeAssets.resolve("resources.pri"), "application resources.pri")
         requireFile(runtimeAssets.resolve("Microsoft.UI.pri"), "Microsoft.UI component PRI")
         requireFile(
@@ -524,7 +730,6 @@ tasks.register("validateWinUIMppSampleSourceIsolation") {
     group = "verification"
     description = "Validates the WinUI MPP sample does not use Desktop/AWT/Swing-only sources or runtimes."
     inputs.files(winUiMppSampleSourceFiles)
-    inputs.file(winUiMppMingwMainSource)
     outputs.file(layout.buildDirectory.file("validation/winui-mpp-sample-source-isolation.txt"))
 
     doLast {
@@ -532,17 +737,17 @@ tasks.register("validateWinUIMppSampleSourceIsolation") {
             check(sourceFile.isFile) {
                 "Missing WinUI MPP sample source file: ${sourceFile.absolutePath}"
             }
-            val source = sourceFile.readText()
+            val source = sourceFile.readLines()
+                .filterNot { line ->
+                    val trimmed = line.trimStart()
+                    trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+                }
+                .joinToString(separator = "\n")
             val forbiddenTokens = winUiMppSampleForbiddenSourceTokens.filter(source::contains)
             check(forbiddenTokens.isEmpty()) {
                 "WinUI MPP sample source ${sourceFile.absolutePath} uses Desktop/AWT/Swing-only APIs: " +
                     forbiddenTokens
             }
-        }
-
-        val mingwMainSource = winUiMppMingwMainSource.readText()
-        check("extendsContentIntoTitleBar = true" in mingwMainSource) {
-            "WinUI MinGW MPP sample must extend Compose content into the title bar."
         }
 
         val runtimeArtifacts = configurations.named("winuiJvmRuntimeClasspath").get().files
@@ -687,17 +892,12 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
                 .map { it.name }
                 .toSet()
         }
-        val compilerSupportManifestPrefix =
-            "io/github/composefluent/winrt/projections/support/WinRTCompilerSupportManifest_"
-        val uiCompilerSupportManifests = uiJarEntries.filter { entry ->
-            entry.startsWith(compilerSupportManifestPrefix) && entry.endsWith(".class")
-        }
-        check(uiCompilerSupportManifests.size == 1) {
-            "compose-ui WinUI jar must contain exactly one owner-scoped kotlin-winrt " +
-                "compiler support manifest, found: $uiCompilerSupportManifests"
+        check(uiJarEntries.any(::isWinRTCompilerSupportManifest)) {
+            "compose-ui WinUI jar is missing the kotlin-winrt compiler support manifest."
         }
         val requiredUiJarEntries = listOf(
-            "io/github/composefluent/winrt/projections/support/WinRTAuthoringTypeDetailsRegistrar_ui.class",
+            // One registrar per source set that declares authored classes.
+            "io/github/composefluent/winrt/projections/support/WinRTAuthoringTypeDetailsRegistrar_ui_winuiMain.class",
             "kotlin-winrt/type-index.tsv",
             "kotlin-winrt-authoring/ui.host.json",
             "kotlin-winrt-authoring/ui.winmd",
@@ -722,7 +922,19 @@ tasks.register("validateWinUiKotlinWinRtKmpGraphBaseline") {
             .dir("classes/kotlin/winuiJvm/main")
             .get()
             .asFile
-        val requiredDemoFiles = listOf(
+        val demoProjectionClassesDir = layout.buildDirectory
+            .dir("classes/kotlin-winrt/projection/compileKotlinWinuiJvm")
+            .get()
+            .asFile
+        val demoCompilerSupportManifests = demoProjectionClassesDir
+            .resolve("io/github/composefluent/winrt/projections/support")
+            .listFiles { file -> isWinRTCompilerSupportManifest(file.name) }
+            .orEmpty()
+        check(demoCompilerSupportManifests.isNotEmpty()) {
+            "Missing demo-winui kotlin-winrt compiler support manifest in " +
+                demoProjectionClassesDir.absolutePath
+        }
+        val requiredDemoFiles = demoCompilerSupportManifests.toList() + listOf(
             demoClassesDir.resolve("kotlin-winrt/type-index.tsv"),
             demoClassesDir.resolve("kotlin-winrt/authored-candidates.tsv"),
             demoClassesDir.resolve("kotlin-winrt-authoring/demo-winui.host.json"),
@@ -774,7 +986,7 @@ tasks.register("validateWinUIMppSampleCompileOnly") {
     dependsOn("validateWinUiKotlinWinRtKmpGraphBaseline")
 }
 
-val smokeWinUIMppSampleLaunchWindow = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleLaunchWindow") {
+val smokeWinUIMppSampleLaunchWindow = registerWinAppHostRunTask("smokeWinUIMppSampleLaunchWindow") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until the application window composes.",
         reportName = "winui-mpp-sample-launch-window",
@@ -786,7 +998,7 @@ val smokeWinUIMppSampleLaunchWindow = registerWinRTApplicationHostRunTask("smoke
     )
 }
 
-val smokeWinUIMppSampleRenderOutput = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleRenderOutput") {
+val smokeWinUIMppSampleRenderOutput = registerWinAppHostRunTask("smokeWinUIMppSampleRenderOutput") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until the image viewer reaches a laid-out frame.",
         reportName = "winui-mpp-sample-render-output",
@@ -801,7 +1013,7 @@ val smokeWinUIMppSampleRenderOutput = registerWinRTApplicationHostRunTask("smoke
     )
 }
 
-val smokeWinUIMppSampleInputFocus = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleInputFocus") {
+val smokeWinUIMppSampleInputFocus = registerWinAppHostRunTask("smokeWinUIMppSampleInputFocus") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until pointer/input handlers compose on a live window.",
         reportName = "winui-mpp-sample-input-focus",
@@ -812,7 +1024,7 @@ val smokeWinUIMppSampleInputFocus = registerWinRTApplicationHostRunTask("smokeWi
     )
 }
 
-val smokeWinUIMppSampleResourceLoading = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleResourceLoading") {
+val smokeWinUIMppSampleResourceLoading = registerWinAppHostRunTask("smokeWinUIMppSampleResourceLoading") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until bundled resources load through the runtime classpath.",
         reportName = "winui-mpp-sample-resource-loading",
@@ -820,7 +1032,7 @@ val smokeWinUIMppSampleResourceLoading = registerWinRTApplicationHostRunTask("sm
     )
 }
 
-val smokeWinUIMppSampleShutdownDisposal = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleShutdownDisposal") {
+val smokeWinUIMppSampleShutdownDisposal = registerWinAppHostRunTask("smokeWinUIMppSampleShutdownDisposal") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until auto-exit disposes the window content.",
         reportName = "winui-mpp-sample-shutdown-disposal",
@@ -831,7 +1043,7 @@ val smokeWinUIMppSampleShutdownDisposal = registerWinRTApplicationHostRunTask("s
     )
 }
 
-val smokeWinUIMppSampleAutoTraverse = registerWinRTApplicationHostRunTask("smokeWinUIMppSampleAutoTraverse") {
+val smokeWinUIMppSampleAutoTraverse = registerWinAppHostRunTask("smokeWinUIMppSampleAutoTraverse") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Automatically traverses WinUI MPP sample demo screens and exercises pointer input.",
         reportName = "winui-mpp-sample-auto-traverse",
@@ -847,7 +1059,7 @@ val smokeWinUIMppSampleAutoTraverse = registerWinRTApplicationHostRunTask("smoke
     )
 }
 
-registerWinRTApplicationHostRunTask("runWinUIMppSample") {
+registerWinAppHostRunTask("runWinUIMppSample") {
     dependsOn("validateWinUIMppSampleCompileOnly")
     dependsOn("validateWinUIMppSampleSourceIsolation")
     dependsOn("validateWinUIMppSampleApiSurface")
@@ -878,7 +1090,6 @@ registerWinRTApplicationHostRunTask("runWinUIMppSample") {
             "systembars-inset-includes-caption",
             "safedrawing-inset-includes-caption",
             "window-insets-horizontal:0:0",
-            "titlebar-insets-horizontal:0:276",
             "topappbar-extends-below-titlebar",
             "frame-observed",
             "exit-requested",
@@ -890,7 +1101,7 @@ registerWinRTApplicationHostRunTask("runWinUIMppSample") {
     )
 }
 
-registerWinRTApplicationHostRunTask("runWinUIMppSampleInteractive") {
+registerWinAppHostRunTask("runWinUIMppSampleInteractive") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the original MPP demo through the compose-winui JVM target without auto-exit.",
         reportName = "winui-mpp-sample-interactive",
@@ -900,6 +1111,12 @@ registerWinRTApplicationHostRunTask("runWinUIMppSampleInteractive") {
         validateTitleBarInsets = true,
     )
     group = "application"
+}
+
+fun isWinRTCompilerSupportManifest(path: String): Boolean {
+    val name = path.substringAfterLast('/')
+    return name.startsWith("WinRTCompilerSupportManifest_") && name.endsWith(".class") &&
+        (path == name || path.startsWith("io/github/composefluent/winrt/projections/support/"))
 }
 
 fun linkedMapMapOfProjectionOwners(files: Set<File>): Map<String, Set<String>> {

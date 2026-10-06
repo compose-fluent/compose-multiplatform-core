@@ -20,10 +20,6 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import windows.applicationmodel.datatransfer.DataPackageOperation
-
-internal fun winUIDragAcceptedOperation(accepted: Boolean): DataPackageOperation =
-    if (accepted) DataPackageOperation.Copy else DataPackageOperation.None
 
 internal fun runWinUIDragAndDropCleanup(vararg cleanupActions: () -> Unit) {
     var failure: Throwable? = null

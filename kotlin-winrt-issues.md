@@ -9,6 +9,30 @@ baseline, not every retest attempt.
 
 ## Current upstream triage
 
+- **kotlin-winrt build in use:** `xaml-support` `7bd31fd48`:
+  `origin/xaml-support` `d5aaeed6b`, which has kotlin-winrt PRs #15 to #18
+  (`KWINRT-066`, `KWINRT-067`, `KWINRT-070`, `KWINRT-071`, `KWINRT-073`,
+  `KWINRT-075` to `KWINRT-080`), plus the fix of PR #19 (`KWINRT-081`, merged
+  with `xaml-support` into `master`). The plugin in Maven Local is published
+  from `origin/master` `f1046bb50` plus the `KWINRT-082` fix (`0eeb83ce2`,
+  PR #21); PR #20 (an application's component
+  packages replacing a library's metapackage) is not needed since skiko-winui
+  and `compose:ui:ui` declare components themselves. skiko-winui was rebuilt
+  against it on 2026-10-06. Published to Maven
+  Local from the local checkout
+  (since 2026-10-04; before that the `0.1.0-SNAPSHOT` published from
+  `master`). The `external/kotlin-winrt` submodule of `winui_dev` pins a commit
+  that is not in `compose-fluent/kotlin-winrt`, so the merge of `winui_dev`
+  into the `jb-main` sync (2026-10-05) did not take it.
+- **Issue numbers:** `winui_dev` and the `jb-main` sync both numbered their new
+  issues from `KWINRT-052`. The merge kept the numbers of `winui_dev`
+  (`KWINRT-052` to `KWINRT-064`); the twelve issues of the `jb-main` sync are
+  `KWINRT-065` to `KWINRT-076` now (old number plus 13). The commits of the
+  sync before the merge and kotlin-winrt PRs #15, #16 and #17 name them by
+  their old numbers `KWINRT-052` to `KWINRT-063`.
+- **Open upstream/plugin/runtime:** `KWINRT-065`, `KWINRT-072`, and
+  `KWINRT-074`; the runtime half of `KWINRT-064` (see its merge note).
+- **Open compose-side workarounds:** `KWINRT-065` and `KWINRT-074`.
 - **Closed local runtime/Compose lifetime fix:** `KWINRT-064`. The pointer
   event path now closes its transient WinRT projections and retained drag
   points, and the local kotlin-winrt submodule commit `f5f90d75` makes
@@ -49,10 +73,474 @@ baseline, not every retest attempt.
   `KWINRT-048`, `KWINRT-050`, `KWINRT-040`, `KWINRT-049`, `KWINRT-051`,
   `KWINRT-052`, `KWINRT-053`, `KWINRT-054`, `KWINRT-055`, `KWINRT-056`,
   `KWINRT-057`, `KWINRT-058`, `KWINRT-059`, `KWINRT-060`, `KWINRT-062`,
-  `KWINRT-063`, and `KWINRT-064`.
+  `KWINRT-063`, `KWINRT-064`, `KWINRT-066`, `KWINRT-067`, `KWINRT-068`,
+  `KWINRT-069`, `KWINRT-070`, `KWINRT-071`, `KWINRT-073`, `KWINRT-075`,
+  `KWINRT-076`, `KWINRT-077`, `KWINRT-078`, `KWINRT-079`, `KWINRT-080`, and
+  `KWINRT-082`.
+
+## KWINRT-082: Metadata tasks read the projection outputs without a task dependency
+
+- **Status:** Closed. Fixed on kotlin-winrt `kwinrt-082-metadata-task-order`
+  by `0eeb83ce2` (https://github.com/compose-fluent/kotlin-winrt/pull/21,
+  open). mingwX64 only; no fork-side workaround kept.
+- **Observed in:** publishing the root (`KotlinMultiplatform`) publication of
+  a library with a `winuiMingw` target
+  (`publishKotlinMultiplatformPublicationToMavenLocal`, 2026-10-06). The
+  per-target publications never run the metadata tasks, so the regular
+  builds do not see it. Gradle 9 fails the build with "uses this output of
+  task ... without declaring an explicit or implicit dependency" for:
+  - `compile<SourceSet>KotlinMetadata` of the shared source sets, which read
+    the generated `kotlin-winrt-authoring` sources that
+    `generateWinRTProjections` writes into the source set (only
+    `compileWinuiMainKotlinMetadata` depended on it);
+  - `transform<SourceSet>DependenciesMetadata` and
+    `transform<SourceSet>CInteropDependenciesMetadata` of the projects that
+    depend on the library, which read the projection klib that
+    `compileWinRTProjectionKotlin<Target>` publishes on the Native variant
+    (`material3-window-size-class` and `adaptive` read the one of
+    `ui-text`; neither applies the plugin). The plugin ordered only the
+    transforms of the library's own project after the projection.
+- **Cause:** the plugin keeps ordering edges, not producer edges, for the
+  projection klib (a producer edge on the source-set file dependency makes
+  IDE import compile the projection), and had the edges for the platform
+  compilations and the local transforms only.
+- **Fix:** every `compile*KotlinMetadata` task of a plugin project depends on
+  `generateWinRTProjections`, and the projection compilation orders the
+  metadata transforms of every project in the build after itself.
+- **Validation:** 2026-10-06: `WindowsToolkitPluginTest.metadata_tasks_follow_the_projection_outputs_of_this_and_the_dependency_projects`
+  (new); the fork's mingw chain (`runtime` to `material3`, root and
+  `winuiMingw` / `mingwX64` publications) publishes to Maven Local from a
+  build with `-Pandroidx.enabled.kmp.target.platforms=-js,-wasm,-linux,-mac`
+  and without `kotlin.mpp.enableCInteropCommonization=false`.
+
+## KWINRT-081: A native application does not end when a finalizer releases into the UI thread
+
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `7bd31fd48`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/19, open). mingwX64
+  only; the JVM target never had it.
+- **Observed in:** the native MPP demo (`:compose:mpp:demo-winui`,
+  `winuiMingw`, debug and release). Copy text in the Selection screen with
+  Ctrl+C and close the window within a few seconds: the window goes away and
+  the process stays, for as long as it was watched (90 s). The JVM application
+  ends at once. Waiting seven seconds between the copy and the close also ends
+  the native one.
+- **Cause:** the stacks of the process that is left (lldb):
+  - The main thread, which is the UI thread and an STA, is in
+    `WinAppHostScope.close` -> `cleanupApplicationHostRuntime` ->
+    `PlatformFinalization.drain` -> `GC.collect()`. On Kotlin/Native
+    `GC.collect()` returns when the cleaners have run, and the thread waits for
+    that without dispatching COM calls or messages.
+  - The cleaner thread is in `closeComPtrSupportFromFinalizer` ->
+    `RawComObjectReferenceSupport.close` -> `Release` of an object of
+    `windows.applicationmodel.datatransfer.dll` (a `DataPackage` or
+    `DataPackageView` projection that Compose dropped after the copy). The
+    object has no context of its own, so it is released on the cleaner thread,
+    and its last release makes a COM call that the UI thread has to serve.
+  Each waits for the other. The same wait is in
+  `PlatformFinalization.collectForReferenceTracking`, which the UI thread runs
+  during reference tracking, so it is not limited to the end of the
+  application.
+- **Fix:** the cleaners hand their releases to the thread that drains
+  (`WaitedFinalizerReleases`), which runs them when `GC.collect()` has
+  returned. `ReferenceTrackerManager` already did that for the collection of a
+  reference tracking pass; the drain at the end of the application did not.
+  CsWinRT releases on the finalizer thread and relies on the CLR, which serves
+  COM calls while a single-threaded apartment waits in
+  `GC.WaitForPendingFinalizers`; Kotlin/Native has no such wait.
+- **Resolution:** the workaround of 2026-10-06 (`releasedAfter` in
+  `PlatformClipboard.winui.kt`, which released the clipboard projections on the
+  UI thread) is removed.
+- **Validation:** 2026-10-06: with the published fix and without the workaround, the native demo ended in 8 of 8 runs of copy, one second, close (9 of 10 stayed before). `NativeFinalizerDrainTest` on mingwX64 fails without the change. The fifteen real-input checks and the 105 captures of the native demo are as before, apart from one run of the dropdown check whose menu was closed in the capture and which three repeats did not reproduce.
+
+## KWINRT-080: An authored control read back from a property cannot be cast to its base class
+
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `0ecc57ae3`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/18, open).
+- **Observed in:** the environment smoke of
+  `:compose:ui:ui:winui-samples:runWinUIViewSample` and `runWinUIWindowSample`,
+  which reads the root of the Compose view back from `Window.Content`; the root
+  is `WinUIRootContentControl`, a `ContentControl` authored in Kotlin.
+- **Symptom:** `window.content` was a `microsoft.ui.xaml.UIElement` wrapper,
+  not the authored object, and `asWinRT<ContentControl>()` on it threw
+  `Unable to create a WinRT wrapper for
+  'Microsoft.UI.Xaml.Controls.ContentControl'`.
+- **Cause:** the generated `wrap` asks `ComWrappersSupport.findObject` for the
+  Kotlin object of the returned pointer, and `findObject` looked that address
+  up only. An object that Kotlin composes over a WinRT class is registered
+  under the pointers of its creation; `Window.Content` returns another
+  interface of the inner object. The lookup missed, a plain `UIElement` was
+  built, and it replaced the authored object in the identity cache.
+- **Fix:** a miss on the pointer is followed by the lookup of its COM identity
+  (`IUnknown`), which is the CCW of the Kotlin object, as CsWinRT does in
+  `MarshalInspectable<T>.FromAbi`.
+- **Resolution:** the sample reads `window.content.asWinRTContentControl()`
+  again, as on `winui_dev`.
+- **Validation:** 2026-10-05: in the sample, `window.content` is the authored
+  instance with `0ecc57ae3` and a `UIElement` with `c4bf4e53a`;
+  `ComWrappersSupportTest.find_object_follows_another_interface_pointer_to_the_registered_identity`
+  on the JVM and on mingwX64.
+
+## KWINRT-079: The shutdown hook waits for the apartment of the thread that exits
+
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `dd05a5c8a`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/18, open).
+- **Observed in:** `:compose:ui:ui:winuiJvmTest`, whose tests create a
+  `DispatcherQueueController` on the test thread (`WinUITestRuntime`). All
+  tests passed and the Gradle test worker never exited.
+- **Cause:** at JVM shutdown `EventSourceShutdownRegistry` removes the event
+  registrations that are still alive, on the thread of its shutdown hook. The
+  publisher here is the `DispatcherQueueTimer` of `WinUIScheduler`, which
+  belongs to the apartment of the thread that created it. Resolving its weak
+  reference is a call into that apartment, and its thread was the one in
+  `System.exit`, waiting for the hooks.
+- **Fix:** the cleanup leaves a registration alone when its publisher cannot be
+  called on the hook's thread; it removes the free-threaded ones and those of
+  its own apartment as before.
+- **Resolution:** `WinUITestRuntime.exitWhenShutdownHangs()`, which halted the
+  test worker three seconds after its shutdown started, is gone.
+- **Validation:** 2026-10-05: `:compose:ui:ui:winuiJvmTest` exits by itself
+  with `dd05a5c8a`; `EventSourceShutdownApartmentJvmTest` in kotlin-winrt.
+- **Not examined:** `demo-winui.exe` stayed alive after
+  `java.lang.OutOfMemoryError: Metaspace` with the JVM bounds of `winui_dev`.
+  No thread dump was taken, so it is not known whether that was this problem.
+
+## KWINRT-078: Applying the plugin breaks a module whose tests depend back on it
+
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `e9a49f736`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/18, open).
+- **Observed in:** `:compose:ui:ui-text`, which `winui_dev` gives the
+  projection plugin for its WinRT `Locale` (`Windows.Globalization`). On the
+  `jb-main` module graph the tests of `ui-text` depend on
+  `:compose:ui:ui-skiko`, which depends on `ui-text`.
+- **Symptom:** `:compose:ui:ui-text:compileTestKotlinWinuiJvm` failed while
+  Gradle computed the task graph: `Could not resolve project
+  :compose:ui:ui-text`, because its `iosArm64CInteropApiElements`,
+  `iosSimulatorArm64CInteropApiElements` and `macosArm64CInteropApiElements`
+  configurations "contain identical attribute sets".
+- **Cause:** the plugin resolved the dependency identities of the module, and
+  the classpath of its generator, in `afterEvaluate`. The graph of that
+  resolution came back to `ui-text` (the stack of the failure shows an edge to
+  the project; which dependency it was is not established), so Gradle selected
+  among the variants of `ui-text` there and kept the outcome. The Kotlin plugin
+  completes its configurations in later `afterEvaluate` stages; at that point
+  the C interop elements of the Native targets had no attributes yet. Test
+  classpaths were not resolved; the test dependency only made `ui-text` a
+  dependency of something in the same build, which then met the kept failure.
+- **Fix:** the plugin resolves nothing of a project while it is being
+  configured. The decision whether the dependencies leave a projection to
+  generate answers from the declarations until then, and the preparation of
+  the imported projection runs when the projects are evaluated.
+- **Resolution:** `ui-text` applies the plugin, and the WinRT `Locale` of
+  `winui_dev` is in `winuiMain` for both WinUI targets again. Which path
+  generates the projection of a module no longer changes between invocations.
+- **Validation:** 2026-10-05: `:compose:ui:ui-text:compileTestKotlinWinuiJvm`
+  fails with `c4bf4e53a` and resolves with `e9a49f736`;
+  `ConfigurationTimeResolutionTest.a_library_is_resolved_and_prepared_only_once_it_is_configured`
+  in kotlin-winrt.
+
+## KWINRT-077: Windows SDK interop helpers are not generated by the generation task
+
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `870bfb72d`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/18, open).
+- **Observed in:** `:compose:ui:ui`, which `winui_dev` moved to the generated
+  `winrt.interop.WindowNative` (the HWND of a window) and
+  `windows.ui.viewmanagement.InputPaneInterop` (`KWINRT-063`).
+- **Symptom:** `Unresolved reference 'InputPaneInterop'` and `'winrt'`. The
+  projection of `Windows.UI.ViewManagement.InputPane` was generated, the two
+  helpers were not.
+- **Cause:** `GenerateWinRTProjectionsTask` built the projection context from
+  the resolved metadata files only, and the SDK source additions are selected
+  from the declared Windows SDK source. The prepared path
+  (`PreparedProjectionGeneratorMain`) keeps that source, but a module only
+  takes it without a NuGet projection, without project-produced dependency
+  identities and without authored WinRT classes; `ui` has all three.
+- **Fix:** the task adds the declared SDK source to its context.
+- **Resolution:** `winuiWindowHwnd` and `acquireWinUIInputPane` call
+  `WindowNative.getWindowHandle(window)` and
+  `InputPaneInterop.getForWindow(windowHandle)` again, as on `winui_dev`; the
+  COM calls that `ui` made itself are gone.
+- **Validation:** 2026-10-05: `:compose:ui:ui:compileKotlinWinuiJvm` with the
+  generated helpers;
+  `WindowsToolkitPluginTest.in_task_generation_selects_windows_sdk_source_additions_that_no_dependency_owns`
+  in kotlin-winrt fails with `c4bf4e53a` and passes with `870bfb72d`.
+
+## KWINRT-065: Compiler plugin only runs on the Kotlin compiler it was built with
+
+- **Number before the merge of `winui_dev`:** `KWINRT-052`.
+- **Status:** Open.
+- **Observed in:** `:compose:ui:ui:compileKotlinWinRTProjectionWinuiJvm` after
+  the 2026-10-04 upstream sync moved the fork to Kotlin 2.4.20, with the
+  published `0.1.0-SNAPSHOT` (kotlin-winrt `master` 2976464e6, built with
+  Kotlin 2.4.0). `xaml-support` `fa4508d7c` builds with Kotlin 2.4.0 as well.
+- **Symptom:** `NoSuchMethodError: IrFileImpl.<init>(IrFileEntry, IrFileSymbol,
+  FqName)` from `WinRTAbiSupportFiles.file` in the call-site lowering.
+- **Expected behavior:** a kotlin-winrt build for the Kotlin version of the
+  consumer, as for any compiler plugin.
+- **compose-winui workaround:** `buildSrc-fork/settingsScripts/winui-setup.groovy`
+  pins `kotlin`, `kotlin24` and `composeCompilerPlugin` to 2.4.0 in the version
+  catalog of the main build and of buildSrc when
+  `-PcomposeWinUi.enableJvmTarget=true` is set. Builds without the WinUI target
+  keep upstream's Kotlin version.
+- **Remove when:** kotlin-winrt publishes a build for Kotlin 2.4.20.
+
+## KWINRT-066: Toolkit plugin resolves its identity configuration during configuration
+
+- **Number before the merge of `winui_dev`:** `KWINRT-053`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `1b7b9ec57`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/16, open).
+- **Observed in:** `:compose:ui:ui`, which also has the Android KMP target.
+  `gradle.properties` sets
+  `android.dependencyResolutionAtConfigurationTime.disallow=true`.
+- **Symptom:** `Configuration 'kotlinWinRTLibraryDependencyIdentity' was
+  resolved during configuration time` from the plugin's `afterEvaluate` hook.
+  AGP allows resolution after its own `afterEvaluate` hook with configuration
+  on demand, and only after all projects are evaluated without it.
+- **Fix:** the configuration-time preparation of projection sources steps
+  aside when the identity configuration cannot be resolved; the generation
+  task resolves it when it runs.
+- **Resolution:** WinUI builds no longer depend on configuration on demand.
+  `compose/ui/ui/build-fork.gradle` still applies the plugin after the
+  `androidXMultiplatform` block, for the reason left in `KWINRT-067`.
+- **Validation:** 2026-10-04: `:compose:ui:ui:help --no-configure-on-demand`
+  fails with `4c1a850f4` and passes with `1b7b9ec57`.
+
+## KWINRT-067: Toolkit plugin treats every Kotlin/JVM compilation as a WinRT consumer
+
+- **Number before the merge of `winui_dev`:** `KWINRT-054`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `22f497678`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/16, open). One compose-side adaptation stays, see below.
+- **Observed in:** `:compose:ui:ui`, which has an Android compilation next to
+  `winuiJvm`.
+- **Symptom:** the plugin registers `compileKotlinWinRTProjectioncompileAndroidMain`,
+  which cannot compile the JVM projections (2824 errors) and is a dependency of
+  the WinUI jar. It also applies `KotlinBaseApiPlugin` for these standalone
+  compile tasks, which the AndroidX build logic took for AGP built-in Kotlin
+  and configured the project a second time (duplicate Compose compiler plugin
+  options, duplicate `lintAnalyzeDebug`, a `KotlinAndroidProjectExtension`
+  cast).
+- **Fix:** compile tasks of targets that are not `KotlinJvmTarget` get no
+  projection or XAML compilation (`22f497678`) and no WinRT compiler plugin
+  options (`dbc8d050e`). The Android library target reports the `jvm` platform
+  type, so the target class decides.
+- **Resolution:** `compose/ui/ui/build-fork.gradle` no longer disables the
+  projection compilations that do not belong to `winuiJvm`; the Android one is
+  not registered any more.
+- **Stays in compose-winui:** the toolkit applies `KotlinBaseApiPlugin` for its
+  standalone compile tasks, which is regular use of the Kotlin Gradle plugin
+  API. `AndroidXImplPlugin` and `AndroidXComposeImplPlugin` in `buildSrc-fork`
+  take that plugin for AGP built-in Kotlin unless a Kotlin plugin wrapper is
+  already applied, so the toolkit has to be applied after the
+  `androidXMultiplatform` block (otherwise: `Cannot add task
+  'lintAnalyzeDebug'`). The Compose compiler plugin also stays off the
+  `*WinRTProjection*` compile tasks.
+- **Validation:** 2026-10-04 with `3d7855783`: `:compose:ui:ui:winuiJvmJar`
+  builds, and `compileKotlinWinRTProjectioncompileAndroidMain` does not exist.
+  `:compose:ui:ui:compileAndroidMain` passes with the WinUI target enabled; up
+  to `1b7b9ec57` it failed with `kotlin-winrt compiler plugin requires external
+  projection registrar support input`. It still runs the WinRT generation
+  tasks of the module first.
+
+## KWINRT-068: Authoring scanner misreads CRLF sources
+
+- **Number before the merge of `winui_dev`:** `KWINRT-055`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support`, where the scanner
+  normalizes line endings before parsing; still open in the snapshot published
+  from `master`.
+- **Observed in:** a checkout with `core.autocrlf=true`.
+- **Symptom:** `kotlin-winrt authored candidate row 1 in
+  .../authored-candidates.tsv is malformed`: every authored class is recorded
+  without its package when a comment precedes the `package` directive.
+- **Resolution:** the `prepareWinUiAuthoringSources` LF copy in
+  `compose/ui/ui/build-fork.gradle` and
+  `compose/ui/ui/winui-samples/build.gradle` is removed. The scanner reads the
+  CRLF sources of all WinUI source sets directly.
+- **Validation:** 2026-10-04 with `xaml-support` `fa4508d7c` in a CRLF
+  checkout: `:compose:ui:ui:compileKotlinWinuiJvm`,
+  `:compose:mpp:demo-winui:runWinUIMppSample` and the `winui-samples`
+  applications pass.
+
+## KWINRT-069: Projection compilation classpath misses dependency projections
+
+- **Number before the merge of `winui_dev`:** `KWINRT-056`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` (`fa4508d7c`,
+  "Compile projections against external modules that publish WinRT
+  identity"); still open in the snapshot published from `master`.
+- **Symptom:** generation skips WinRT types that a dependency already
+  projects, but the classpath of `compileKotlinWinRTProjection*` only gets
+  project dependencies that are already configured when it is resolved, which
+  configuration on demand does not guarantee, and no external modules.
+  The support sources then fail on unresolved projection types.
+- **Resolution:** the explicit additions to
+  `kotlinWinRTProjection*CompileClasspath` in `compose/ui/ui/build-fork.gradle`,
+  `demo-winui` and `winui-samples` are removed. The plugin takes a declared
+  external module when it publishes the `kotlinWinRTIdentityElements` variant,
+  so skiko-winui has to be built with the same plugin (`SKIKO-013`).
+- **Validation:** 2026-10-04 with `xaml-support` `fa4508d7c`:
+  `:compose:ui:ui:compileKotlinWinRTProjectionWinuiJvm` compiles against
+  skiko-winui, and `:compose:mpp:demo-winui:compileKotlinWinRTProjectionWinuiJvm`
+  against `:compose:ui:ui` and skiko-winui, also when only the demo task is
+  requested with configuration on demand.
+
+## KWINRT-070: Application host rejects runtime jars with the same file name
+
+- **Number before the merge of `winui_dev`:** `KWINRT-057`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `6501b03cb`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/16, open).
+- **Symptom:** `JVM application host cannot stage two runtime JARs with the
+  same file name 'lifecycle-common-jvm-2.11.0.jar'`. JetBrains publishes its
+  JVM redirect artifacts as jars without classes that are named like the
+  androidx jar they depend on.
+- **Fix:** jars with one file name get a digest of their content in the staged
+  name.
+- **Resolution:** `demo-winui` no longer leaves jars without content out of the
+  host's `runtimeClasspath`.
+- **Validation:** 2026-10-04 with `1b7b9ec57`: the demo host builds, and its
+  `lib` holds `lifecycle-common-jvm-2.11.0-50a826ef.jar` and
+  `lifecycle-common-jvm-2.11.0-e6a66e67.jar`.
+
+## KWINRT-071: Application host does not find the libraries of its bundled runtime
+
+- **Number before the merge of `winui_dev`:** `KWINRT-058`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `1743e3d9c`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/16, open).
+- **Symptom:** `Unable to load zip library: ...\jvm-host\runtime\bin\zip.dll`.
+  The host loads `jvm.dll` by path; `zip.dll` imports `java.dll` by name, and
+  with another JDK's `bin` on `PATH` that JDK's `java.dll` is loaded.
+- **Fix:** the host calls `SetDllDirectoryW` with the `bin` directory of the
+  runtime before it loads `jvm.dll`.
+- **Resolution:** the `RunWinAppHostTask`s of `demo-winui` and `winui-samples`
+  no longer put `<host>\runtime\bin` first on `PATH`.
+- **Validation:** 2026-10-04 with `1b7b9ec57`, with the `bin` directory of
+  another JDK on `PATH`: the demo smoke runs and the eleven `winui-samples`
+  applications start and pass.
+
+## KWINRT-072: Toolchain discovery fails when vswhere.exe is not on PATH
+
+- **Number before the merge of `winui_dev`:** `KWINRT-059`.
+- **Status:** Open; no compose-side workaround in the build.
+- **Symptom:** `No usable Windows C/C++ toolchain for win-x64` although Build
+  Tools and the SDK are installed. `VsDevCmd.bat` prints an ANSI
+  `'vswhere.exe' is not recognized` message into output that the plugin reads
+  as UTF-16, so the environment marker is not found.
+- **Workaround:** run Gradle with
+  `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer` on `PATH`.
+- **Re-tested:** 2026-10-04 with `xaml-support` `fa4508d7c`. Without that
+  directory on `PATH`, `compileWinAppLauncherJvmMain` of `winui-samples` fails
+  the same way.
+
+## KWINRT-073: Authored .winmd is staged twice into JVM application resources
+
+- **Number before the merge of `winui_dev`:** `KWINRT-060`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `bf3b6874f`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/16, open).
+- **Observed in:** `:compose:ui:ui:winui-samples` (a Kotlin/JVM application).
+- **Symptom:** `processResources` fails on the duplicate
+  `windows-package-runtime-assets/winui-samples.winmd`, once from the
+  compilation output and once from the staged package.
+- **Fix:** the plugin's check for an application never saw the extension, so
+  every project shipped the compiled metadata as a resource; an application
+  takes it from its staged package only now.
+- **Resolution:** `duplicatesStrategy = EXCLUDE` on `processResources` in
+  `compose/ui/ui/winui-samples/build.gradle` is removed.
+- **Validation:** 2026-10-04 with `1b7b9ec57`: `processResources` of
+  `winui-samples` passes.
+
+## KWINRT-074: Plugin artifacts need JDK 25 even when the plugin is not applied
+
+- **Number before the merge of `winui_dev`:** `KWINRT-061`.
+- **Status:** Open (by design of the JDK 25 toolchain).
+- **Symptom:** `plugins { id(...) apply false }` in `:compose:ui:ui` fails on
+  the JDK 21 of the upstream build with `Dependency requires at least JVM
+  runtime version 25`.
+- **compose-winui workaround:** the root `build-fork.gradle` puts the plugin
+  on the buildscript classpath only for `-PcomposeWinUi.enableJvmTarget=true`;
+  projects apply it by id. The WinUI-only projects are only included in that
+  mode.
+
+## KWINRT-075: XAML schema export runs for every library and cannot be turned off
+
+- **Number before the merge of `winui_dev`:** `KWINRT-062`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `a2df61585`,
+  `34003c521` and `4c1a850f4`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/15, merged). `master`
+  has no XAML pipeline.
+- **Observed in:** `:compose:ui:ui` and the skiko-winui build, with
+  kotlin-winrt `xaml-support` `fa4508d7c`.
+- **Symptom:** in a project without `windows.application` and without XAML
+  files, the plugin runs `generateWinRTXamlApplicationHeader` and a
+  `compileKotlinWinRTXamlLibrarySemantic<Target>` compilation of the whole
+  module, to publish a XAML schema and a registrar of its public classes.
+  - `generateWinRTXamlApplicationHeader` fails with
+    `IllegalArgumentException: Required value was null` at
+    `KotlinWinRTAuthoringScannerCli.writeXamlHeader`
+    (`requireNotNull(source.className(klass))`). A source root with one file
+    that declares `val runner: Runnable = object : Runnable { ... }` at top
+    level reproduces it; the same object inside a class does not.
+  - In skiko-winui the task fails Gradle's validation before that: it reads
+    `build/generated/winuiJvm`, a Kotlin source directory that the source set
+    gets from the task that generates it, as a plain directory (`uses this
+    output of task ':generateVersionJvmWindowsX64' without declaring an
+    explicit or implicit dependency`).
+  - The semantic compilation was not reached, because the header task fails
+    first.
+- **Fix:** the header scan skips unnamed object expressions; a header without
+  XAML takes no source roots, so a library no longer scans its sources or
+  reads generated roots; `windows { xaml { exportLibrarySchema = false } }`
+  (or `-PkotlinWinRT.xaml.exportLibrarySchema=false`) switches the export off.
+- **Resolution:** `compose/ui/ui/build-fork.gradle` sets
+  `exportLibrarySchema = false` instead of disabling the tasks by name. That
+  is a setting, not a workaround: Compose UI declares no types for markup.
+- **Validation:** 2026-10-04 with `4c1a850f4` in Maven Local: the three new
+  kotlin-winrt tests, the `compileKotlinWinuiJvm` and `winuiJvmTest` runs,
+  `:compose:mpp:demo-winui:runWinUIMppSample` and the `winui-samples`
+  applications pass.
+- **Not covered by the fix:** with the export left on, skiko-winui gets past
+  the header and the semantic compilation, and then fails
+  `compileKotlinWinuiJvm`: the generated registrar names
+  `org.jetbrains.skia.paragraph.FontRastrSettings`, which skiko deprecates
+  with `DeprecationLevel.ERROR`. Compose UI was not tried with the export on.
+
+## KWINRT-076: Interface projections call IClosable.Close on the wrong interface
+
+- **Number before the merge of `winui_dev`:** `KWINRT-063`.
+- **Status:** Closed. Fixed on kotlin-winrt `xaml-support` by `c4bf4e53a`
+  (https://github.com/compose-fluent/kotlin-winrt/pull/17, open).
+- **Observed in:** the drag image of `Modifier.dragAndDropSource` on WinUI
+  (`WinUISoftwareBitmap.winuiJvm.kt` of the `jb-main` sync, which wrote the
+  pixels through `BitmapBuffer.createReference()`), with kotlin-winrt
+  `xaml-support` `3d7855783` in Maven Local.
+- **Symptom:** `IMemoryBufferReference.close()` on the object that
+  `BitmapBuffer.createReference()` returns crashes the JVM with
+  `EXCEPTION_ACCESS_VIOLATION` in `RTMediaFrame.dll`.
+  `IMemoryBufferReference$NativeProjection.close()` calls vtable slot 6 of the
+  `IMemoryBufferReference` pointer, which is `get_Capacity`, without its out
+  parameter, instead of querying `IClosable` and calling its slot 6 (`Close`).
+  Runtime class projections (`BitmapBuffer.close()`,
+  `SoftwareBitmap.close()`) are right: they go through `WinRTClosableObject`.
+  The other required interfaces of an interface projection probably have the
+  same problem.
+- **Fix:** the native projection of such an interface caches the `IClosable`
+  reference of the object (`acquireInterfaceReference(nativeObject,
+  IID.IDisposable)`, qualified because the interface's own `Metadata.IID`
+  shadows the runtime `IID` there) and calls `Close` on it, as CsWinRT's
+  `ABI.System.IDisposable.Dispose` does.
+- **Resolution:** `WinUISoftwareBitmap.winuiJvm.kt` closed the buffer
+  reference with the projected `close()` again; `WinUISoftwareBitmapTest`
+  crashed the test JVM before the fix and passed with it. The merge of
+  `winui_dev` (2026-10-05) replaced that file and its test with the portable
+  drag image of `winui_dev` (`DataWriter` and
+  `SoftwareBitmap.createCopyFromBuffer`), which has no `IMemoryBufferReference`.
+  The fix stays necessary for `close()` on any interface projection.
 
 ## KWINRT-064: Pointer projections retain native references on every mouse move
 
+- **Merge note (2026-10-05):** the runtime commit `f5f90d75` named below is a
+  commit of the `external/kotlin-winrt` checkout of `winui_dev`. It is not in
+  `compose-fluent/kotlin-winrt`: on `xaml-support` `c4bf4e53a`,
+  `acquireInterfaceReference` still returns a reference that its parent does
+  not own. The Compose half (closing the pointer callback projections and the
+  retained drag point) is merged and runs against that runtime; what closing a
+  wrapper releases there is its `_inner` reference only.
 - **Status:** Closed locally on 2026-07-25. Runtime ownership is fixed in
   kotlin-winrt submodule commit `f5f90d75`; compose pointer cleanup is in
   commits `595a3cf15d9` and `493b94d3891`; sample host heap defaults are
@@ -110,6 +598,9 @@ baseline, not every retest attempt.
 
 ## KWINRT-063: Desktop InputPane interop helper was not generated
 
+- **Merge note (2026-10-05):** the kotlin-winrt build in use has the
+  `InputPaneInterop` source addition, but its generation task does not
+  generate it for `:compose:ui:ui`: `KWINRT-077`.
 - **Status:** Closed in kotlin-winrt snapshot
   `0.1.0-20260719.013720-104` on 2026-07-19.
 - **Observed in:** compose-winui software-keyboard integration for a WinUI 3

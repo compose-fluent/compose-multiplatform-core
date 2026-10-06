@@ -195,9 +195,10 @@ private class ProjectedWinUIInputPaneAdapter(
         }
     }
 
-    override fun dispose() {
-        inputPane.nativeObject.close()
-    }
+    // The input pane of a window is one object, and every Compose view of the window (a window
+    // popup has a view of its own) gets the same projection of it. Its reference is therefore
+    // not closed with one of the views: the others would fail to remove their handlers.
+    override fun dispose() = Unit
 }
 
 private class ProjectedWinUIInputPaneEventRegistration(

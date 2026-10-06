@@ -19,8 +19,11 @@ package androidx.compose.ui.platform
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.SystemTheme
+import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.text.intl.isRtl
 import androidx.compose.ui.unit.LayoutDirection
 import microsoft.ui.xaml.DependencyPropertyChangedCallback
 import microsoft.ui.xaml.ElementTheme
@@ -102,8 +105,10 @@ internal class WinUIXamlEnvironmentSource(
                 foreground = foreground,
                 background = background,
             ),
-            layoutDirection = runCatching { root.flowDirection.toComposeLayoutDirection() }
-                .getOrDefault(LayoutDirection.Ltr),
+            layoutDirection = winUILayoutDirection(
+                flowDirection = runCatching { root.flowDirection }.getOrNull(),
+                isLocaleRtl = isCurrentLocaleRtl(),
+            ),
             fontScale = normalizeWinUITextScaleFactor(
                 uiSettings?.let { uiSettings ->
                     runCatching { uiSettings.textScaleFactor }.getOrNull()
@@ -213,6 +218,23 @@ internal fun FlowDirection.toComposeLayoutDirection(): LayoutDirection = when (t
     FlowDirection.RightToLeft -> LayoutDirection.Rtl
     else -> LayoutDirection.Ltr
 }
+
+/**
+ * The layout direction of the content: right to left when the XAML tree flows that way and, as
+ * on the desktop target, when the locale of the user is written that way. XAML does not take
+ * its flow direction from the locale.
+ */
+internal fun winUILayoutDirection(
+    flowDirection: FlowDirection?,
+    isLocaleRtl: Boolean,
+): LayoutDirection = when {
+    isLocaleRtl -> LayoutDirection.Rtl
+    else -> flowDirection?.toComposeLayoutDirection() ?: LayoutDirection.Ltr
+}
+
+@OptIn(InternalComposeUiApi::class)
+private fun isCurrentLocaleRtl(): Boolean =
+    runCatching { Locale.current.isRtl() }.getOrDefault(false)
 
 internal fun normalizeWinUITextScaleFactor(value: Double?): Float =
     value?.toFloat()?.takeIf { it.isFinite() && it > 0f } ?: 1f

@@ -112,6 +112,8 @@ class WinUIComposeViewDisposalTest {
         findUiModuleRoot()
             .resolve("src/winuiMain/kotlin/androidx/compose/ui/platform/WinUIComposeView.winui.kt")
             .readText()
+            // A checkout with core.autocrlf has CRLF line endings.
+            .replace("\r\n", "\n")
 
     private fun findUiModuleRoot(): Path {
         val start = Paths.get("").toAbsolutePath()

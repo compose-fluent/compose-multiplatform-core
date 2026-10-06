@@ -34,16 +34,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import windows.applicationmodel.datatransfer.DataPackageOperation
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalCoroutinesApi::class)
 class WinUIDragAndDropAdapterTest {
-    @Test
-    fun acceptedOperationAdvertisesCopyOnlyForAcceptedTargets() {
-        assertEquals(DataPackageOperation.Copy, winUIDragAcceptedOperation(true))
-        assertEquals(DataPackageOperation.None, winUIDragAcceptedOperation(false))
-    }
-
     @Test
     fun dragSessionTerminationEndsAndClearsStateAfterCallbackFailure() {
         var endCalls = 0

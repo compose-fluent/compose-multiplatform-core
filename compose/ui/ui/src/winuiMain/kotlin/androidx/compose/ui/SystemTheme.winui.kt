@@ -16,6 +16,8 @@
 
 package androidx.compose.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 
 enum class SystemTheme {
@@ -25,4 +27,11 @@ enum class SystemTheme {
 @InternalComposeUiApi
 val LocalSystemTheme = staticCompositionLocalOf {
     SystemTheme.Unknown
+}
+
+@InternalComposeUiApi
+@Composable
+@ReadOnlyComposable
+fun isUiSystemInDarkTheme(): Boolean {
+    return LocalSystemTheme.current == SystemTheme.Dark
 }

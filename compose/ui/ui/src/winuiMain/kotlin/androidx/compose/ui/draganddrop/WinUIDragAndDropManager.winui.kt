@@ -37,6 +37,12 @@ internal class WinUIDragAndDropManager : DragAndDropManager {
     override val isRequestDragAndDropTransferRequired: Boolean
         get() = starter != null
 
+    /**
+     * Whether the last drag event was over a target that accepted the session.
+     */
+    internal val hasEligibleDropTarget: Boolean
+        get() = rootDragAndDropNode.hasEligibleDropTarget
+
     override fun requestDragAndDropTransfer(node: DragAndDropNode, offset: Offset) {
         val currentStarter = starter ?: return
         var isTransferStarted = false

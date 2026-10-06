@@ -99,8 +99,9 @@ private class PlatformLayersComposeSceneImpl(
             coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
             size = size,
             platformContext = composeSceneContext.platformContext,
-            snapshotInvalidationTracker = snapshotInvalidationTracker,
             inputHandler = inputHandler,
+            invalidate = ::invokeInvalidationCallbacks,
+            onChangedExecutor = frameRecomposer::runOnComposeThread,
         )
     }
 
@@ -160,6 +161,12 @@ private class PlatformLayersComposeSceneImpl(
         check(!isClosed) { "invalidatePositionOnScreen called after ComposeScene is closed" }
         mainOwner.invalidatePositionOnScreen()
     }
+
+    override val hasPendingMeasureOrLayout: Boolean
+        get() = hasForcedLayout || mainOwner.hasPendingMeasureOrLayout
+
+    override val hasPendingDraw: Boolean
+        get() = hasForcedDraw || mainOwner.hasPendingDraw
 
     override fun createComposition(
         parentCompositionContext: CompositionContext,

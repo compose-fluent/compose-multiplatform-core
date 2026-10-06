@@ -19,6 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTransferAction
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.WinUIDragAndDropManager
 import androidx.compose.ui.draganddrop.WinUIDragAndDropStarter
@@ -53,7 +54,10 @@ import windows.applicationmodel.datatransfer.DataPackage
 import windows.applicationmodel.datatransfer.DataPackageOperation
 import windows.applicationmodel.datatransfer.DataPackageView
 import windows.applicationmodel.datatransfer.DataProviderHandler
+import windows.applicationmodel.datatransfer.dragdrop.DragDropModifiers
 import windows.foundation.EventRegistrationToken
+import windows.foundation.Point
+import windows.foundation.TypedEventHandler
 import windows.graphics.imaging.BitmapAlphaMode
 import windows.graphics.imaging.BitmapPixelFormat
 import windows.graphics.imaging.SoftwareBitmap
@@ -76,6 +80,7 @@ internal class WinUIDragAndDropAdapter(
         WinUIOwnedResourceSlot<PointerPoint> { point -> point.nativeObject.close() }
     private var pendingSourceTransfer: WinUIPendingSourceTransfer? = null
     private var activeDragOperation: WinRTAsyncOperationReference<DataPackageOperation>? = null
+    private var lastAction: DragAndDropTransferAction? = null
     private val dragSession =
         WinUIDragSessionController(
             onStart = dragAndDropManager::onDragStarted,
@@ -136,9 +141,10 @@ internal class WinUIDragAndDropAdapter(
                             renderWinUIDragDecoration(
                                     decorationSize = decorationSize,
                                     density = owner.density,
+                                    layoutDirection = owner.layoutDirection,
                                     drawDragDecoration = drawDragDecoration,
                                 )
-                                .toSoftwareBitmap()
+                                .toSoftwareBitmap(owner.density.density)
                         }
                         .getOrNull(),
             )
@@ -162,10 +168,11 @@ internal class WinUIDragAndDropAdapter(
         val accepted =
             dispatch.withPlatformData {
                 val accepted = dragSession.ensureStarted(dispatch.event)
+                lastAction = dispatch.event.action
                 dragAndDropManager.onDragEntered(dispatch.event)
                 accepted
             }
-        return advertiseAcceptedOperation(args, dispatch, accepted)
+        return advertiseAcceptedOperation(args, dispatch, accepted, overTarget = accepted)
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
@@ -174,15 +181,27 @@ internal class WinUIDragAndDropAdapter(
         val accepted =
             dispatch.withPlatformData {
                 val accepted = dragSession.ensureStarted(dispatch.event)
+                if (accepted && dispatch.event.action != lastAction) {
+                    lastAction = dispatch.event.action
+                    dragAndDropManager.onDragChanged(dispatch.event)
+                }
                 dragAndDropManager.onDragMoved(dispatch.event)
                 accepted
             }
-        return advertiseAcceptedOperation(args, dispatch, accepted)
+        // Like AWT, offer the drop only over a target that takes it, so that WinUI shows that a
+        // drop elsewhere does nothing.
+        return advertiseAcceptedOperation(
+            args = args,
+            dispatch = dispatch,
+            accepted = accepted,
+            overTarget = accepted && dragAndDropManager.hasEligibleDropTarget,
+        )
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun handleDragLeave(args: DragEventArgs): Boolean {
-        setAcceptedOperation(args, false)
+        lastAction = null
+        setAcceptedOperation(args, null)
         if (pendingDrop != null) return true
         val dispatch = args.toComposeDragAndDropDispatch() ?: return rejectTerminalEvent(args)
         dispatch.withPlatformData {
@@ -201,8 +220,9 @@ internal class WinUIDragAndDropAdapter(
     private fun handleDrop(args: DragEventArgs): Boolean {
         cancelPendingDrop()
         val dispatch = args.toComposeDragAndDropDispatch() ?: return rejectTerminalEvent(args)
+        lastAction = null
         val accepted = dispatch.withPlatformData { dragSession.ensureStarted(dispatch.event) }
-        if (!setAcceptedOperation(args, accepted)) {
+        if (!setAcceptedOperation(args, dispatch.event.action.takeIf { accepted })) {
             abortDrop(dispatch)
             return false
         }
@@ -242,29 +262,44 @@ internal class WinUIDragAndDropAdapter(
         return true
     }
 
+    /**
+     * Tells WinUI which operation a drop at the current position performs.
+     *
+     * @param accepted whether a target takes part in the session.
+     * @param overTarget whether the position is over such a target.
+     */
     private fun advertiseAcceptedOperation(
         args: DragEventArgs,
         dispatch: WinUIComposeDragAndDropDispatch,
         accepted: Boolean,
+        overTarget: Boolean,
     ): Boolean {
-        val advertised = setAcceptedOperation(args, accepted)
-        if (advertised) {
+        val advertised = setAcceptedOperation(args, dispatch.event.action.takeIf { overTarget })
+        if (accepted) {
             startPlainTextRead(dispatch.transfer)
         } else {
             abortDrop(dispatch)
         }
-        return advertised
+        return accepted && (advertised || !overTarget)
     }
 
-    private fun setAcceptedOperation(args: DragEventArgs, accepted: Boolean): Boolean {
+    /**
+     * Sets the operation that WinUI shows and reports to the source; `null` rejects the drop.
+     * Returns whether an operation was accepted.
+     */
+    private fun setAcceptedOperation(
+        args: DragEventArgs,
+        action: DragAndDropTransferAction?,
+    ): Boolean {
         val assigned =
-            runCatching { args.acceptedOperation = winUIDragAcceptedOperation(accepted) }.isSuccess
-        return accepted && assigned
+            runCatching { args.acceptedOperation = action.toDataPackageOperation() }.isSuccess
+        return action != null && assigned
     }
 
     @OptIn(ExperimentalComposeUiApi::class)
     private fun rejectTerminalEvent(args: DragEventArgs): Boolean {
-        setAcceptedOperation(args, false)
+        lastAction = null
+        setAcceptedOperation(args, null)
         dragSession.terminate(DragAndDropEvent())
         return false
     }
@@ -282,20 +317,29 @@ internal class WinUIDragAndDropAdapter(
     }
 
     private fun registerSourceEvents(): List<() -> Unit> {
-        val dragStarting: (UIElement, DragStartingEventArgs) -> Unit = { _, args ->
+        val dragStarting: TypedEventHandler<UIElement, DragStartingEventArgs> = { _, args ->
             handleDragStarting(args)
         }
-        val dropCompleted: (UIElement, DropCompletedEventArgs) -> Unit = { _, _ ->
+        val dropCompleted: TypedEventHandler<UIElement, DropCompletedEventArgs> = { _, args ->
             if (
                 shouldHandleWinUIDropCompleted(
                     hasPendingSourceTransfer = pendingSourceTransfer != null,
                     hasActiveDragOperation = activeDragOperation != null,
                 )
             ) {
-                runWinUIDragSourceCleanup(
-                    closeActiveDragOperation = { closeActiveDragOperation(cancel = false) },
-                    clearPendingSourceTransfer = ::clearPendingSourceTransfer,
-                    clearPointerPoint = ::clearSourcePointerPoint,
+                val onTransferCompleted = pendingSourceTransfer?.transferData?.onTransferCompleted
+                val userAction =
+                    runCatching { args.dropResult.toTransferAction() }.getOrNull()
+                runWinUIDragAndDropCleanup(
+                    {
+                        runWinUIDragSourceCleanup(
+                            closeActiveDragOperation = { closeActiveDragOperation(cancel = false) },
+                            clearPendingSourceTransfer = ::clearPendingSourceTransfer,
+                            clearPointerPoint = ::clearSourcePointerPoint,
+                        )
+                    },
+                    // As on desktop: the action the target performed, or null without a drop.
+                    { onTransferCompleted?.invoke(userAction) },
                 )
             }
         }
@@ -332,11 +376,14 @@ internal class WinUIDragAndDropAdapter(
             }
             WinUIDragStartingDecision.Start -> Unit
         }
-        args.allowedOperations = DataPackageOperation.Copy
+        val transferData = checkNotNull(pending).transferData
+        args.allowedOperations = transferData.supportedActions.toDataPackageOperation()
         val dragUI = args.dragUI
-        val decoration = checkNotNull(pending).decoration
+        val decoration = pending.decoration
         if (decoration != null && dragUI != null) {
-            runCatching { dragUI.setContentFromSoftwareBitmap(decoration) }
+            // The anchor is in pixels of the bitmap, like the offset.
+            val anchor = transferData.dragDecorationOffset
+            runCatching { dragUI.setContentFromSoftwareBitmap(decoration, Point(anchor.x, anchor.y)) }
                 .onFailure { runCatching { dragUI.setContentFromDataPackage() } }
         } else if (dragUI != null) {
             runCatching { dragUI.setContentFromDataPackage() }
@@ -350,6 +397,11 @@ internal class WinUIDragAndDropAdapter(
         when (val nativeData = pending.transferData.nativeTransferData) {
             is String -> runCatching { target.setText(nativeData) }.isSuccess
             is DataPackage -> forwardDataPackage(nativeData, target, pending)
+            is Function1<*, *> ->
+                runCatching {
+                    @Suppress("UNCHECKED_CAST")
+                    (nativeData as (DataPackage) -> Unit).invoke(target)
+                }.isSuccess
             is Map<*, *> -> {
                 var wroteData = false
                 nativeData.forEach { (format, value) ->
@@ -442,7 +494,20 @@ internal class WinUIDragAndDropAdapter(
             } else {
                 Offset.Zero
             }
-        val event = DragAndDropEvent(nativeEvent = this, positionInRootImpl = positionInRoot)
+        val event =
+            DragAndDropEvent(
+                nativeEvent = this,
+                positionInRootImpl = positionInRoot,
+                action =
+                    runCatching {
+                            winUIDragAction(
+                                allowedOperations = allowedOperations,
+                                isControlPressed = modifiers.hasFlag(DragDropModifiers.Control),
+                                isShiftPressed = modifiers.hasFlag(DragDropModifiers.Shift),
+                            )
+                        }
+                        .getOrNull(),
+            )
         return WinUIComposeDragAndDropDispatch(
             event = event,
             data =
@@ -500,7 +565,7 @@ internal class WinUIDragAndDropAdapter(
         WinUIDropTermination(
             finishDrop = { dispatchDropAndTerminate(dispatch) },
             abortDrop = { abortDrop(dispatch) },
-            publishResult = { handled -> publishDropResult(args, handled) },
+            publishResult = { handled -> publishDropResult(args, dispatch, handled) },
             completeDeferral = completeDeferral,
             onTerminated = onTerminated,
         )
@@ -514,9 +579,17 @@ internal class WinUIDragAndDropAdapter(
         return handled
     }
 
-    private fun publishDropResult(args: DragEventArgs, handled: Boolean) {
+    private fun publishDropResult(
+        args: DragEventArgs,
+        dispatch: WinUIComposeDragAndDropDispatch,
+        handled: Boolean,
+    ) {
         runWinUIDragAndDropCleanup(
-            { args.acceptedOperation = winUIDragAcceptedOperation(handled) },
+            // The source learns the action from the accepted operation.
+            {
+                args.acceptedOperation =
+                    dispatch.event.action.takeIf { handled }.toDataPackageOperation()
+            },
             { args.handled = handled },
         )
     }
@@ -616,6 +689,7 @@ internal data class WinUIDragDecoration(val width: Int, val height: Int, val bgr
 internal fun renderWinUIDragDecoration(
     decorationSize: Size,
     density: androidx.compose.ui.unit.Density,
+    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     drawDragDecoration: DrawScope.() -> Unit,
 ): WinUIDragDecoration {
     val width = ceil(decorationSize.width.toDouble()).toInt().coerceAtLeast(1)
@@ -624,7 +698,7 @@ internal fun renderWinUIDragDecoration(
     CanvasDrawScope()
         .draw(
             density = density,
-            layoutDirection = LayoutDirection.Ltr,
+            layoutDirection = layoutDirection,
             canvas = Canvas(imageBitmap),
             size = Size(width.toFloat(), height.toFloat()),
             block = drawDragDecoration,
@@ -647,7 +721,7 @@ private fun premultiplyWinUIColorChannel(channel: Int, alpha: Int): Byte =
     ((channel * alpha + 127) / 255).toByte()
 
 @OptIn(ExperimentalUnsignedTypes::class)
-private fun WinUIDragDecoration.toSoftwareBitmap(): SoftwareBitmap {
+private fun WinUIDragDecoration.toSoftwareBitmap(scale: Float): SoftwareBitmap {
     val writer = DataWriter()
     return try {
         writer.writeBytes(Array(bgraPixels.size) { index -> bgraPixels[index].toUByte() })
@@ -657,8 +731,62 @@ private fun WinUIDragDecoration.toSoftwareBitmap(): SoftwareBitmap {
             width,
             height,
             BitmapAlphaMode.Premultiplied,
-        )
+        ).also { bitmap ->
+            // Show the bitmap at its size in physical pixels, as Compose drew it.
+            val dpi = 96.0 * validateWinUIRasterizationScale(scale)
+            runCatching {
+                bitmap.dpiX = dpi
+                bitmap.dpiY = dpi
+            }
+        }
     } finally {
         runCatching { writer.close() }
     }
 }
+
+/**
+ * Returns the action of a drag from the operations that its source allows and the modifier keys,
+ * with the keys that AWT uses: Ctrl copies, Shift moves and Ctrl+Shift links. Without keys, the
+ * drag copies when the source allows it, which is what Windows apps do for data other than files.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun winUIDragAction(
+    allowedOperations: DataPackageOperation,
+    isControlPressed: Boolean,
+    isShiftPressed: Boolean,
+): DragAndDropTransferAction? {
+    val requested = when {
+        isControlPressed && isShiftPressed -> DataPackageOperation.Link
+        isControlPressed -> DataPackageOperation.Copy
+        isShiftPressed -> DataPackageOperation.Move
+        else -> listOf(
+            DataPackageOperation.Copy,
+            DataPackageOperation.Move,
+            DataPackageOperation.Link,
+        ).firstOrNull { allowedOperations.hasFlag(it) } ?: return null
+    }
+    return if (allowedOperations.hasFlag(requested)) requested.toTransferAction() else null
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun DataPackageOperation.toTransferAction(): DragAndDropTransferAction? = when {
+    hasFlag(DataPackageOperation.Copy) -> DragAndDropTransferAction.Copy
+    hasFlag(DataPackageOperation.Move) -> DragAndDropTransferAction.Move
+    hasFlag(DataPackageOperation.Link) -> DragAndDropTransferAction.Link
+    else -> null
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun DragAndDropTransferAction?.toDataPackageOperation(): DataPackageOperation =
+    when (this) {
+        DragAndDropTransferAction.Copy -> DataPackageOperation.Copy
+        DragAndDropTransferAction.Move -> DataPackageOperation.Move
+        DragAndDropTransferAction.Link -> DataPackageOperation.Link
+        else -> DataPackageOperation.None
+    }
+
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun Iterable<DragAndDropTransferAction>.toDataPackageOperation(): DataPackageOperation =
+    fold(DataPackageOperation.None) { operations, action ->
+        operations or action.toDataPackageOperation()
+    }

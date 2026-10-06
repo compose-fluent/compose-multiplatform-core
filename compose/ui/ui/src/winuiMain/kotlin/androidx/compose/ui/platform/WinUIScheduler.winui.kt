@@ -16,16 +16,34 @@
 
 package androidx.compose.ui.platform
 
+import kotlin.concurrent.Volatile
 import microsoft.ui.dispatching.DispatcherQueue
 
 internal object WinUIScheduler {
+    @Volatile
+    private var dispatcherQueue: DispatcherQueue? = null
+    @Volatile
     private var dispatchQueue: WinUIDispatchQueue? = null
 
     fun register(dispatcherQueue: DispatcherQueue) {
         if (this.dispatchQueue == null) {
             this.dispatchQueue = WinUIDispatchQueue(dispatcherQueue)
+            this.dispatcherQueue = dispatcherQueue
+            installWinUIMainDispatcher()
         }
     }
+
+    val isRegistered: Boolean
+        get() = dispatchQueue != null
+
+    /**
+     * Whether the calling thread is the thread of the registered queue, `false` when no queue is
+     * registered.
+     */
+    val hasThreadAccess: Boolean
+        get() = dispatcherQueue?.let { queue ->
+            runCatching { queue.hasThreadAccess }.getOrDefault(false)
+        } ?: false
 
     fun dispatch(block: () -> Unit): Boolean {
         return dispatchQueue?.dispatch(block) == true

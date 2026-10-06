@@ -24,65 +24,20 @@
 
 import androidx.build.SoftwareType
 import androidx.build.PlatformIdentifier
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.jetbrains.kotlin.konan.target.Family
 
 plugins {
     id("AndroidXPlugin")
     id("AndroidXComposePlugin")
-    id("JetBrainsAndroidXPlugin")
-    id("io.github.compose-fluent.winrt") apply false
-    alias(libs.plugins.atomicFu)
-}
-
-def composeWinUiJvmTargetEnabled = providers
-        .gradleProperty("composeWinUi.enableJvmTarget")
-        .map { it.toBoolean() }
-        .orElse(false)
-        .get()
-def composeWinUiMingwTargetEnabled = providers
-        .gradleProperty("composeWinUi.enableMingwTarget")
-        .map { it.toBoolean() }
-        .orElse(false)
-        .get()
-def composeWinUiTargetEnabled = composeWinUiJvmTargetEnabled || composeWinUiMingwTargetEnabled
-def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
-def composeWinUiSkikoWinUiVersion = providers
-        .gradleProperty("composeWinUi.skikoWinUiVersion")
-        .orElse("0.0.0-SNAPSHOT")
-def composeWinUiWindowsSdkVersion = providers
-        .gradleProperty("composeWinUi.windowsSdkVersion")
-        .orElse("10.0.26100.0")
-
-if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
-    apply plugin: "io.github.compose-fluent.winrt"
-
-    winRT {
-        windowsSdk(composeWinUiWindowsSdkVersion.get(), false, false)
-        type("Windows.Globalization.ApplicationLanguages")
-        type("Windows.Globalization.Language")
-    }
 }
 
 androidXMultiplatform {
     androidLibrary {
-        compileSdk = 35
+        compileSdk { version = release(37) }
         namespace = "androidx.compose.ui.text"
         androidResources.enable = true
-        optimization {
-            it.consumerKeepRules.publish = true
-            it.consumerKeepRules.files.add(new File("proguard-rules.pro"))
-        }
     }
-    if (!composeWinUiTargetEnabled) {
-        desktop()
-    }
-    mac()
-    ios()
-    js()
-    wasmJs()
+    jvmStubs()
+    linuxX64Stubs()
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 
@@ -100,12 +55,7 @@ androidXMultiplatform {
             implementation(project(":compose:ui:ui-util"))
 
             // TODO: Pin androidx.collection when SieveCache is available
-            // implementation("androidx.collection:collection:1.4.2")
-            implementation("androidx.collection:collection:1.5.0")
-        }
-
-        commonTest.dependencies {
-            implementation(libs.kotlinTest)
+            implementation("androidx.collection:collection:1.6.0")
         }
 
         androidMain.dependencies {
@@ -144,175 +94,6 @@ androidXMultiplatform {
             implementation(libs.mockitoKotlin4)
             implementation(libs.byteBuddy)
         }
-
-        // TODO: Align naming: nonAndroidMain
-        skikoMain {
-            dependsOn(commonMain)
-            dependencies {
-                api(libs.skiko)
-                implementation(libs.atomicFu)
-            }
-        }
-
-        skikoTest {
-            dependsOn(commonTest)
-            dependencies {
-                implementation(project(":kruth:kruth"))
-            }
-        }
-
-        desktopMain {
-            dependsOn(skikoMain)
-        }
-
-        desktopTest {
-            dependsOn(skikoTest)
-            dependencies {
-                implementation(libs.truth)
-                implementation(libs.junit)
-                implementation(libs.skikoCurrentOs)
-                implementation(project(":compose:foundation:foundation"))
-                implementation(project(":compose:ui:ui-test-junit4"))
-                implementation(project(":internal-testutils-fonts"))
-                implementation(libs.mockitoCore)
-                implementation(libs.mockitoKotlin)
-                implementation(libs.mockitoCore4)
-                implementation(libs.mockitoKotlin4)
-                implementation(libs.kotlinReflect)
-            }
-        }
-
-        nonJvmMain {
-            dependsOn(skikoMain)
-            dependencies {
-                // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
-                implementation("org.jetbrains.compose.collection-internal:collection:1.10.0")
-            }
-        }
-
-        nonJvmTest {
-            dependsOn(skikoTest)
-        }
-
-        nativeMain {
-            dependsOn(nonJvmMain)
-        }
-
-        nativeTest {
-            dependsOn(nonJvmTest)
-        }
-
-        darwinMain {
-            dependsOn(nativeMain)
-        }
-
-        darwinTest {
-            dependsOn(nativeTest)
-        }
-
-        macosMain {
-            dependsOn(darwinMain)
-        }
-
-        macosTest {
-            dependsOn(darwinTest)
-        }
-
-        iosMain {
-            dependsOn(darwinMain)
-        }
-
-        iosTest {
-            dependsOn(darwinTest)
-        }
-
-        wasmJsMain {
-            dependencies {
-                implementation(libs.skikoWasmJs)
-                implementation(libs.skikoJsWasmRuntime)
-            }
-        }
-
-        // TODO: Align it with AOSP or make explicit
-        configureEach {
-            languageSettings.optIn("androidx.compose.ui.text.ExperimentalTextApi")
-        }
-    }
-}
-
-kotlin {
-    if (composeWinUiGradlePluginAvailable) {
-        if (composeWinUiJvmTargetEnabled) {
-            jvm("winuiJvm")
-        }
-        if (composeWinUiMingwTargetEnabled) {
-            mingwX64("winuiMingw")
-        }
-
-        sourceSets {
-            winuiMain {
-                dependsOn(skikoMain)
-                dependencies {
-                    implementation("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}")
-                }
-            }
-
-            winuiTest {
-                dependsOn(commonTest)
-                dependencies {
-                    implementation(project(":kruth:kruth"))
-                }
-            }
-
-            if (composeWinUiJvmTargetEnabled) {
-                winuiJvmMain {
-                    dependsOn(winuiMain)
-                    dependsOn(jvmAndAndroidMain)
-                }
-                winuiJvmTest {
-                    dependsOn(winuiTest)
-                    dependencies {
-                        runtimeOnly("io.github.compose-fluent:skiko-winui-windows:${composeWinUiSkikoWinUiVersion.get()}")
-                    }
-                }
-            }
-
-            if (composeWinUiMingwTargetEnabled) {
-                winuiMingwMain {
-                    dependsOn(winuiMain)
-                }
-                winuiMingwTest {
-                    dependsOn(winuiTest)
-                }
-            }
-
-        }
-    }
-}
-
-if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
-    configurations.configureEach { configuration ->
-        def lowerName = configuration.name.toLowerCase(Locale.ROOT)
-        if (lowerName.contains("winui")) {
-            configuration.attributes.attribute(
-                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
-                    25
-            )
-            configuration.resolutionStrategy.dependencySubstitution {
-                substitute(module("org.jetbrains.skiko:skiko"))
-                        .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
-                        .because("compose-winui uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
-            }
-        }
-    }
-    tasks.withType(KotlinCompile).configureEach { task ->
-        if (task.name.contains("Winui")) {
-            task.exclude("**/intl/Locale.jvmAndAndroid.kt")
-            task.compilerOptions {
-                it.jvmTarget.set(JvmTarget.JVM_25)
-                it.freeCompilerArgs.add("-Xjdk-release=25")
-            }
-        }
     }
 }
 
@@ -326,14 +107,5 @@ androidx {
     type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
     inceptionYear = "2019"
     description = "Compose Text primitives and utilities"
-    legacyDisableKotlinStrictApiMode = true
     samples(project(":compose:ui:ui-text:ui-text-samples"))
-}
-
-afterEvaluate {
-    // needed to support running tests that use AwtFontUtils
-    // (https://github.com/JetBrains/compose-multiplatform-core/pull/918)
-    tasks.withType(Test) { t ->
-        t.jvmArgs += ["--add-opens=java.desktop/sun.font=ALL-UNNAMED"]
-    }
 }

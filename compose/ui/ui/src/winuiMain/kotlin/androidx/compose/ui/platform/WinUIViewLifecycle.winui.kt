@@ -27,14 +27,17 @@ import microsoft.ui.xaml.WindowActivatedEventArgs
 import microsoft.ui.xaml.WindowActivationState
 import windows.foundation.TypedEventHandler
 
+// The same states as on desktop: resumed while the window has focus, started while it is visible
+// without focus, created while it is minimized (or the view is not shown).
 internal fun calculateWinUIViewLifecycleState(
     isLoaded: Boolean,
     isVisible: Boolean,
     isActive: Boolean,
     isDisposed: Boolean,
+    isMinimized: Boolean = false,
 ): Lifecycle.State = when {
     isDisposed -> Lifecycle.State.DESTROYED
-    !isLoaded || !isVisible -> Lifecycle.State.CREATED
+    !isLoaded || !isVisible || isMinimized -> Lifecycle.State.CREATED
     !isActive -> Lifecycle.State.STARTED
     else -> Lifecycle.State.RESUMED
 }
@@ -45,6 +48,7 @@ internal class WinUIViewLifecycleController(
     private var isLoaded = false
     private var isVisible = true
     private var isActive = false
+    private var isMinimized = false
     private var isDisposed = false
     private var lastState: Lifecycle.State? = null
 
@@ -81,6 +85,13 @@ internal class WinUIViewLifecycleController(
         }
     }
 
+    fun setMinimized(value: Boolean) {
+        if (!isDisposed) {
+            isMinimized = value
+            publishState()
+        }
+    }
+
     fun dispose() {
         if (!isDisposed) {
             isDisposed = true
@@ -94,6 +105,7 @@ internal class WinUIViewLifecycleController(
             isVisible = isVisible,
             isActive = isActive,
             isDisposed = isDisposed,
+            isMinimized = isMinimized,
         )
         if (next != lastState) {
             lastState = next

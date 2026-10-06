@@ -16,10 +16,17 @@
 
 package androidx.compose.ui.platform
 
-import io.github.composefluent.winrt.runtime.WinRTWindowsAppSdkBootstrap
+import io.github.composefluent.winrt.runtime.WindowsAppSdkLauncherSupport
 import microsoft.ui.dispatching.DispatcherQueueController
 
+/**
+ * Starts the Windows App SDK for the tests that need its objects, such as a dispatcher queue.
+ *
+ * The test task passes the self-contained runtime that `:compose:ui:ui:winui-samples` stages.
+ */
 internal object WinUITestRuntime {
+    private const val RuntimeAssetsRootProperty = "compose.winui.test.runtimeAssetsRoot"
+
     private var applicationHostScope: AutoCloseable? = null
     private var dispatcherQueueController: DispatcherQueueController? = null
     private var ownerThread: Thread? = null
@@ -33,7 +40,14 @@ internal object WinUITestRuntime {
             return
         }
 
-        val hostScope = WinRTWindowsAppSdkBootstrap.initializeApplicationHost()
+        val runtimeAssetsRoot = checkNotNull(System.getProperty(RuntimeAssetsRootProperty)) {
+            "The WinUI tests need -D$RuntimeAssetsRootProperty; winuiJvmTest sets it."
+        }
+        val hostScope = WindowsAppSdkLauncherSupport.initializeApplicationHost(
+            packageIdentity = "Unpackaged",
+            deploymentMode = "SelfContained",
+            runtimeAssetsRoot = runtimeAssetsRoot,
+        )
         try {
             val controller = DispatcherQueueController.createOnCurrentThread()
             WinUIScheduler.register(checkNotNull(controller.dispatcherQueue))
