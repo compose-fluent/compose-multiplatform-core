@@ -282,7 +282,12 @@ class WinUIComposeView internal constructor(
         retainedValuesStore = retainedValuesStore,
         coroutineContextProvider = { ownerCoroutineContext },
         onMeasureAndLayoutRequested = ::scheduleRootContentSync,
-        onInteropTreeChanged = ::syncRootContent,
+        // The owner reports interop tree changes for every layout node that is deactivated or
+        // reused, from inside the Recomposer's apply phase. Measuring there would subcompose
+        // compositions of the same frame that are composed but not applied yet ("pending
+        // composition has not been applied"), and a lazy list would re-measure the whole root for
+        // each recycled item: sync once, after the apply, instead.
+        onInteropTreeChanged = ::scheduleRootContentSync,
         onRootInvalidated = ::invalidateRootLayer,
         onInteropTransactionScheduled = ::scheduleInteropTransaction,
         onAccessibilityUpdate = renderHost::notifyAccessibilityChanged,
@@ -333,6 +338,9 @@ class WinUIComposeView internal constructor(
     private var captionBarHeight = 0
     private var titleBarLeftInset = 0
     private var titleBarRightInset = 0
+    private val titleBarPassthrough = window?.let { owningWindow ->
+        WinUITitleBarPassthrough(owningWindow) { owner.semanticsOwner }
+    }
     private var inputPaneOccludedRect: WinUIInputPaneOccludedRect? = null
     private var inputPaneController: WinUIInputPaneController? = null
     private var currentInteropRoots: List<UIElement> = emptyList()
@@ -451,6 +459,7 @@ class WinUIComposeView internal constructor(
                 LocalPlatformPrefetchScheduler provides NoOpPlatformPrefetchScheduler,
                 LocalWinUIRoot provides rootContentControl,
                 LocalWinUIWindow provides window,
+                LocalWinUISkiaLayer provides renderHost.skiaLayer,
                 LocalSystemTheme provides systemEnvironment.systemTheme,
                 LocalWinUIComposeLayerHost provides layerHost,
             ) {
@@ -499,6 +508,7 @@ class WinUIComposeView internal constructor(
             { dragAndDropAdapter.dispose() },
             { pointerCursorAdapter.dispose() },
             { retainedValuesStore.dispose() },
+            { titleBarPassthrough?.close() },
             {
                 architectureComponentsOwner.navigationEventDispatcherOwner
                     .navigationEventDispatcher.removeInput(backNavigationEventInput)
@@ -666,6 +676,7 @@ class WinUIComposeView internal constructor(
         titleBarLeftInset = leftInset
         titleBarRightInset = rightInset
         updatePlatformWindowInsets()
+        titleBarPassthrough?.setTitleBar(height, leftInset, rightInset)
     }
 
     private fun updatePlatformWindowInsets() {
@@ -735,6 +746,7 @@ class WinUIComposeView internal constructor(
             measureAndLayout()
             owner.sendAndPerformSnapshotChanges()
             updateRootContent(rootNode.collectWinUIInteropRoots())
+            titleBarPassthrough?.onLayout()
             requestRender()
         }
     }
@@ -795,6 +807,7 @@ class WinUIComposeView internal constructor(
                     // The work of the frame can close the window, which disposes this view and
                     // the surface of the canvas.
                     if (isDisposed) return@applyOwnerChanges
+                    titleBarPassthrough?.onLayout()
                     frameBackgroundColor?.let(canvas::clear)
                     owner.draw(canvas.asComposeCanvas())
                 }
@@ -831,9 +844,13 @@ class WinUIComposeView internal constructor(
         }
     }
 
+    // No continuously running frame scheduler: Compose asks for every frame it needs
+    // (recomposition, animation frames, size changes) and the layer renders those on the next frame
+    // of the compositor. A running scheduler renders every frame of the display, changed or not.
     private fun startRenderScheduler() {
         if (!isDisposed && content != null) {
-            renderHost.startFrameScheduler()
+            renderHost.attachSurface()
+            requestRender()
         }
     }
 

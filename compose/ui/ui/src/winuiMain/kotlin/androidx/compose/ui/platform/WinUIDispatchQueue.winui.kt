@@ -23,44 +23,52 @@ import microsoft.ui.dispatching.DispatcherQueueHandler
 import microsoft.ui.dispatching.DispatcherQueueTimer
 import windows.foundation.TypedEventHandler
 
+/**
+ * Runs blocks on the thread of [dispatcherQueue], in order.
+ *
+ * [dispatch] is called from any thread (it backs `Dispatchers.Main`), so the pending blocks and the
+ * scheduling state are guarded by [lock]. The blocks themselves run outside the lock.
+ *
+ * A drain is always a dispatcher queue item, also when [dispatch] is called on the thread of the
+ * queue: the blocks leave the current WinUI callback, but run as soon as the message loop gets to
+ * them. (A DispatcherQueueTimer, even with a 1 ms interval, fires on the next tick of the system
+ * timer, 15.6 ms by default, which capped the frame loop of Compose at 64 Hz.)
+ */
 internal class WinUIDispatchQueue(
     private val dispatcherQueue: DispatcherQueue,
 ) {
+    private val lock = makeSynchronizedObject()
     private val pending = ArrayDeque<() -> Unit>()
     private var isScheduled = false
     private var isDraining = false
     private var isClosed = false
-    private val tickHandler: TypedEventHandler<DispatcherQueueTimer, Any?> = { _, _ ->
+    private val drainHandler = DispatcherQueueHandler {
         runCatching {
             drain()
         }.onFailure { throwable ->
             logDispatchFailure(throwable)
         }
     }
-    private val timer = dispatcherQueue.createTimer().also { timer ->
-        timer.interval = 1.milliseconds
-        timer.isRepeating = false
-    }
-    private val tickToken: EventRegistrationToken = timer.tick.add(tickHandler)
 
     fun dispatch(block: () -> Unit): Boolean {
-        if (isClosed) return false
-        pending.addLast(block)
-        if (isScheduled || isDraining) return true
-        isScheduled = true
-        return if (scheduleDrain()) {
-            true
-        } else {
-            val task = pending.removeLastOrNull().also {
+        synchronized(lock) {
+            if (isClosed) return false
+            pending.addLast(block)
+            if (isScheduled || isDraining) return true
+            isScheduled = true
+        }
+        if (scheduleDrain()) return true
+        val task = synchronized(lock) {
+            pending.removeLastOrNull().also {
                 if (pending.isEmpty()) {
                     isScheduled = false
                 }
             }
-            if (task === block) {
-                block()
-            }
-            false
         }
+        if (task === block) {
+            block()
+        }
+        return false
     }
 
     fun postDelayed(delayMillis: Long, block: () -> Unit): WinUIDelayedTask {
@@ -87,11 +95,13 @@ internal class WinUIDispatchQueue(
     }
 
     private fun drain() {
-        isScheduled = false
-        isDraining = true
-        val tasks = buildList {
-            while (pending.isNotEmpty()) {
-                add(pending.removeFirst())
+        val tasks = synchronized(lock) {
+            isScheduled = false
+            isDraining = true
+            buildList {
+                while (pending.isNotEmpty()) {
+                    add(pending.removeFirst())
+                }
             }
         }
         try {
@@ -103,12 +113,14 @@ internal class WinUIDispatchQueue(
                 }
             }
         } finally {
-            isDraining = false
-            val shouldSchedule = if (!isClosed && pending.isNotEmpty() && !isScheduled) {
-                isScheduled = true
-                true
-            } else {
-                false
+            val shouldSchedule = synchronized(lock) {
+                isDraining = false
+                if (!isClosed && pending.isNotEmpty() && !isScheduled) {
+                    isScheduled = true
+                    true
+                } else {
+                    false
+                }
             }
             if (shouldSchedule) {
                 scheduleDrain()
@@ -118,30 +130,19 @@ internal class WinUIDispatchQueue(
 
     private fun scheduleDrain(): Boolean =
         runCatching {
-            if (dispatcherQueue.hasThreadAccess) {
-                timer.start()
-                true
-            } else {
-                dispatcherQueue.tryEnqueue(DispatcherQueueHandler {
-                    runCatching {
-                        drain()
-                    }.onFailure { throwable ->
-                        logDispatchFailure(throwable)
-                    }
-                })
-            }
+            dispatcherQueue.tryEnqueue(drainHandler)
         }.getOrElse { throwable ->
             logDispatchFailure(throwable)
             false
         }
 
     fun close() {
-        if (isClosed) return
-        isClosed = true
-        isScheduled = false
-        pending.clear()
-        runCatching { timer.stop() }
-        runCatching { timer.tick.remove(tickToken) }
+        synchronized(lock) {
+            if (isClosed) return
+            isClosed = true
+            isScheduled = false
+            pending.clear()
+        }
     }
 
     private fun logDispatchFailure(throwable: Throwable) {
