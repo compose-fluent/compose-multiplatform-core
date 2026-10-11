@@ -31,9 +31,9 @@ import androidx.compose.ui.focus.FocusPropertiesModifierNode
 import androidx.compose.ui.focus.FocusTargetNode
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.geometry.Rect as ComposeRect
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.materialize
 import androidx.compose.ui.node.DelegatingNode
@@ -45,18 +45,20 @@ import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.node.UnplacedAwareModifierNode
 import androidx.compose.ui.node.WinUIOwner
 import androidx.compose.ui.node.requireOwner
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.toWinUIXamlSize
 import androidx.compose.ui.platform.validateWinUIRasterizationScale
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
+import io.github.composefluent.winrt.runtime.ComWrappersSupport
 import io.github.composefluent.winrt.runtime.EventHandlerCallback
-import windows.foundation.EventRegistrationToken
 import io.github.composefluent.winrt.runtime.asWinRT
+import io.github.composefluent.winrt.runtime.requireRegisteredWinRTInterfaceTypeHandle
+import kotlin.math.ceil
+import kotlin.math.max
 import microsoft.ui.xaml.FocusState
 import microsoft.ui.xaml.FrameworkElement
 import microsoft.ui.xaml.HorizontalAlignment
@@ -68,14 +70,11 @@ import microsoft.ui.xaml.automation.peers.AccessibilityView
 import microsoft.ui.xaml.controls.Canvas
 import microsoft.ui.xaml.controls.Control
 import microsoft.ui.xaml.media.RectangleGeometry
+import windows.foundation.EventRegistrationToken
 import windows.foundation.Rect
 import windows.foundation.Size
-import kotlin.math.ceil
-import kotlin.math.max
 
-/**
- * WinUI-specific interop switches for [WinUIView].
- */
+/** WinUI-specific interop switches for [WinUIView]. */
 @Immutable
 data class WinUIInteropProperties(
     val isNativeAccessibilityEnabled: Boolean = true,
@@ -107,9 +106,7 @@ fun <T : UIElement> WinUIView(
     )
 }
 
-/**
- * Composes a reusable WinUI [UIElement] obtained from [factory].
- */
+/** Composes a reusable WinUI [UIElement] obtained from [factory]. */
 @Composable
 @UiComposable
 fun <T : UIElement> WinUIView(
@@ -157,12 +154,7 @@ private fun <T : UIElement> createWinUIViewNodeFactory(
     factory: () -> T,
     density: Density,
 ): () -> LayoutNode {
-    return {
-        WinUIViewHolder(
-            view = factory(),
-            initialDensity = density,
-        ).layoutNode
-    }
+    return { WinUIViewHolder(view = factory(), initialDensity = density).layoutNode }
 }
 
 private fun <T : UIElement> Updater<LayoutNode>.updateWinUIViewHolderParams(
@@ -185,19 +177,18 @@ private fun <T : UIElement> LayoutNode.requireWinUIViewHolder(): WinUIViewHolder
 
 private val WinUIViewNoOpUpdate: UIElement.() -> Unit = {}
 
-private class WinUIViewHolder<T : UIElement>(
-    private val view: T,
-    initialDensity: Density,
-) : InteropViewFactoryHolder(), WinUIInteropViewHost {
+private class WinUIViewHolder<T : UIElement>(private val view: T, initialDensity: Density) :
+    InteropViewFactoryHolder(), WinUIInteropViewHost {
     private val interopView = view.asInteropView()
     private val viewControl = view.asWinRTControl()
     private val viewFrameworkElement = view.asWinRTFrameworkElement()
-    private val group = InteropViewGroup(
-        Canvas().also {
-            it.horizontalAlignment = HorizontalAlignment.Left
-            it.verticalAlignment = VerticalAlignment.Top
-        }
-    )
+    private val group =
+        InteropViewGroup(
+            Canvas().also {
+                it.horizontalAlignment = HorizontalAlignment.Left
+                it.verticalAlignment = VerticalAlignment.Top
+            }
+        )
     private var isViewAttachedToGroup = true
     private var isNativeChildAttachedToGroup = false
     private var width = 0
@@ -240,10 +231,11 @@ private class WinUIViewHolder<T : UIElement>(
             }
         }
 
-    private val positionModifier = Modifier.onGloballyPositioned { coordinates ->
-        val bounds = coordinates.boundsInRoot()
-        applyPosition(bounds.left, bounds.top)
-    }
+    private val positionModifier =
+        Modifier.onGloballyPositioned { coordinates ->
+            val bounds = coordinates.boundsInRoot()
+            applyPosition(bounds.left, bounds.top)
+        }
     private val placementModifier = TrackWinUIInteropPlacementModifierElement(this)
 
     var properties: WinUIInteropProperties = WinUIInteropProperties()
@@ -269,11 +261,12 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun scheduleNativeUpdate(action: WinUIInteropAction) {
-        val owner = if (layoutNode.isAttached) {
-            (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
-        } else {
-            lastKnownOwner
-        }
+        val owner =
+            if (layoutNode.isAttached) {
+                (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
+            } else {
+                lastKnownOwner
+            }
         if (owner == null) {
             pendingNativeUpdates += action
             return
@@ -283,16 +276,15 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun flushPendingNativeUpdates() {
         if (pendingNativeUpdates.isEmpty()) return
-        val owner = if (layoutNode.isAttached) {
-            (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
-        } else {
-            lastKnownOwner
-        } ?: return
+        val owner =
+            if (layoutNode.isAttached) {
+                (layoutNode.requireOwner() as? WinUIOwner)?.also { lastKnownOwner = it }
+            } else {
+                lastKnownOwner
+            } ?: return
         val updates = pendingNativeUpdates.toList()
         pendingNativeUpdates.clear()
-        owner.scheduleInteropTransaction {
-            updates.forEach { it.invoke() }
-        }
+        owner.scheduleInteropTransaction { updates.forEach { it.invoke() } }
     }
 
     private fun composeModifier(modifier: Modifier): Modifier =
@@ -319,10 +311,11 @@ private class WinUIViewHolder<T : UIElement>(
         }
     }
 
-    val layoutNode: LayoutNode = LayoutNode().also {
-        it.interopViewFactoryHolder = this
-        it.measurePolicy = measurePolicy
-    }
+    val layoutNode: LayoutNode =
+        LayoutNode().also {
+            it.interopViewFactoryHolder = this
+            it.measurePolicy = measurePolicy
+        }
 
     init {
         layoutNode.density = density
@@ -356,10 +349,11 @@ private class WinUIViewHolder<T : UIElement>(
             attachViewToGroup()
         }
         flushPendingNativeUpdates()
-        val changed = this.width != width ||
-            this.height != height ||
-            this.nativeWidth != nativeWidth ||
-            this.nativeHeight != nativeHeight
+        val changed =
+            this.width != width ||
+                this.height != height ||
+                this.nativeWidth != nativeWidth ||
+                this.nativeHeight != nativeHeight
         this.width = width
         this.height = height
         this.nativeWidth = nativeWidth
@@ -406,13 +400,13 @@ private class WinUIViewHolder<T : UIElement>(
 
     private fun applyInteraction(isUserInteractionEnabled: Boolean) {
         scheduleNativeUpdate {
-            group.uiElement.isHitTestVisible = initialGroupHitTestVisible &&
-                isUserInteractionEnabled
+            group.uiElement.isHitTestVisible =
+                initialGroupHitTestVisible && isUserInteractionEnabled
             view.isHitTestVisible = initialViewHitTestVisible && isUserInteractionEnabled
             view.isTabStop = initialViewTabStop && isUserInteractionEnabled
             viewControl?.let { control ->
-                control.isEnabled = (initialControlEnabled ?: control.isEnabled) &&
-                    isUserInteractionEnabled
+                control.isEnabled =
+                    (initialControlEnabled ?: control.isEnabled) && isUserInteractionEnabled
             }
         }
     }
@@ -420,9 +414,7 @@ private class WinUIViewHolder<T : UIElement>(
     private fun applyNativeAccessibility(isNativeAccessibilityEnabled: Boolean) {
         if (isNativeAccessibilityEnabled) {
             if (nativeAccessibilityOverrideApplied) {
-                scheduleNativeUpdate {
-                    view.clearValue(requiredAccessibilityViewProperty)
-                }
+                scheduleNativeUpdate { view.clearValue(requiredAccessibilityViewProperty) }
                 nativeAccessibilityOverrideApplied = false
             }
         } else {
@@ -454,13 +446,13 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun requestNativeFocusNow(): Boolean =
-        runCatching {
-            canRequestFocus() && view.focus(FocusState.Programmatic)
-        }.getOrDefault(false).also { isFocused ->
-            if (isFocused) {
-                updateOwnerInteropFocusRect(interopFocusRect())
+        runCatching { canRequestFocus() && view.focus(FocusState.Programmatic) }
+            .getOrDefault(false)
+            .also { isFocused ->
+                if (isFocused) {
+                    updateOwnerInteropFocusRect(interopFocusRect())
+                }
             }
-        }
 
     private fun requestNativeFocusWhenLayoutReady(frameworkElement: FrameworkElement) {
         if (runCatching { frameworkElement.isLoaded }.getOrDefault(false)) {
@@ -521,9 +513,7 @@ private class WinUIViewHolder<T : UIElement>(
     }
 
     private fun attachViewToGroup() {
-        scheduleNativeUpdate {
-            group.uiElement.requiredChildren.add(view)
-        }
+        scheduleNativeUpdate { group.uiElement.requiredChildren.add(view) }
         isViewAttachedToGroup = true
         isNativeChildAttachedToGroup = true
         updateOwnerInteropBoundsIfActive()
@@ -540,9 +530,7 @@ private class WinUIViewHolder<T : UIElement>(
         cancelDeferredNativeFocus()
         updateOwnerInteropFocusRect(null)
         updateOwnerInteropBounds(null)
-        scheduleNativeUpdate {
-            group.uiElement.requiredChildren.clear()
-        }
+        scheduleNativeUpdate { group.uiElement.requiredChildren.clear() }
         isViewAttachedToGroup = false
         isNativeChildAttachedToGroup = false
         if (notifyOwner) {
@@ -558,9 +546,7 @@ private class WinUIViewHolder<T : UIElement>(
         restoreInteraction()
         restoreNativeAccessibility()
         clearClip()
-        scheduleNativeUpdate {
-            group.uiElement.requiredChildren.clear()
-        }
+        scheduleNativeUpdate { group.uiElement.requiredChildren.clear() }
         isViewAttachedToGroup = false
         isNativeChildAttachedToGroup = false
     }
@@ -570,19 +556,13 @@ private class WinUIViewHolder<T : UIElement>(
             group.uiElement.isHitTestVisible = initialGroupHitTestVisible
             view.isHitTestVisible = initialViewHitTestVisible
             view.isTabStop = initialViewTabStop
-            viewControl?.let { control ->
-                initialControlEnabled?.let {
-                    control.isEnabled = it
-                }
-            }
+            viewControl?.let { control -> initialControlEnabled?.let { control.isEnabled = it } }
         }
     }
 
     private fun restoreNativeAccessibility() {
         if (!nativeAccessibilityOverrideApplied) return
-        scheduleNativeUpdate {
-            view.clearValue(requiredAccessibilityViewProperty)
-        }
+        scheduleNativeUpdate { view.clearValue(requiredAccessibilityViewProperty) }
         nativeAccessibilityOverrideApplied = false
     }
 
@@ -603,17 +583,13 @@ private class WinUIViewHolder<T : UIElement>(
                 height.toWinUISize(density.density).toFloat(),
             ),
         )
-        scheduleNativeUpdate {
-            setClip(group.uiElement, clip)
-        }
+        scheduleNativeUpdate { setClip(group.uiElement, clip) }
     }
 
     private fun clearClip() {
         if (clipGeometry == null) return
         clipGeometry = null
-        scheduleNativeUpdate {
-            setClip(group.uiElement, null)
-        }
+        scheduleNativeUpdate { setClip(group.uiElement, null) }
     }
 
     private fun interopFocusRect(): ComposeRect =
@@ -648,9 +624,8 @@ private class WinUIViewHolder<T : UIElement>(
     }
 }
 
-private data class TrackWinUIInteropPlacementModifierElement(
-    val holder: WinUIViewHolder<*>,
-) : ModifierNodeElement<TrackWinUIInteropPlacementModifierNode>() {
+private data class TrackWinUIInteropPlacementModifierElement(val holder: WinUIViewHolder<*>) :
+    ModifierNodeElement<TrackWinUIInteropPlacementModifierNode>() {
     override fun create(): TrackWinUIInteropPlacementModifierNode =
         TrackWinUIInteropPlacementModifierNode(holder)
 
@@ -663,9 +638,8 @@ private data class TrackWinUIInteropPlacementModifierElement(
     }
 }
 
-private class TrackWinUIInteropPlacementModifierNode(
-    var holder: WinUIViewHolder<*>,
-) : Modifier.Node(),
+private class TrackWinUIInteropPlacementModifierNode(var holder: WinUIViewHolder<*>) :
+    Modifier.Node(),
     LayoutAwareModifierNode,
     UnplacedAwareModifierNode,
     GlobalPositionAwareModifierNode {
@@ -700,15 +674,13 @@ private fun Modifier.winUIFocusInteropModifier(
     requestFocus: () -> Boolean,
     clearFocus: () -> Unit,
 ): Modifier =
-    this
-        .then(WinUIFocusGroupPropertiesElement(requestFocus))
+    this.then(WinUIFocusGroupPropertiesElement(requestFocus))
         .focusTarget()
         .then(WinUIFocusTargetPropertiesElement(canFocus))
         .then(WinUIFocusTargetInteropElement(clearFocus))
 
-private data class WinUIFocusGroupPropertiesElement(
-    val requestFocus: () -> Boolean,
-) : ModifierNodeElement<WinUIFocusGroupPropertiesNode>() {
+private data class WinUIFocusGroupPropertiesElement(val requestFocus: () -> Boolean) :
+    ModifierNodeElement<WinUIFocusGroupPropertiesNode>() {
     override fun create(): WinUIFocusGroupPropertiesNode =
         WinUIFocusGroupPropertiesNode(requestFocus)
 
@@ -721,9 +693,8 @@ private data class WinUIFocusGroupPropertiesElement(
     }
 }
 
-private class WinUIFocusGroupPropertiesNode(
-    var requestFocus: () -> Boolean,
-) : Modifier.Node(), FocusPropertiesModifierNode {
+private class WinUIFocusGroupPropertiesNode(var requestFocus: () -> Boolean) :
+    Modifier.Node(), FocusPropertiesModifierNode {
     private val onEnter: FocusEnterExitScope.() -> Unit = {
         if (!requestFocus()) {
             cancelFocusChange()
@@ -736,9 +707,8 @@ private class WinUIFocusGroupPropertiesNode(
     }
 }
 
-private data class WinUIFocusTargetPropertiesElement(
-    val canFocus: () -> Boolean,
-) : ModifierNodeElement<WinUIFocusTargetPropertiesNode>() {
+private data class WinUIFocusTargetPropertiesElement(val canFocus: () -> Boolean) :
+    ModifierNodeElement<WinUIFocusTargetPropertiesNode>() {
     override fun create(): WinUIFocusTargetPropertiesNode = WinUIFocusTargetPropertiesNode(canFocus)
 
     override fun update(node: WinUIFocusTargetPropertiesNode) {
@@ -750,19 +720,16 @@ private data class WinUIFocusTargetPropertiesElement(
     }
 }
 
-private class WinUIFocusTargetPropertiesNode(
-    var canFocus: () -> Boolean,
-) : Modifier.Node(), FocusPropertiesModifierNode {
+private class WinUIFocusTargetPropertiesNode(var canFocus: () -> Boolean) :
+    Modifier.Node(), FocusPropertiesModifierNode {
     override fun applyFocusProperties(focusProperties: FocusProperties) {
         focusProperties.canFocus = canFocus()
     }
 }
 
-private data class WinUIFocusTargetInteropElement(
-    val clearFocus: () -> Unit,
-) : ModifierNodeElement<WinUIFocusTargetInteropNode>() {
-    override fun create(): WinUIFocusTargetInteropNode =
-        WinUIFocusTargetInteropNode(clearFocus)
+private data class WinUIFocusTargetInteropElement(val clearFocus: () -> Unit) :
+    ModifierNodeElement<WinUIFocusTargetInteropNode>() {
+    override fun create(): WinUIFocusTargetInteropNode = WinUIFocusTargetInteropNode(clearFocus)
 
     override fun update(node: WinUIFocusTargetInteropNode) {
         node.clearFocus = clearFocus
@@ -773,9 +740,7 @@ private data class WinUIFocusTargetInteropElement(
     }
 }
 
-private class WinUIFocusTargetInteropNode(
-    var clearFocus: () -> Unit,
-) : DelegatingNode() {
+private class WinUIFocusTargetInteropNode(var clearFocus: () -> Unit) : DelegatingNode() {
     init {
         delegate(FocusTargetNode(isInteropViewHost = true, onFocusChange = ::onFocusStateChange))
     }
@@ -795,39 +760,35 @@ private class WinUIFocusTargetInteropNode(
 }
 
 private fun UIElement.measureUnclippedDesiredSize(density: Density): IntSize {
-    val measuredSize = runCatching {
-        measure(
-            Size(
-                width = MaxUnboundedWinUISize,
-                height = MaxUnboundedWinUISize,
+    val measuredSize =
+        runCatching {
+                measure(Size(width = MaxUnboundedWinUISize, height = MaxUnboundedWinUISize))
+                IntSize(
+                    width = desiredSize.width.toComposeLayoutSize(density),
+                    height = desiredSize.height.toComposeLayoutSize(density),
+                )
+            }
+            .getOrElse { IntSize.Zero }
+    val explicitSize =
+        asWinRTFrameworkElement()?.let {
+            IntSize(
+                width = it.width.toComposeLayoutSize(density),
+                height = it.height.toComposeLayoutSize(density),
             )
-        )
-        IntSize(
-            width = desiredSize.width.toComposeLayoutSize(density),
-            height = desiredSize.height.toComposeLayoutSize(density),
-        )
-    }.getOrElse {
-        IntSize.Zero
-    }
-    val explicitSize = asWinRTFrameworkElement()?.let {
-        IntSize(
-            width = it.width.toComposeLayoutSize(density),
-            height = it.height.toComposeLayoutSize(density),
-        )
-    } ?: IntSize.Zero
+        } ?: IntSize.Zero
     return IntSize(
         width = max(measuredSize.width, explicitSize.width),
         height = max(measuredSize.height, explicitSize.height),
     )
 }
 
-private fun Int.toWinUISize(rasterizationScale: Float): Double =
-    toWinUIXamlSize(rasterizationScale)
+private fun Int.toWinUISize(rasterizationScale: Float): Double = toWinUIXamlSize(rasterizationScale)
 
 private val requiredAccessibilityViewProperty
-    get() = checkNotNull(AutomationProperties.accessibilityViewProperty) {
-        "WinUI AutomationProperties.AccessibilityViewProperty is not available."
-    }
+    get() =
+        checkNotNull(AutomationProperties.accessibilityViewProperty) {
+            "WinUI AutomationProperties.AccessibilityViewProperty is not available."
+        }
 
 private fun Float.toComposeLayoutSize(density: Density): Int =
     when {
@@ -843,11 +804,19 @@ private fun Double.toComposeLayoutSize(density: Density): Int =
         else -> ceil(this * validateWinUIRasterizationScale(density.density)).toInt()
     }
 
-private fun Any?.asWinRTControl(): Control? =
-    runCatching { this?.asWinRT<Control>() }.getOrNull()
+private fun Any?.asWinRTControl(): Control? = asWinRTOrNull<Control>()
 
-private fun Any?.asWinRTFrameworkElement(): FrameworkElement? =
-    runCatching { this?.asWinRT<FrameworkElement>() }.getOrNull()
+private fun Any?.asWinRTFrameworkElement(): FrameworkElement? = asWinRTOrNull<FrameworkElement>()
+
+private inline fun <reified T : Any> Any?.asWinRTOrNull(): T? {
+    val value = this ?: return null
+    val typeHandle = requireRegisteredWinRTInterfaceTypeHandle(T::class)
+    return ComWrappersSupport.tryUnwrapObject(value)?.use { reference ->
+        // A projected wrapper can defer QueryInterface until a property is read.
+        // Check native support before treating a Grid or other panel as a Control.
+        reference.tryQueryInterface(typeHandle.interfaceId)?.use { value.asWinRT<T>() }
+    }
+}
 
 private fun setClip(element: UIElement, clip: RectangleGeometry?) {
     element.clip = clip
@@ -879,11 +848,12 @@ private fun LayoutNode.collectWinUIInteropRootsInto(result: MutableList<UIElemen
     if (!isPlaced) return
     val interopHolder = interopViewFactoryHolder
     val interopHost = interopHolder as? WinUIInteropViewHost
-    val interopRoot = if (interopHost != null) {
-        interopHost.takeIf { it.isInteropViewActive }?.interopRoot
-    } else {
-        interopHolder?.getInteropView()?.uiElement
-    }
+    val interopRoot =
+        if (interopHost != null) {
+            interopHost.takeIf { it.isInteropViewActive }?.interopRoot
+        } else {
+            interopHolder?.getInteropView()?.uiElement
+        }
     if (interopRoot != null) {
         result += interopRoot
         return

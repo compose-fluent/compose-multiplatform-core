@@ -30,6 +30,7 @@ ext.repos.prebuiltsRoot = new File(checkoutRoot, "prebuilts").absolutePath
  * Adds maven repositories to the given repository handler.
  */
 def addMavenRepositories(RepositoryHandler handler) {
+    def composeWinUiRelease = providers.gradleProperty("composeWinUi.release").orNull == "true"
     def metalavaRepoOverride = System.getenv("METALAVA_REPO")
     if (metalavaRepoOverride != null) {
         for(extraRepo in metalavaRepoOverride.split(File.pathSeparator)) {
@@ -69,7 +70,7 @@ def addMavenRepositories(RepositoryHandler handler) {
     // (for example a skiko-winui build: <skiko>/skiko/build/repo). Listed first so that they win
     // over the published snapshots of the same version.
     def composeWinUiRepoOverride = System.getenv("COMPOSE_WINUI_MAVEN_REPO")
-    if (composeWinUiRepoOverride != null) {
+    if (composeWinUiRepoOverride != null && !composeWinUiRelease) {
         for(extraRepo in composeWinUiRepoOverride.split(File.pathSeparator)) {
             handler.maven {
                 url = new File(extraRepo).toURI()
@@ -105,7 +106,9 @@ def addMavenRepositories(RepositoryHandler handler) {
                 snapshotsOnly()
             }
         }
-        handler.mavenLocal()
+        if (!composeWinUiRelease) {
+            handler.mavenLocal()
+        }
     }
     // Ordering appears to be important: b/229733266
     def androidPluginRepoOverride = System.getenv("GRADLE_PLUGIN_REPO")

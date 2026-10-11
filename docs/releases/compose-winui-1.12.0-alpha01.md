@@ -33,10 +33,10 @@ which individual modules and variants are shipped, including upstream redirects.
 - WinUI changes ported from `winui_dev` commit
   `7ba45b1468d7688d050f9ea2256848383a4ea7f4` onto that baseline.
   Later CMP 1.13 upstream changes are not the base of this release.
-- Rendering dependency: [Skiko WinUI 0.150.1-alpha1](https://github.com/compose-fluent/skiko/releases/tag/skiko-winui/v0.150.1-alpha1),
+- Rendering dependency: [Skiko WinUI 0.150.1-alpha02](https://github.com/compose-fluent/skiko/releases/tag/skiko-winui/v0.150.1-alpha02),
+  fork commit `f16ecf0be58d4c8695459a6db6fe680ece787304`,
   based on upstream Skiko `0.150.1`, commit
   `3956e988e6e93eaf1ee985d725049443e7845807`.
-  The exact published dependency suffix is `alpha1`, not `alpha01`.
 - Windows toolkit: stable kotlin-winrt `0.1.0`.
 
 ## WinUI support
@@ -44,7 +44,13 @@ which individual modules and variants are shipped, including upstream redirects.
 The port includes JVM and MinGW WinUI backends, Compose UI, Foundation,
 Material, Material3 and Adaptive integration, and Navigation 2 / Navigation 3
 adaptations. The released Skiko dependency includes the accessibility peer
-and pattern-provider reuse fix.
+and pattern-provider reuse fix, and restores Canvas state after each frame to
+prevent transforms and clips from accumulating between frames.
+
+Native view interop checks interface support before treating a WinUI element as
+a `Control`, fixing the crash when the `InteropOrder` sample hosts a native `Grid`.
+Material3's MinGW calendar factory is declared explicitly and used directly so
+locale-specific calendar construction does not depend on Windows SDK factory order.
 
 Only required JVM and MinGW implementations are built and published by this
 fork. Other supported targets remain available through metadata redirects to
@@ -90,6 +96,8 @@ Validation completed against the release dependencies:
 - The WinUI JVM demo traversed 101 sample screens with the released Skiko and
   kotlin-winrt dependencies. The smoke test verified Direct3D rendering,
   non-empty drawing bounds, completion, and clean shutdown.
+- The `InteropOrder` regression check entered the native Grid interop screen,
+  observed rendered content, and verified clean shutdown.
 
 MinGW validation covers compilation and published dependency resolution; the
 runtime smoke test above was performed on the WinUI JVM backend.

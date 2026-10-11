@@ -23,7 +23,8 @@ Other platform binaries are neither built nor uploaded by this fork.
 ## Local validation
 
 Use JDK 25, Kotlin 2.4.0, Windows SDK 10.0.26100.0, MSVC and NuGet. The Gradle build
-uses stable kotlin-winrt 0.1.0 and Skiko WinUI 0.150.1-alpha1 from Maven Central.
+uses stable kotlin-winrt 0.1.0 and Skiko WinUI 0.150.1-alpha02 from Maven Central.
+Release mode excludes Maven Local and `COMPOSE_WINUI_MAVEN_REPO` overrides.
 
 ```powershell
 python -B -m unittest discover -s development -p test_compose_winui_release.py

@@ -71,6 +71,8 @@ jobs:
           }
           if (-not (Test-Path $sdk)) { throw 'Windows SDK 10.0.26100.0 is required' }
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Verify release configuration
         shell: pwsh
         run: |

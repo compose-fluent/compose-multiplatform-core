@@ -1023,6 +1023,22 @@ val smokeWinUIMppSampleInputFocus = registerWinAppHostRunTask("smokeWinUIMppSamp
     )
 }
 
+val smokeWinUIMppSampleInteropOrder = registerWinAppHostRunTask("smokeWinUIMppSampleInteropOrder") {
+    args.add("InteropOrder")
+    configureWinUIMppSampleApplicationHost(
+        taskDescription = "Verifies that native Grid interop composes and renders without a Control cast.",
+        reportName = "winui-mpp-sample-interop-order",
+        requiredEvents = listOf(
+            "app-content-composed",
+            "render-direct3d",
+            "render-positive-size",
+            "non-empty-draw-bounds",
+            "frame-observed",
+            "window-content-disposed",
+        ),
+    )
+}
+
 val smokeWinUIMppSampleResourceLoading = registerWinAppHostRunTask("smokeWinUIMppSampleResourceLoading") {
     configureWinUIMppSampleApplicationHost(
         taskDescription = "Runs the WinUI MPP sample until bundled resources load through the runtime classpath.",
@@ -1065,6 +1081,7 @@ registerWinAppHostRunTask("runWinUIMppSample") {
     dependsOn(smokeWinUIMppSampleLaunchWindow)
     dependsOn(smokeWinUIMppSampleRenderOutput)
     dependsOn(smokeWinUIMppSampleInputFocus)
+    dependsOn(smokeWinUIMppSampleInteropOrder)
     dependsOn(smokeWinUIMppSampleResourceLoading)
     dependsOn(smokeWinUIMppSampleShutdownDisposal)
     dependsOn(smokeWinUIMppSampleAutoTraverse)

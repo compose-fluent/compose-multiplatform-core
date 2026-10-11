@@ -371,6 +371,8 @@ if (composeWinUiGradlePluginAvailable && composeWinUiTargetEnabled) {
                 // The calendar locale and date format of the native target are the WinRT ones;
                 // the JVM target has the JVM ones, like the desktop target.
                 type("Windows.Globalization.Calendar")
+                // Keep the locale-specific factory explicit across Windows SDK metadata versions.
+                type("Windows.Globalization.ICalendarFactory")
                 type("Windows.Globalization.DateTimeFormatting.DateTimeFormatter")
                 type("Windows.Globalization.NumberFormatting.DecimalFormatter")
                 type("Windows.System.UserProfile.GlobalizationPreferences")

@@ -21,6 +21,8 @@ package androidx.compose.material3.internal
 import androidx.compose.material3.CalendarLocale
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import io.github.composefluent.winrt.runtime.ActivationFactory
+import io.github.composefluent.winrt.runtime.asWinRT
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -34,6 +36,7 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.number
 import platform.windows.GetLocaleInfoEx
 import windows.globalization.Calendar
+import windows.globalization.ICalendarFactory
 import windows.globalization.datetimeformatting.DateTimeFormatter
 import windows.system.userprofile.GlobalizationPreferences
 
@@ -42,9 +45,8 @@ internal actual class PlatformDateFormat actual constructor(private val locale: 
     private val languages = listOf(locale.toLanguageTag())
 
     actual val firstDayOfWeek: Int
-        get() = GlobalizationPreferences.weekStartsOn.abiValue.let { day ->
-            if (day == 0) 7 else day
-        }
+        get() =
+            GlobalizationPreferences.weekStartsOn.abiValue.let { day -> if (day == 0) 7 else day }
 
     actual fun formatWithPattern(
         utcTimeMillis: Long,
@@ -60,31 +62,35 @@ internal actual class PlatformDateFormat actual constructor(private val locale: 
         // The patterns of the locale, as the other targets have them. A WinRT formatter takes the
         // date formats that the user has set in the regional settings instead ("14-Oct-26" for
         // a skeleton that asks for an abbreviated month, the day and the year).
-        val localePattern = when (skeleton) {
-            DatePickerDefaults.YearMonthSkeleton ->
-                localeDatePattern(LocaleYearMonthPattern)?.withStandaloneMonth()
-            DatePickerDefaults.YearAbbrMonthDaySkeleton ->
-                localeDatePattern(LocaleLongDatePattern)?.withoutWeekday()?.withAbbreviatedMonth()
-            DatePickerDefaults.YearMonthWeekdayDaySkeleton ->
-                localeDatePattern(LocaleLongDatePattern)?.takeIf { 'E' in it.unquoted() }
-            else -> null
-        }
+        val localePattern =
+            when (skeleton) {
+                DatePickerDefaults.YearMonthSkeleton ->
+                    localeDatePattern(LocaleYearMonthPattern)?.withStandaloneMonth()
+                DatePickerDefaults.YearAbbrMonthDaySkeleton ->
+                    localeDatePattern(LocaleLongDatePattern)
+                        ?.withoutWeekday()
+                        ?.withAbbreviatedMonth()
+                DatePickerDefaults.YearMonthWeekdayDaySkeleton ->
+                    localeDatePattern(LocaleLongDatePattern)?.takeIf { 'E' in it.unquoted() }
+                else -> null
+            }
         if (localePattern != null) return formatWithPattern(utcTimeMillis, localePattern, cache)
 
-        val template = when (skeleton) {
-            DatePickerDefaults.YearMonthSkeleton -> "month.full year"
-            DatePickerDefaults.YearAbbrMonthDaySkeleton -> "month.abbreviated day year"
-            DatePickerDefaults.YearMonthWeekdayDaySkeleton ->
-                "dayofweek.full month.full day year"
-            else -> skeleton.toWinRTTemplate()
-        }
+        val template =
+            when (skeleton) {
+                DatePickerDefaults.YearMonthSkeleton -> "month.full year"
+                DatePickerDefaults.YearAbbrMonthDaySkeleton -> "month.abbreviated day year"
+                DatePickerDefaults.YearMonthWeekdayDaySkeleton ->
+                    "dayofweek.full month.full day year"
+                else -> skeleton.toWinRTTemplate()
+            }
         val cacheKey = "winrt:$template:${locale.toLanguageTag()}"
-        val formatter = cache.getOrPut(cacheKey) {
-            DateTimeFormatter(template, languages)
-        } as DateTimeFormatter
+        val formatter =
+            cache.getOrPut(cacheKey) { DateTimeFormatter(template, languages) } as DateTimeFormatter
         // The formatter marks the direction of every field with U+200E or U+200F, which the
         // formatters of the other targets do not and which take room in a line of text.
-        return formatter.format(Instant.fromEpochMilliseconds(utcTimeMillis), UtcTimeZone)
+        return formatter
+            .format(Instant.fromEpochMilliseconds(utcTimeMillis), UtcTimeZone)
             .filterNot { it == '‎' || it == '‏' }
     }
 
@@ -116,25 +122,27 @@ internal actual class PlatformDateFormat actual constructor(private val locale: 
         }
 
         return runCatching {
-            val localDate = LocalDate(
-                year = requireNotNull(year),
-                month = requireNotNull(month),
-                day = requireNotNull(day),
-            )
-            CalendarDate(
-                year = localDate.year,
-                month = localDate.month.number,
-                dayOfMonth = localDate.day,
-                utcTimeMillis = localDate.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(),
-            )
-        }.getOrNull()
+                val localDate =
+                    LocalDate(
+                        year = requireNotNull(year),
+                        month = requireNotNull(month),
+                        day = requireNotNull(day),
+                    )
+                CalendarDate(
+                    year = localDate.year,
+                    month = localDate.month.number,
+                    dayOfMonth = localDate.day,
+                    utcTimeMillis = localDate.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(),
+                )
+            }
+            .getOrNull()
     }
 
     actual fun getDateInputFormat(): DateInputFormat =
         datePatternAsInputFormat(
-            localeDatePattern(LocaleShortDatePattern)?.unquoted()
-                ?.takeIf { pattern -> pattern.any { it == '/' || it == '-' || it == '.' } }
-                ?: "yyyy/MM/dd"
+            localeDatePattern(LocaleShortDatePattern)?.unquoted()?.takeIf { pattern ->
+                pattern.any { it == '/' || it == '-' || it == '.' }
+            } ?: "yyyy/MM/dd"
         )
 
     /**
@@ -143,42 +151,59 @@ internal actual class PlatformDateFormat actual constructor(private val locale: 
      */
     private fun localeDatePattern(type: UInt): String? = memScoped {
         val buffer = allocArray<UShortVar>(LocalePatternCapacity)
-        val length = GetLocaleInfoEx(
-            locale.toLanguageTag(),
-            type or LocaleNoUserOverride,
-            buffer,
-            LocalePatternCapacity,
-        )
+        val length =
+            GetLocaleInfoEx(
+                locale.toLanguageTag(),
+                type or LocaleNoUserOverride,
+                buffer,
+                LocalePatternCapacity,
+            )
         if (length <= 0) return null
-        buffer.toKStringFromUtf16().mapPatternFields { letter, count ->
-            when {
-                letter == 'd' && count >= 3 -> "E".repeat(count)
-                letter == 'g' -> ""
-                else -> letter.toString().repeat(count)
+        buffer
+            .toKStringFromUtf16()
+            .mapPatternFields { letter, count ->
+                when {
+                    letter == 'd' && count >= 3 -> "E".repeat(count)
+                    letter == 'g' -> ""
+                    else -> letter.toString().repeat(count)
+                }
             }
-        }.trim()
+            .trim()
     }
 
     // The second name is the narrow one, as on the other targets ("M" for Monday). The shortest
     // abbreviation of WinRT has two letters in many languages ("Mo"), and its first letter is
     // the narrow name there.
     actual val weekdayNames: List<Pair<String, String>>
-        get() = calendarAt(KnownMondayUtcMillis).let { calendar ->
-            List(DaysInWeek) {
-                val names = calendar.dayOfWeekAsString() to
-                    calendar.dayOfWeekAsString(1).firstCodePoint()
-                calendar.addDays(1)
-                names
+        get() =
+            calendarAt(KnownMondayUtcMillis).let { calendar ->
+                List(DaysInWeek) {
+                    val names =
+                        calendar.dayOfWeekAsString() to
+                            calendar.dayOfWeekAsString(1).firstCodePoint()
+                    calendar.addDays(1)
+                    names
+                }
             }
-        }
 
     actual fun is24HourFormat(): Boolean =
         GlobalizationPreferences.clocks.any { it.contains("24", ignoreCase = true) }
 
-    private fun calendarAt(utcTimeMillis: Long): Calendar = Calendar(languages).apply {
-        changeTimeZone(UtcTimeZone)
-        setDateTime(Instant.fromEpochMilliseconds(utcTimeMillis))
-    }
+    private fun calendarAt(utcTimeMillis: Long): Calendar =
+        // kotlin-winrt 0.1.0 projects constructors from only the first activation factory.
+        // Use the declared locale-specific factory regardless of Windows SDK attribute order.
+        ActivationFactory.get(Calendar.TYPE_NAME, ICalendarFactory.Metadata.IID)
+            .use { factory ->
+                checkNotNull(
+                    factory
+                        .asWinRT<ICalendarFactory>()
+                        .createCalendarDefaultCalendarAndClock(languages)
+                )
+            }
+            .apply {
+                changeTimeZone(UtcTimeZone)
+                setDateTime(Instant.fromEpochMilliseconds(utcTimeMillis))
+            }
 }
 
 private fun Calendar.formatPattern(pattern: String): String = buildString {
@@ -207,48 +232,52 @@ private fun Calendar.formatPattern(pattern: String): String = buildString {
         append(
             when (char) {
                 'y' -> if (length == 2) yearAsTruncatedString(2) else yearAsPaddedString(length)
-                'M' -> when {
-                    length >= 4 -> monthAsString()
-                    length == 3 -> monthAsString(3)
-                    length == 2 -> monthAsPaddedNumericString(2)
-                    else -> monthAsNumericString()
-                }
-                'L' -> when {
-                    length >= 4 -> monthAsSoloString()
-                    length == 3 -> monthAsSoloString(3)
-                    length == 2 -> monthAsPaddedNumericString(2)
-                    else -> monthAsNumericString()
-                }
+                'M' ->
+                    when {
+                        length >= 4 -> monthAsString()
+                        length == 3 -> monthAsString(3)
+                        length == 2 -> monthAsPaddedNumericString(2)
+                        else -> monthAsNumericString()
+                    }
+                'L' ->
+                    when {
+                        length >= 4 -> monthAsSoloString()
+                        length == 3 -> monthAsSoloString(3)
+                        length == 2 -> monthAsPaddedNumericString(2)
+                        else -> monthAsNumericString()
+                    }
                 'd' -> if (length >= 2) dayAsPaddedString(length) else dayAsString()
-                'E', 'e', 'c' ->
-                    if (length >= 4) dayOfWeekAsString() else dayOfWeekAsString(length)
+                'E',
+                'e',
+                'c' -> if (length >= 4) dayOfWeekAsString() else dayOfWeekAsString(length)
                 else -> pattern.substring(index, index + length)
-            },
+            }
         )
         index += length
     }
 }
 
 /** Replaces the runs of pattern letters outside of quoted text. */
-private inline fun String.mapPatternFields(transform: (letter: Char, count: Int) -> String): String =
-    buildString {
-        val pattern = this@mapPatternFields
-        var index = 0
-        var quoted = false
-        while (index < pattern.length) {
-            val char = pattern[index]
-            if (char == '\'') quoted = !quoted
-            if (quoted || !char.isLetter()) {
-                append(char)
-                index++
-                continue
-            }
-            val end = pattern.indexOfFirstFrom(index + 1) { it != char }
-            val count = (if (end < 0) pattern.length else end) - index
-            append(transform(char, count))
-            index += count
+private inline fun String.mapPatternFields(
+    transform: (letter: Char, count: Int) -> String
+): String = buildString {
+    val pattern = this@mapPatternFields
+    var index = 0
+    var quoted = false
+    while (index < pattern.length) {
+        val char = pattern[index]
+        if (char == '\'') quoted = !quoted
+        if (quoted || !char.isLetter()) {
+            append(char)
+            index++
+            continue
         }
+        val end = pattern.indexOfFirstFrom(index + 1) { it != char }
+        val count = (if (end < 0) pattern.length else end) - index
+        append(transform(char, count))
+        index += count
     }
+}
 
 private fun String.unquoted(): String = replace(Regex("'[^']*'"), "")
 
@@ -264,16 +293,19 @@ private fun String.withStandaloneMonth(): String = mapPatternFields { letter, co
 private fun String.withoutWeekday(): String =
     replace(Regex("^E+[^A-Za-z']*"), "").replace(Regex("[^A-Za-z']*E+"), "")
 
-private fun String.toWinRTTemplate(): String = buildList {
-    if ('E' in this@toWinRTTemplate) add("dayofweek.full")
-    when {
-        "MMMM" in this@toWinRTTemplate -> add("month.full")
-        "MMM" in this@toWinRTTemplate -> add("month.abbreviated")
-        'M' in this@toWinRTTemplate -> add("month.integer")
-    }
-    if ('d' in this@toWinRTTemplate) add("day")
-    if ('y' in this@toWinRTTemplate) add("year")
-}.joinToString(separator = " ").ifEmpty { "shortdate" }
+private fun String.toWinRTTemplate(): String =
+    buildList {
+            if ('E' in this@toWinRTTemplate) add("dayofweek.full")
+            when {
+                "MMMM" in this@toWinRTTemplate -> add("month.full")
+                "MMM" in this@toWinRTTemplate -> add("month.abbreviated")
+                'M' in this@toWinRTTemplate -> add("month.integer")
+            }
+            if ('d' in this@toWinRTTemplate) add("day")
+            if ('y' in this@toWinRTTemplate) add("year")
+        }
+        .joinToString(separator = " ")
+        .ifEmpty { "shortdate" }
 
 private inline fun String.indexOfFirstFrom(startIndex: Int, predicate: (Char) -> Boolean): Int {
     for (index in startIndex until length) {
