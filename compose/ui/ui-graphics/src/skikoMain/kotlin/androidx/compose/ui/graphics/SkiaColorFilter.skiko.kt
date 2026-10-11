@@ -32,11 +32,10 @@ fun ColorFilter.asSkiaColorFilter(): SkColorFilter = nativeColorFilter
 fun SkColorFilter.asComposeColorFilter(): ColorFilter = ColorFilter(this)
 
 internal actual fun actualTintColorFilter(color: Color, blendMode: BlendMode): NativeColorFilter {
-    // TODO: https://github.com/JetBrains/skiko/pull/1272 - drop isNoOpBlend and the
-    //  pass-through filter once skiko reports the absent filter as null. Replace by this:
-    // SkColorFilter.makeBlend(color.toArgb(), blendMode.toSkia()) ?: PassThroughColorFilter
+    // The CMP 1.12.1 Skiko version needs the explicit no-op guard. Newer Skiko versions used by
+    // WinUI return null for an absent filter, which also needs the pass-through representation.
     if (isNoOpBlend(color, blendMode)) return PassThroughColorFilter
-    return SkColorFilter.makeBlend(color.toArgb(), blendMode.toSkia())
+    return SkColorFilter.makeBlend(color.toArgb(), blendMode.toSkia()) ?: PassThroughColorFilter
 }
 
 /**

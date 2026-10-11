@@ -33,6 +33,21 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
+def composeWinUiMingwTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableMingwTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+
 androidXMultiplatform {
     redirect("androidx.navigation3") {
         androidLibrary {
@@ -42,7 +57,9 @@ androidXMultiplatform {
             androidResources.enable = true
         }
     }
-    desktop()
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
     mac()
     ios()
     js()
@@ -56,10 +73,14 @@ androidXMultiplatform {
         commonMain.dependencies {
             api("androidx.navigation3:navigation3-runtime:$navigation3Version")
             api("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
-            api("org.jetbrains.compose.animation:animation:1.10.0")
-            api("org.jetbrains.compose.runtime:runtime:1.10.0")
-            api("org.jetbrains.compose.runtime:runtime-saveable:1.10.0")
-            api("org.jetbrains.compose.ui:ui:1.10.0")
+            // The WinUI build compiles against the Compose modules of this build (see navigation-compose).
+            def compose = { String projectPath, String published ->
+                composeWinUiMingwTargetEnabled ? project(projectPath) : published
+            }
+            api(compose(":compose:animation:animation", "org.jetbrains.compose.animation:animation:1.10.0"))
+            api(compose(":compose:runtime:runtime", "org.jetbrains.compose.runtime:runtime:1.10.0"))
+            api(compose(":compose:runtime:runtime-saveable", "org.jetbrains.compose.runtime:runtime-saveable:1.10.0"))
+            api(compose(":compose:ui:ui", "org.jetbrains.compose.ui:ui:1.10.0"))
             api("androidx.savedstate:savedstate:1.4.0")
             api("androidx.savedstate:savedstate-compose:1.4.0")
             implementation("androidx.annotation:annotation:1.9.1")
@@ -133,4 +154,68 @@ androidx {
             "create a higher level solution."
     samples(project(":navigation3:navigation3-ui:navigation3-ui-samples"))
     addGoldenImageAssets()
+}
+
+kotlin {
+    if (composeWinUiGradlePluginAvailable && composeWinUiMingwTargetEnabled) {
+        mingwX64("winuiMingw")
+
+        sourceSets {
+            winuiMingwMain {
+                dependsOn(nativeMain)
+            }
+        }
+    }
+    if (composeWinUiGradlePluginAvailable && composeWinUiJvmTargetEnabled) {
+        jvm("winuiJvm")
+
+        sourceSets {
+            winuiJvmMain {
+                dependsOn(nonAndroidMain)
+                kotlin.srcDir("src/desktopMain/kotlin")
+                dependencies {
+                // Compile against the WinUI Compose UI that the application runs with. The
+                // published one is the desktop variant, whose actuals (Dialog_skikoKt) are not
+                // in the WinUI one.
+                    implementation(project(":compose:ui:ui"))
+                }
+            }
+
+            winuiJvmTest {
+                dependsOn(nonAndroidTest)
+            }
+        }
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
+            freeCompilerArgs.add("-Xjdk-release=25")
+        }
+    }
+}
+
+configurations.configureEach { configuration ->
+    def lowerName = configuration.name.toLowerCase(Locale.ROOT)
+    if (lowerName.contains("winui")) {
+        if (!lowerName.contains("mingw")) {
+            configuration.attributes.attribute(
+                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
+                    25
+            )
+        }
+        configuration.resolutionStrategy.dependencySubstitution {
+            substitute(module("org.jetbrains.skiko:skiko"))
+                    .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
+                    .because("compose-winui JVM uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
+        }
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.enabled = false
+    }
 }

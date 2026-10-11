@@ -20,12 +20,9 @@ import kotlin.native.Platform as NativePlatform
 import org.jetbrains.skia.FontStyle as SkFontStyle
 import org.jetbrains.skia.Typeface as SkTypeface
 import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontStyle
 import kotlin.experimental.ExperimentalNativeApi
 import org.jetbrains.skia.Data
 import org.jetbrains.skia.FontMgr
-import org.jetbrains.skia.FontSlant
-import org.jetbrains.skia.FontWidth
 
 @OptIn(ExperimentalTextApi::class)
 internal actual fun loadTypeface(font: Font): SkTypeface {
@@ -44,11 +41,7 @@ internal actual fun loadTypeface(font: Font): SkTypeface {
 }
 
 private val Font.skFontStyle: SkFontStyle
-    get() = SkFontStyle(
-        weight = weight.weight,
-        width = FontWidth.NORMAL,
-        slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT
-    )
+    get() = style.toSkFontStyle().withWeight(weight.weight)
 
 @OptIn(ExperimentalNativeApi::class)
 internal actual fun currentPlatform(): Platform = when (NativePlatform.osFamily) {

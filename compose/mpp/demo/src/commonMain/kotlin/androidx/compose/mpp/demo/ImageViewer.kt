@@ -47,8 +47,10 @@ import kotlin.math.min
 import kotlin.math.pow
 
 @Composable
-fun ImageViewer() {
-    ImageViewer(remember {
+fun ImageViewer(
+    onValidationEvent: (String) -> Unit = {},
+) {
+    val image = remember {
         ImageBitmap(500, 1000).apply {
             Canvas(this).apply {
                 drawRect(0f, 0f, size.width, size.height, Paint().apply {
@@ -60,12 +62,29 @@ fun ImageViewer() {
                 })
             }
         }
-    })
+    }
+    SideEffect {
+        val pixels = IntArray(4)
+        image.readPixels(
+            buffer = pixels,
+            startX = 0,
+            startY = 0,
+            width = 2,
+            height = 2,
+        )
+        if (pixels.any { it != 0 }) {
+            onValidationEvent("image-bitmap-drawn")
+        }
+    }
+    ImageViewer(image, onValidationEvent)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ImageViewer(image: ImageBitmap) {
+fun ImageViewer(
+    image: ImageBitmap,
+    onValidationEvent: (String) -> Unit = {},
+) {
     val cameraState = remember { CameraState() }
 
     BoxWithConstraints {
@@ -75,6 +94,9 @@ fun ImageViewer(image: ImageBitmap) {
         val areaCenter = Offset(areaSize.width / 2f, areaSize.height / 2f)
 
         if (areaSize.width > 0 && areaSize.height > 0) {
+            SideEffect {
+                onValidationEvent("positive-layout-size")
+            }
             DisposableEffect(Unit) {
                 cameraState.setScale(
                     min(areaSize.width / imageSize.width, areaSize.height / imageSize.height),
@@ -88,6 +110,7 @@ fun ImageViewer(image: ImageBitmap) {
             Modifier
                 .fillMaxSize()
                 .drawWithContent {
+                    onValidationEvent("draw-content")
                     drawIntoCanvas {
                         it.withSave {
                             it.translate(areaCenter.x, areaCenter.y)
@@ -125,6 +148,8 @@ fun ImageViewer(image: ImageBitmap) {
         )
 
         SideEffect {
+            onValidationEvent("image-viewer-composed")
+            onValidationEvent("input-handlers-composed")
             cameraState.limitTargetInsideArea(areaSize, imageSize)
         }
     }

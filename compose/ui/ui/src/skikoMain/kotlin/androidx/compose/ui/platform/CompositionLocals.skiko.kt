@@ -58,6 +58,18 @@ val LocalPlatformWindowInsets = staticCompositionLocalOf<PlatformWindowInsets> {
     error("CompositionLocal LocalPlatformWindowInsets not present")
 }
 
+@Composable
+internal fun PlatformWindowInsets.exclude(
+    safeInsets: Boolean,
+    ime: Boolean,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalPlatformWindowInsets provides excluding(safeInsets, ime),
+        content = content,
+    )
+}
+
 /**
  * The CompositionLocal providing prefetch scheduler associated with the current scene.
  */

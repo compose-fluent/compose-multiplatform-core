@@ -1,0 +1,24 @@
+import androidx.build.PlatformIdentifier
+import androidx.build.SoftwareType
+
+plugins {
+    id("AndroidXPlugin")
+    id("JetBrainsAndroidXPlugin")
+}
+
+// Window Core already supports Windows upstream. Publish a versioned redirect,
+// not a duplicate of the AndroidX implementation.
+androidXMultiplatform {
+    redirect("androidx.window") {
+        jvm()
+        mingwX64()
+    }
+    defaultPlatform(PlatformIdentifier.JVM)
+}
+
+androidx {
+    name = "Compose WinUI WindowManager Core"
+    type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
+    inceptionYear = "2026"
+    description = "WinUI release coordinates redirecting to WindowManager Core 1.5.1."
+}

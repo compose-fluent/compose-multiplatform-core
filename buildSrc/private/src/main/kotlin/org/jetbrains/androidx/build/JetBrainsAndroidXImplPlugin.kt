@@ -47,6 +47,7 @@ class JetBrainsAndroidXImplPlugin @Inject constructor(
         project.configureMavenArtifactUpload(componentFactory)
         project.configureDependencyVerification()
         project.registerRedirectVersionsExtension()
+        project.configureWinUiMingwDependencies()
         project.plugins.all { plugin ->
             if (plugin is KotlinMultiplatformPluginWrapper) {
                 onKotlinMultiplatformPluginApplied(project)

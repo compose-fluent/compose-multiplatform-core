@@ -126,6 +126,9 @@ object JetBrainsPublication {
             ComposeComponent(":savedstate:savedstate", supportedPlatforms = ComposePlatforms.ALL),
             ComposeComponent(":savedstate:savedstate-compose", supportedPlatforms = ComposePlatforms.ALL),
         ),
+        "WINDOW" to listOf(
+            ComposeComponent(":window:window-core", supportedPlatforms = ComposePlatforms.ALL),
+        ),
     )
 
     private val jetBrainsProjectsWithAndroidTarget = setOf(

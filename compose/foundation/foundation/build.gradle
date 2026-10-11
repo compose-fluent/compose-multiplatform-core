@@ -34,6 +34,25 @@ plugins {
     alias(libs.plugins.atomicFu)
 }
 
+def composeWinUiJvmTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableJvmTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+def composeWinUiGradlePluginAvailable = JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_22)
+def composeWinUiSkikoWinUiVersion = providers
+        .gradleProperty("composeWinUi.skikoWinUiVersion")
+        .orElse("0.0.0-SNAPSHOT")
+def kotlinWinRtVersion = providers
+        .gradleProperty("kotlinWinRt.version")
+        .orElse("0.1.0-SNAPSHOT")
+
+def composeWinUiMingwTargetEnabled = providers
+        .gradleProperty("composeWinUi.enableMingwTarget")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
+
 androidXMultiplatform {
     redirect("androidx.compose.foundation") {
         androidLibrary {
@@ -42,7 +61,9 @@ androidXMultiplatform {
             androidResources.enable = true
         }
     }
-    desktop()
+    if (!composeWinUiJvmTargetEnabled) {
+        desktop()
+    }
     mac()
     ios()
     js()
@@ -163,8 +184,19 @@ androidXMultiplatform {
             dependsOn(skikoTest)
         }
 
+        // The Skiko actuals of the native targets. They are separate from nativeMain, which a
+        // WinUI native target shares without skikoMain.
+        skikoNativeMain {
+            dependsOn(skikoMain)
+        }
+
         nativeMain {
             dependsOn(nonJvmMain)
+            // The WinUI native target shares nativeMain but has its own actuals for what
+            // skikoNativeMain provides; see :compose:ui:ui.
+            if (!composeWinUiMingwTargetEnabled) {
+                dependsOn(skikoNativeMain)
+            }
         }
 
         nativeTest {
@@ -258,4 +290,89 @@ tasks.register("updateTranslations", UpdateTranslationsTask.class) {
             "si", "sk", "sl", "sq", "sr", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur",
             "uz", "vi", "zh_CN", "zh_HK", "zh_TW", "zu"
     ]
+}
+
+kotlin {
+    if (composeWinUiGradlePluginAvailable && (composeWinUiJvmTargetEnabled || composeWinUiMingwTargetEnabled)) {
+        if (composeWinUiJvmTargetEnabled) {
+            jvm("winuiJvm")
+        }
+        if (composeWinUiMingwTargetEnabled) {
+            mingwX64("winuiMingw")
+        }
+
+        sourceSets {
+            winuiMain {
+                dependsOn(skikoMain)
+                dependencies {
+                    implementation("io.github.compose-fluent:winrt-runtime:${kotlinWinRtVersion.get()}")
+                }
+            }
+
+            winuiTest {
+                // :compose:ui:ui-test has no WinUI variant, so skikoTest, which uses it, cannot
+                // be compiled for this target. The WinUI tests of this module are the ones
+                // that do not need it.
+                dependsOn(commonTest)
+            }
+
+            if (composeWinUiJvmTargetEnabled) {
+                winuiJvmMain {
+                    dependsOn(winuiMain)
+                }
+
+                winuiJvmTest {
+                    dependsOn(winuiTest)
+                }
+            }
+
+            if (composeWinUiMingwTargetEnabled) {
+                winuiMingwMain {
+                    dependsOn(winuiMain)
+                    dependsOn(nativeMain)
+                }
+            }
+        }
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.exclude("**/BasicContextMenuRepresentation.skiko.kt")
+        task.exclude("**/DefaultTextContextMenuDropdownProvider.skiko.kt")
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.exclude("**/BasicContextMenuRepresentation.skiko.kt")
+        task.exclude("**/DefaultTextContextMenuDropdownProvider.skiko.kt")
+        task.compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
+            freeCompilerArgs.add("-Xjdk-release=25")
+        }
+    }
+}
+
+configurations.configureEach { configuration ->
+    def lowerName = configuration.name.toLowerCase(Locale.ROOT)
+    if (lowerName.contains("winui")) {
+        if (!lowerName.contains("mingw")) {
+            configuration.attributes.attribute(
+                    org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE,
+                    25
+            )
+        }
+        configuration.resolutionStrategy.dependencySubstitution {
+            substitute(module("org.jetbrains.skiko:skiko"))
+                    .using(module("io.github.compose-fluent:skiko-winui:${composeWinUiSkikoWinUiVersion.get()}"))
+                    .because("compose-winui JVM uses skiko-winui as the WinUI replacement for the regular Skiko distribution.")
+        }
+    }
+}
+
+tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+    if (task.name.contains("Winui")) {
+        task.enabled = false
+    }
 }

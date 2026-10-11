@@ -66,12 +66,17 @@ abstract class RedirectVersionsService : BuildService<RedirectVersionsService.Pa
         private const val TOML_FILE_NAME = "redirectversions.toml"
 
         internal fun registerOrGet(project: Project): Provider<RedirectVersionsService> {
-            val contents = project.lazyReadFile(TOML_FILE_NAME)
+            val fileName = if (project.providers.gradleProperty("composeWinUi.release").orNull == "true") {
+                "gradle/compose-winui-redirectversions.toml"
+            } else {
+                TOML_FILE_NAME
+            }
+            val contents = project.lazyReadFile(fileName)
             return project.gradle.sharedServices.registerIfAbsent(
                 "redirectVersionsService",
                 RedirectVersionsService::class.java,
             ) { spec ->
-                spec.parameters.tomlFileName = TOML_FILE_NAME
+                spec.parameters.tomlFileName = fileName
                 spec.parameters.tomlFileContents = contents
             }
         }

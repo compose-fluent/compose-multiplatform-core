@@ -1,0 +1,177 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import groovy.xml.XmlParser
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.GenerateMavenPom
+import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.jetbrains.androidx.build.JetBrainsPublication
+
+// Build Windows variants only; keep other targets as verified upstream redirects.
+// Keep normal JetBrains publication tasks and coordinates unchanged outside release mode.
+def release = new Properties()
+rootProject.file("compose-winui-release.properties").withInputStream { release.load(it) }
+def modulePaths = new JsonSlurper().parse(rootProject.file('compose-winui-modules.json')).values().flatten()
+def redirectsFile = rootProject.layout.buildDirectory.file('compose-winui-release/upstream-redirects.json').get().asFile
+if (!redirectsFile.isFile()) throw new GradleException('Run python development/compose_winui_release.py prepare first')
+def upstreamRedirects = new JsonSlurper().parse(redirectsFile)
+def coordinates = modulePaths.collectEntries { path ->
+    def family = JetBrainsPublication.INSTANCE.projectPathToLibrary[path]
+    def group = JetBrainsPublication.INSTANCE.mavenGroupFor(path)
+    [("$group:${path.tokenize(':').last()}".toString()): [
+        group: group.replaceFirst('org.jetbrains.', 'io.github.compose-fluent.'),
+        version: release.getProperty("${family}.version"), family: family, path: path,
+    ]]
+}
+def stage = tasks.register('stageComposeWinUiRelease') {
+    group = 'publishing'
+    description = 'Stages the complete Windows release in a local Maven repository; does not upload.'
+}
+def repositoryDir = rootProject.layout.buildDirectory.dir('compose-winui-release/repository')
+def selectedPublications = [:]
+
+modulePaths.each { path ->
+    def p = project(path)
+    p.afterEvaluate {
+        // Declare the fork projects, rather than only substituting during target
+        // resolution: KMP's common metadata reads source-set declarations directly.
+        p.configurations.each { configuration ->
+            configuration.dependencies.toList().each { dependency ->
+                def mapped = coordinates["${dependency.group}:${dependency.name}".toString()]
+                if (mapped != null && mapped.path != path) {
+                    configuration.dependencies.remove(dependency)
+                    configuration.dependencies.add(p.dependencies.project(path: mapped.path))
+                }
+            }
+        }
+        def publishing = p.extensions.getByType(PublishingExtension)
+        publishing.repositories.maven {
+            name = 'WinUiRelease'
+            url = repositoryDir
+        }
+        def names = publishing.publications.names
+        def anchor = names.contains('androidxKmp') ? 'androidxKmp' : 'kotlinMultiplatform'
+        def jvm = names.contains('winuiJvm') ? 'winuiJvm' : names.contains('desktop') ? 'desktop' : 'jvm'
+        def nativeName = names.contains('winuiMingw') ? 'winuiMingw' : 'mingwX64'
+        def upstream = upstreamRedirects[path]
+        def selected = upstream.mode == 'jetpack' ? [anchor] :
+            upstream.mode == 'mingw' ? [anchor, nativeName] : [anchor, jvm, nativeName]
+        selected.each { name ->
+            if (!names.contains(name)) throw new GradleException("$path lacks release publication $name; available: $names")
+        }
+        selectedPublications[path] = selected
+        def family = JetBrainsPublication.INSTANCE.projectPathToLibrary[path]
+        def javadoc = p.tasks.register('winUiReleaseJavadocJar', Jar) {
+            archiveClassifier = 'javadoc'
+            from(rootProject.file('docs/releases/compose-winui-1.12.0-alpha01.md'))
+        }
+        selected.each { publicationName ->
+            def publication = publishing.publications.getByName(publicationName) as MavenPublication
+            publication.artifact(javadoc)
+            publication.pom {
+                url = 'https://github.com/compose-fluent/compose-multiplatform-core'
+                developers { developer { id = 'compose-fluent'; name = 'Compose Fluent contributors' } }
+                scm {
+                    url = 'https://github.com/compose-fluent/compose-multiplatform-core'
+                    connection = 'scm:git:https://github.com/compose-fluent/compose-multiplatform-core.git'
+                    tag = release.getProperty('release.tag')
+                }
+                properties.put('compose.winui.cmp.version', release.getProperty("${family}.cmp"))
+                properties.put('compose.winui.jetpack.version', release.getProperty("${family}.jetpack"))
+                properties.put('compose.winui.upstream.commit', release.getProperty('upstream.commit'))
+            }
+            stage.configure { dependsOn("$path:publish${publicationName.capitalize()}PublicationToWinUiReleaseRepository") }
+        }
+        // Run after the standard publisher's dependency metadata adjustments.
+        p.gradle.projectsEvaluated {
+            p.tasks.withType(GenerateModuleMetadata).configureEach { task ->
+                task.doLast {
+                    def file = task.outputFile.get().asFile
+                    def data = new JsonSlurper().parse(file)
+                    def isAnchor = task.name == "generateMetadataFileFor${anchor.capitalize()}Publication"
+                    data.variants = data.variants.findAll { variant ->
+                        def type = variant.attributes?.get('org.jetbrains.kotlin.platform.type')
+                        (upstream.mode != 'jetpack' && type == 'common') ||
+                            (upstream.mode == 'winui' && variant.name.toLowerCase().startsWith(jvm.toLowerCase())) ||
+                            (upstream.mode != 'jetpack' && variant.name.toLowerCase().startsWith(nativeName.toLowerCase()))
+                    }
+                    data.variants.each { variant ->
+                        // AndroidX's atomic constraints cover non-Windows modules that this
+                        // release does not ship. Direct dependency versions remain explicit.
+                        variant.remove('dependencyConstraints')
+                        variant.dependencies?.each { dep ->
+                            def mapped = coordinates["${dep.group}:${dep.module}".toString()]
+                            if (mapped != null) {
+                                dep.group = mapped.group
+                                dep.version = [requires: mapped.version]
+                            }
+                            if (variant.name.toLowerCase().contains('winui') && dep.group == 'org.jetbrains.skiko') {
+                                dep.group = 'io.github.compose-fluent'
+                                dep.module = 'skiko-winui'
+                                dep.version = [requires: release.getProperty('skiko.version')]
+                            }
+                        }
+                    }
+                    if (isAnchor) data.variants.addAll(upstream.variants)
+                    file.text = JsonOutput.prettyPrint(JsonOutput.toJson(data)) + '\n'
+                }
+            }
+            p.tasks.withType(GenerateMavenPom).configureEach { task ->
+                task.doLast {
+                    def pom = new XmlParser(false, false).parse(task.destination)
+                    pom.dependencyManagement.toList().each { pom.remove(it) }
+                    pom.dependencies.dependency.each { dep ->
+                        def mapped = coordinates["${dep.groupId.text()}:${dep.artifactId.text()}".toString()]
+                        if (mapped != null) {
+                            dep.groupId[0].value = mapped.group
+                            dep.version[0].value = mapped.version
+                        }
+                        // Gradle's POM resolver can select a concrete project target.
+                        // A redirected target has no fork artifact; use its upstream GAV.
+                        coordinates.values().each { target ->
+                            def moduleName = target.path.tokenize(':').last()
+                            if (dep.groupId.text() == target.group && dep.artifactId.text().startsWith(moduleName + '-')) {
+                                def suffix = dep.artifactId.text().substring(moduleName.length() + 1)
+                                if (suffix in ['jvm', 'desktop', 'mingwx64', 'winuijvm', 'winuimingw'] &&
+                                        !selectedPublications[target.path].any { it.toLowerCase() == suffix }) {
+                                    def variant = upstreamRedirects[target.path].variants.find {
+                                        it.name.toLowerCase().startsWith(suffix) && it['available-at'] != null
+                                    }
+                                    if (variant == null) throw new GradleException("Missing upstream target for ${dep.groupId.text()}:${dep.artifactId.text()}")
+                                    def link = variant['available-at']
+                                    dep.groupId[0].value = link.group
+                                    dep.artifactId[0].value = link.module
+                                    dep.version[0].value = link.version
+                                }
+                            }
+                        }
+                    }
+                    if (task.name == "generatePomFileFor${anchor.capitalize()}Publication") {
+                        pom.dependencies.toList().each { pom.remove(it) }
+                        def dependency = pom.appendNode('dependencies').appendNode('dependency')
+                        dependency.appendNode('groupId', upstream.mode == 'winui' ? p.group.toString() : upstream.group)
+                        dependency.appendNode('artifactId', upstream.mode == 'winui' ? publishing.publications.getByName(jvm).artifactId : upstream.module)
+                        dependency.appendNode('version', upstream.mode == 'winui' ? p.version.toString() : upstream.version)
+                        dependency.appendNode('scope', 'compile')
+                    }
+                    pom.url[0].value = 'https://github.com/compose-fluent/compose-multiplatform-core'
+                    pom.scm[0].url[0].value = 'https://github.com/compose-fluent/compose-multiplatform-core'
+                    pom.scm[0].connection[0].value = 'scm:git:https://github.com/compose-fluent/compose-multiplatform-core.git'
+                    task.destination.text = groovy.xml.XmlUtil.serialize(pom).replace(
+                        '<modelVersion>', '<!-- do_not_remove: published-with-gradle-metadata -->\n  <modelVersion>')
+                }
+            }
+        }
+    }
+}
+
+// Evaluation is explicit so the aggregate task includes every selected module.
+modulePaths.each { evaluationDependsOn(it) }
+tasks.register('describeComposeWinUiRelease') {
+    doLast {
+        def output = rootProject.layout.buildDirectory.file('compose-winui-release/publications.json').get().asFile
+        output.parentFile.mkdirs()
+        output.text = JsonOutput.prettyPrint(JsonOutput.toJson(selectedPublications)) + '\n'
+        println("WinUI publication inventory: $output")
+    }
+}
+stage.configure { dependsOn('describeComposeWinUiRelease') }

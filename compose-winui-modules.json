@@ -1,0 +1,25 @@
+{
+  "winui": [
+    ":compose:animation:animation", ":compose:animation:animation-core",
+    ":compose:foundation:foundation", ":compose:foundation:foundation-layout",
+    ":compose:material:material", ":compose:material:material-ripple",
+    ":compose:material3:material3", ":compose:material3:material3-window-size-class",
+    ":compose:material3:material3-adaptive-navigation-suite",
+    ":compose:material3:adaptive:adaptive", ":compose:material3:adaptive:adaptive-layout",
+    ":compose:material3:adaptive:adaptive-navigation",
+    ":compose:ui:ui", ":compose:ui:ui-graphics", ":compose:ui:ui-text",
+    ":navigation:navigation-compose", ":navigation3:navigation3-ui"
+  ],
+  "mingw": [
+    ":compose:ui:ui-geometry", ":compose:ui:ui-unit", ":compose:ui:ui-util", ":compose:ui:ui-backhandler"
+  ],
+  "jetpack": [
+    ":compose:runtime:runtime", ":compose:runtime:runtime-saveable",
+    ":lifecycle:lifecycle-common", ":lifecycle:lifecycle-runtime", ":lifecycle:lifecycle-viewmodel",
+    ":lifecycle:lifecycle-viewmodel-savedstate", ":lifecycle:lifecycle-runtime-compose",
+    ":lifecycle:lifecycle-viewmodel-compose", ":lifecycle:lifecycle-viewmodel-navigation3",
+    ":navigation:navigation-common", ":navigation:navigation-runtime",
+    ":navigationevent:navigationevent-compose", ":savedstate:savedstate", ":savedstate:savedstate-compose",
+    ":window:window-core"
+  ]
+}

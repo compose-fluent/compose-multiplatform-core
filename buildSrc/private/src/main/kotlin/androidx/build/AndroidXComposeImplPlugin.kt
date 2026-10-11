@@ -29,6 +29,7 @@ import org.gradle.api.artifacts.type.ArtifactTypeDefinition
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.file.FileCollection
 import org.gradle.kotlin.dsl.getByType
+import org.jetbrains.androidx.build.configureWinUiMingwDependencies
 import org.jetbrains.kotlin.gradle.plugin.CompilerPluginConfig
 import org.jetbrains.kotlin.gradle.plugin.KotlinBaseApiPlugin
 import org.jetbrains.kotlin.gradle.plugin.KotlinBasePluginWrapper
@@ -42,6 +43,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 /** Plugin to apply common configuration for Compose projects. */
 class AndroidXComposeImplPlugin : Plugin<Project> {
     override fun apply(project: Project) {
+        project.configureWinUiMingwDependencies()
+
         project.plugins.configureEach { plugin ->
             when (plugin) {
                 is AppPlugin,
@@ -55,9 +58,17 @@ class AndroidXComposeImplPlugin : Plugin<Project> {
                         .getByType<KotlinMultiplatformAndroidComponentsExtension>()
                         .finalizeDsl { project.configureAndroidCommonOptions(it.lint) }
                 }
-                is KotlinBasePluginWrapper,
-                is KotlinBaseApiPlugin -> {
+                is KotlinBasePluginWrapper -> {
                     configureComposeCompilerPlugin(project)
+                }
+                is KotlinBaseApiPlugin -> {
+                    // KWINRT-067: without a Kotlin plugin wrapper this is AGP built-in Kotlin.
+                    // With one, a third-party plugin (kotlin-winrt) applied it to register
+                    // standalone compile tasks, and the project is already configured through
+                    // the wrapper.
+                    if (project.plugins.withType(KotlinBasePluginWrapper::class.java).isEmpty()) {
+                        configureComposeCompilerPlugin(project)
+                    }
                 }
             }
         }
@@ -205,6 +216,10 @@ private fun configureComposeCompilerPlugin(project: Project) {
                 .files
 
         project.tasks.withType(KotlinCompilationTask::class.java).configureEach { compile ->
+            // KWINRT-067: kotlin-winrt compiles its generated WinRT projections in tasks of their
+            // own, which have no Compose code and no Compose runtime on the classpath.
+            if (compile.name.contains("WinRTProjection")) return@configureEach
+
             compile.applyPlugin(kotlinPlugin)
 
             val isAndroidOrJvm = compile is KotlinJvmCompile
@@ -221,7 +236,11 @@ private fun configureComposeCompilerPlugin(project: Project) {
 private fun KotlinCompilationTask<*>.applyPlugin(plugins: FileCollection) =
     when (this) {
         is AbstractKotlinCompile<*> -> pluginClasspath.from(plugins)
-        is AbstractKotlinNativeCompile<*, *> -> compilerPluginClasspath = plugins
+        // Added to the plugins that the task already has, as for the JVM tasks above: replacing
+        // them drops the kotlin-winrt compiler plugin of a WinUI native target, which the Kotlin
+        // plugin puts here from its compiler plugin configuration.
+        is AbstractKotlinNativeCompile<*, *> ->
+            compilerPluginClasspath = compilerPluginClasspath?.plus(plugins) ?: plugins
         else -> throw IllegalStateException("Unsupported Kotlin compilation task type")
     }
 

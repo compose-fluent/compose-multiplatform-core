@@ -1,0 +1,124 @@
+name: Publish Compose WinUI
+
+on:
+  push:
+    branches: ['codex/winui-cmp-1.12.1']
+    tags: ['compose-winui/v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the verified release (requires the matching release tag)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-winui-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Record JDK 21 toolchain
+        shell: pwsh
+        run: '"ANDROIDX_JDK21=$env:JAVA_HOME" >> $env:GITHUB_ENV'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: microsoft/setup-msbuild@v2
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Windows SDK
+        shell: pwsh
+        run: |
+          $sdk = 'C:\Program Files (x86)\Windows Kits\10\References\10.0.26100.0'
+          if (-not (Test-Path $sdk)) {
+            winget install --id Microsoft.WindowsSDK.10.0.26100 --silent --accept-source-agreements --accept-package-agreements
+          }
+          if (-not (Test-Path $sdk)) { throw 'Windows SDK 10.0.26100.0 is required' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify release configuration
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s development -p test_compose_winui_release.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python development/compose_winui_release.py verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python development/compose_winui_release.py prepare
+          exit $LASTEXITCODE
+      - name: Build Windows publications
+        shell: pwsh
+        run: |
+          .\gradlew.bat stageComposeWinUiRelease '-PcomposeWinUi.release=true' '-PcomposeWinUi.enableJvmTarget=true' '-PcomposeWinUi.enableMingwTarget=true' '-Pandroidx.enabled.kmp.target.platforms=-mac,-linux,-android_native,-js,-wasm' '-Dorg.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8' '-Pkotlin.daemon.jvmargs=-Xmx4g' --max-workers=2 --no-parallel --no-configuration-cache --console=plain
+          exit $LASTEXITCODE
+      - name: Validate the publication closure
+        shell: pwsh
+        run: python development/compose_winui_release.py bundle
+      - name: Compile an independent JVM and MinGW consumer
+        shell: pwsh
+        run: |
+          .\gradlew.bat -p development/compose-winui-consumer compileKotlinWinuiJvm compileKotlinWinuiMingw verifyWinUiJvmClasspath verifyUpstreamRedirects --no-configuration-cache --console=plain --max-workers=2
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compose-winui-unsigned
+          path: out/compose-multiplatform-core/build/compose-winui-release/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/compose-winui/v') && (github.event_name == 'push' || inputs.publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: compose-winui-unsigned
+          path: release
+      - name: Sign validated publications
+        env:
+          MAVEN_GPG_KEY_ARMOR: ${{ secrets.MAVEN_GPG_KEY_ARMOR }}
+          MAVEN_GPG_KEY_ID: ${{ secrets.MAVEN_GPG_KEY_ID }}
+          MAVEN_GPG_KEY_PASSWORD: ${{ secrets.MAVEN_GPG_KEY_PASSWORD }}
+        run: python3 development/compose_winui_release.py bundle --stage release --sign
+      - name: Publish to Maven Central
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: python3 development/compose_winui_release.py upload --stage release
+      - name: Create GitHub release after Central publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" release/*-central.zip release/release-manifest.json --verify-tag --prerelease --title "Compose WinUI ${RELEASE_TAG##*/v}" --notes-file docs/releases/compose-winui-1.12.0-alpha01.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compose-winui-publication-receipt
+          path: |
+            release/release-manifest.json
+            release/central-deployment.json
+            release/*-central.zip

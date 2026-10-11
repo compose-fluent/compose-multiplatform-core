@@ -20,22 +20,35 @@ import org.gradle.api.Project
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 import org.jetbrains.androidx.build.JetBrainsPublication.isLibraryRegistered
+import java.util.Properties
 
 private const val ARGUMENT_PREFIX = "jetbrains.publication.version."
 
-private fun Project.parseJetBrainsVersions() = JetBrainsVersions(
-    properties.keys
-        .filter { it.startsWith(ARGUMENT_PREFIX) }
-        .associate { propertyName ->
-            val library = propertyName.replace(ARGUMENT_PREFIX, "")
-            require(isLibraryRegistered(library)) {
-                "$propertyName points to a non registered library in the " +
-                    "JetBrainsPublication class"
-            }
-            val version = project.properties[propertyName] as String
-            library to version
+private fun Project.parseJetBrainsVersions(): JetBrainsVersions {
+    if (providers.gradleProperty("composeWinUi.release").orNull == "true") {
+        val release = Properties().apply {
+            rootProject.file("compose-winui-release.properties").inputStream().use { load(it) }
         }
-)
+        return JetBrainsVersions(JetBrainsPublication.libraryToComponents.keys.associateWith { library ->
+            requireNotNull(release.getProperty("$library.version")) {
+                "Missing WinUI release version for $library"
+            }
+        })
+    }
+    return JetBrainsVersions(
+        properties.keys
+            .filter { it.startsWith(ARGUMENT_PREFIX) }
+            .associate { propertyName ->
+                val library = propertyName.replace(ARGUMENT_PREFIX, "")
+                require(isLibraryRegistered(library)) {
+                    "$propertyName points to a non registered library in the " +
+                        "JetBrainsPublication class"
+                }
+                val version = project.properties[propertyName] as String
+                library to version
+            }
+    )
+}
 
 abstract class JetBrainsVersionsService :
     BuildService<JetBrainsVersionsService.Params> {

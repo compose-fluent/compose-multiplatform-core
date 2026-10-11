@@ -24,7 +24,12 @@ fun Project.changeMavenCoordinatesToJetBrains() {
     val component = JetBrainsPublication.projectPathToComponent[path] ?: return
     val versions = JetBrainsVersionsService.versions(project)
 
-    val group = JetBrainsPublication.mavenGroupFor(path)
+    val upstreamGroup = JetBrainsPublication.mavenGroupFor(path)
+    val group = if (providers.gradleProperty("composeWinUi.release").orNull == "true") {
+        upstreamGroup.replaceFirst("org.jetbrains.", "io.github.compose-fluent.")
+    } else {
+        upstreamGroup
+    }
     val version = Version(versions.versionOf(component.library()))
     this.group = group
     this.version = version

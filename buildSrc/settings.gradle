@@ -15,6 +15,9 @@
  */
 
 apply from: "settingsScripts/out-setup.groovy"
+
+apply(from: "settingsScripts/winui-setup.groovy")
+winUISetup.pinKotlinVersionInVersionCatalog(settings)
 getGradle().beforeProject { project ->
     def checkoutRoot = new File("${buildscript.sourceFile.parent}/..")
     init.chooseBuildDirectory(checkoutRoot, rootProject.name, project)
@@ -44,6 +47,10 @@ include ":imports:stableaidl-gradle-plugin"
 dependencyResolutionManagement {
     versionCatalogs {
         libs {
+            // Windows checkouts may materialize the tracked gradle symlink as a text file.
+            if (!file("gradle/libs.versions.toml").exists()) {
+                from(files("../gradle/libs.versions.toml"))
+            }
             def agpOverride = System.getenv("GRADLE_PLUGIN_VERSION")
             if (agpOverride != null) {
                 logger.warn("Using custom version ${agpOverride} of AGP due to GRADLE_PLUGIN_VERSION being set.")
