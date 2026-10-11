@@ -23,7 +23,7 @@ CMP version line; Jetpack versions are listed separately below.
 
 For example, Navigation 3 `1.1.0-alpha01` forks CMP Navigation 3 `1.1.2`,
 whose Jetpack base is `1.1.7`. It does not fork a CMP `1.1.7` release.
-This table specifies version identity; the publication manifest must identify
+This table specifies version identity; the attached publication manifest identifies
 which individual modules and variants are shipped, including upstream redirects.
 
 ## Source provenance
@@ -63,7 +63,33 @@ and Navigation WinUI variants carry the fork's platform implementations.
 Build/runtime tooling uses Kotlin 2.4.0 and JDK 25 for the Windows toolkit.
 These tooling versions are separate from the CMP and Skiko source baselines.
 
-## Release preparation status
+## Publications and validation
 
-This file is the release-note draft. Publication and consumer validation are
-pending; no successful Maven Central publication is claimed by this draft.
+This release covers 36 modules and 76 Maven publications, including root
+multiplatform metadata:
+
+- 17 modules supply both WinUI JVM and MinGW implementations.
+- 6 modules supply only MinGW: UI Geometry, UI Unit, UI Util, UI Back Handler,
+  Navigation Common, and Navigation Runtime. Their other targets redirect upstream.
+- 13 modules redirect all variants directly to Jetpack, including MinGW.
+
+Fork coordinates use the `io.github.compose-fluent.compose.*` and
+`io.github.compose-fluent.androidx.*` groups. The publication manifest records
+every coordinate, source commit, upstream metadata checksum, and target redirect.
+
+Validation completed against the release dependencies:
+
+- All 76 staged publications passed metadata, dependency closure, and file
+  integrity checks; all 9 release-tool tests passed.
+- An independent consumer compiled for JVM and MinGW using the staged Maven
+  repository, Maven Central, and Google Maven, without Maven Local or project
+  substitution.
+- All 55 JARs on the consumer's JVM runtime classpath passed checks for AWT,
+  Swing, and Skiko AWT references, including reflective class-name strings.
+- The consumer resolved 61 iOS dependencies through upstream redirects.
+- The WinUI JVM demo traversed 101 sample screens with the released Skiko and
+  kotlin-winrt dependencies. The smoke test verified Direct3D rendering,
+  non-empty drawing bounds, completion, and clean shutdown.
+
+MinGW validation covers compilation and published dependency resolution; the
+runtime smoke test above was performed on the WinUI JVM backend.
